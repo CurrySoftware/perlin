@@ -119,6 +119,11 @@ impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
 
     fn execute_query(&self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
+            QueryResultIterator::EmptyQuery => {
+                BooleanQueryResult{
+                    document_ids: vec![]
+                }
+            }
             QueryResultIterator::AtomQuery(_, iter) => {
                 BooleanQueryResult {
                     document_ids: iter.map(|&(doc_id, _)| doc_id).collect::<Vec<_>>(),
@@ -184,12 +189,17 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
+        if let Some(result) = self.index.get(atom) {
         QueryResultIterator::AtomQuery(relative_position,
-                                       self.index.get(atom).unwrap().iter().peekable())
+                                       result.iter().peekable())
+        } else {
+            QueryResultIterator::EmptyQuery
+        }
     }
 }
 
 enum QueryResultIterator<'a> {
+    EmptyQuery,
     AtomQuery(usize, Peekable<Iter<'a, Posting>>),
     NAryQuery(NAryQueryIterator<'a>),
 }
@@ -197,6 +207,7 @@ enum QueryResultIterator<'a> {
 impl<'a> QueryResultIterator<'a> {
     fn estimate_length(&self) -> usize {
         match self {
+            &QueryResultIterator::EmptyQuery => 0,
             &QueryResultIterator::AtomQuery(_, ref iter) => iter.len(),
             &QueryResultIterator::NAryQuery(ref iter) => iter.estimate_length(),
 
@@ -205,6 +216,7 @@ impl<'a> QueryResultIterator<'a> {
 
     fn relative_position(&self) -> usize {
         match self {
+            &QueryResultIterator::EmptyQuery => 0,
             &QueryResultIterator::AtomQuery(rpos, _) => rpos,
             &QueryResultIterator::NAryQuery(_) => 0,
         }
@@ -213,6 +225,7 @@ impl<'a> QueryResultIterator<'a> {
 
     fn next(&mut self) -> Option<&'a Posting> {
         match self {
+            &mut QueryResultIterator::EmptyQuery => None,
             &mut QueryResultIterator::AtomQuery(_, ref mut iter) => iter.next(),
             &mut QueryResultIterator::NAryQuery(ref mut iter) => iter.next(),
         }
@@ -220,6 +233,7 @@ impl<'a> QueryResultIterator<'a> {
 
     fn peek(&mut self) -> Option<&'a Posting> {
         match self {
+            &mut QueryResultIterator::EmptyQuery => None,
             &mut QueryResultIterator::AtomQuery(_, ref mut iter) => iter.peek().map(|val| *val),
             &mut QueryResultIterator::NAryQuery(ref mut iter) => iter.peek(),
         }
@@ -626,6 +640,13 @@ mod tests {
                                          BooleanQuery::Atom(QueryAtom::new(0, 0))],
                                    &None);
         assert!(qri.peek() == qri.peek());
+
+    }
+
+    #[test]
+    fn empty_query() {
+        let index = prepare_index();
+        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 15))).document_ids == vec![]);
 
     }
 

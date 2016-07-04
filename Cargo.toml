@@ -4,3 +4,4 @@ version = "0.0.0"
 authors = ["Jakob Demler <jdemler@curry-software.com>"]
 
 [dependencies]
+rand = "0.3"

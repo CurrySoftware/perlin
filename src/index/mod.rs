@@ -1,4 +1,4 @@
-mod boolean_index;
+pub mod boolean_index;
 
 pub trait Index<TTerm> {
     type Query;
