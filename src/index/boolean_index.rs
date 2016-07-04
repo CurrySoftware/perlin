@@ -156,10 +156,16 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                       filter: &Option<(FilterOperator, Box<BooleanQuery<TTerm>>)>)
                       -> QueryResultIterator {
 
+        let new_filter = if let &Some((ref operator, ref operand)) = filter {
+            Some((operator.clone(), Box::new(self.run_query(&operand))))
+        } else {
+            None
+        };
         QueryResultIterator::NAryQuery(NAryQueryIterator::new(operator.clone(),
                                                               operands.iter()
                                                                   .map(|op| self.run_query(op))
-                                                                  .collect::<Vec<_>>()))
+                                                                  .collect::<Vec<_>>(),
+                                                              new_filter))
     }
 
     fn run_positional_query(&self,
@@ -224,13 +230,16 @@ struct NAryQueryIterator<'a> {
     pos_operator: Option<PositionalOperator>,
     bool_operator: Option<BooleanOperator>,
     operands: Vec<QueryResultIterator<'a>>,
-    filter: Option<Box<(FilterOperator, QueryResultIterator<'a>)>>,
+    filter: Option<(FilterOperator, Box<QueryResultIterator<'a>>)>,
     peeked_value: Option<Option<&'a Posting>>,
 }
 
 impl<'a> Iterator for NAryQueryIterator<'a> {
     type Item = &'a Posting;
     fn next(&mut self) -> Option<&'a Posting> {
+        if self.filter.is_some() {
+            return self.filtered_next();
+        }
         if let Some(next) = self.peeked_value {
             self.peeked_value = None;
             return next;
@@ -253,14 +262,14 @@ impl<'a> Iterator for NAryQueryIterator<'a> {
 
 impl<'a> NAryQueryIterator<'a> {
     fn new_positional(operator: PositionalOperator,
-        operands: Vec<QueryResultIterator<'a>>)
+                      operands: Vec<QueryResultIterator<'a>>)
                       -> NAryQueryIterator<'a> {
         let mut result = NAryQueryIterator {
             pos_operator: Some(operator),
             bool_operator: None,
             operands: operands,
             peeked_value: None,
-            filter: None
+            filter: None,
         };
         result.operands.sort_by_key(|op| op.estimate_length());
         result
@@ -269,17 +278,83 @@ impl<'a> NAryQueryIterator<'a> {
 
     fn new(operator: BooleanOperator,
            operands: Vec<QueryResultIterator<'a>>,
-    filter: Option<Box<(FilterOperator, QueryResultIterator<'a>)>>)
+           filter: Option<(FilterOperator, Box<QueryResultIterator<'a>>)>)
            -> NAryQueryIterator<'a> {
         let mut result = NAryQueryIterator {
             pos_operator: None,
             bool_operator: Some(operator),
             operands: operands,
             peeked_value: None,
-            filter: filter
+            filter: filter,
         };
         result.operands.sort_by_key(|op| op.estimate_length());
         result
+    }
+
+    fn filtered_next(&mut self) -> Option<&'a Posting> {
+        loop {
+            let next = match self.peeked_value {
+                Some(n) => {
+                    self.peeked_value = None;
+                    n
+                }
+                None => {
+                    match self.bool_operator {
+                        Some(BooleanOperator::And) => self.next_and(),
+                        Some(BooleanOperator::Or) => self.next_or(),
+                        None => {
+                            match self.pos_operator {
+                                Some(PositionalOperator::InOrder) => self.next_inorder(),
+                                None => {
+                                    assert!(false);
+                                    None
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            if let Some(next_posting) = next {                
+                if self.filter_check(next_posting) {
+                    return next;
+                }
+            } else {
+                return None;
+            }
+        }
+    }
+
+    fn filter_check(&mut self, input: &Posting) -> bool {
+        match self.filter {
+            Some((FilterOperator::Not, _)) => self.filter_not(input),
+            None => {
+                unreachable!();
+            }
+        }
+
+    }
+
+    fn filter_not(&mut self, input: &Posting) -> bool {
+        if let Some((_, ref mut boxed_operator)) = self.filter {
+            let operator = boxed_operator.as_mut();
+            loop {
+                if let Some(v) = operator.peek() {
+                    if v.0 > input.0 {
+                        // Input is smaller than next filtervalue -> let it through
+                        return true;
+                    } else if v.0 == input.0 {
+                        operator.next();
+                        return false;
+                    } else {
+                        operator.next();
+                    }
+                } else {
+                    return true;
+                }
+            }
+        } else {
+            unreachable!();
+        }
     }
 
     fn peek(&mut self) -> Option<&'a Posting> {
@@ -681,7 +756,6 @@ mod tests {
     #[test]
     fn inorder_query() {
         let index = prepare_index();
-        println!("{:?}", index);
         assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
                                                           vec![QueryAtom::new(0, 0),
                                                                QueryAtom::new(1, 1)]))
@@ -713,6 +787,28 @@ mod tests {
     }
 
     #[test]
-    fn query_filter() {}
+    fn query_filter() {
+        let index = prepare_index();
+        println!("{:?}", index.execute_query(
+            &BooleanQuery::NAryQuery(BooleanOperator::And,
+                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 2)),
+                                          BooleanQuery::Atom(QueryAtom::new(0, 0))],
+                                     Some(
+                                         (FilterOperator::Not,
+                                          Box::new(
+                                              BooleanQuery::Atom(
+                                                  QueryAtom::new(0, 16))))))).document_ids);
+        assert!(index.execute_query(
+            &BooleanQuery::NAryQuery(
+                BooleanOperator::And,
+                vec![BooleanQuery::Atom(QueryAtom::new(0, 2)),
+                     BooleanQuery::Atom(QueryAtom::new(0, 0))],
+                Some((FilterOperator::Not,
+                      Box::new(BooleanQuery::Atom(
+                          QueryAtom::new(0, 16))))))).document_ids == vec![0,2]);
+
+
+
+    }
 
 }
