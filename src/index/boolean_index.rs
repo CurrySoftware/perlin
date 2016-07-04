@@ -19,6 +19,7 @@ macro_rules! unwrap_or_return_none{
     }
 }
 
+#[derive(Debug)]
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     index: BTreeMap<TTerm, Vec<Posting>>,
@@ -36,14 +37,25 @@ pub enum FilterOperator {
     Not,
 }
 
+#[derive(Clone)]
 pub enum PositionalOperator {
-    NextTo,
+    InOrder,
 }
 
-struct QueryAtom<TTerm> {
+pub struct QueryAtom<TTerm> {
     relative_position: usize,
     query_term: TTerm,
 }
+
+impl<TTerm> QueryAtom<TTerm> {
+    pub fn new(relative_position: usize, query_term: TTerm) -> Self {
+        QueryAtom {
+            relative_position: relative_position,
+            query_term: query_term,
+        }
+    }
+}
+
 
 pub enum BooleanQuery<TTerm> {
     Atom(QueryAtom<TTerm>),
@@ -125,9 +137,14 @@ impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
 impl<TTerm: Ord> BooleanIndex<TTerm> {
     fn run_query(&self, query: &BooleanQuery<TTerm>) -> QueryResultIterator {
         match query {
-            &BooleanQuery::Atom(atom) => self.run_atom(atom.relative_position, &atom.query_term),
+            &BooleanQuery::Atom(ref atom) => {
+                self.run_atom(atom.relative_position, &atom.query_term)
+            }
             &BooleanQuery::NAryQuery(ref operator, ref operands, ref filter) => {
                 self.run_nary_query(operator, operands, filter)
+            }
+            &BooleanQuery::PositionalQuery(ref operator, ref operands) => {
+                self.run_positional_query(operator, operands)
             }
         }
 
@@ -145,6 +162,19 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                                                                   .collect::<Vec<_>>()))
     }
 
+    fn run_positional_query(&self,
+                            operator: &PositionalOperator,
+                            operands: &Vec<QueryAtom<TTerm>>)
+                            -> QueryResultIterator {
+        QueryResultIterator::NAryQuery(NAryQueryIterator::new_positional(operator.clone(),
+                                                                         operands.into_iter()
+                                                                             .map(|op| {
+                                                                                 self.run_atom(
+                                                      op.relative_position,
+                                                      &op.query_term)
+                                                                             })
+                                                                             .collect::<Vec<_>>()))
+    }
 
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
@@ -167,6 +197,14 @@ impl<'a> QueryResultIterator<'a> {
         }
     }
 
+    fn relative_position(&self) -> usize {
+        match self {
+            &QueryResultIterator::AtomQuery(rpos, _) => rpos,
+            &QueryResultIterator::NAryQuery(_) => 0,
+        }
+
+    }
+
     fn next(&mut self) -> Option<&'a Posting> {
         match self {
             &mut QueryResultIterator::AtomQuery(_, ref mut iter) => iter.next(),
@@ -182,26 +220,13 @@ impl<'a> QueryResultIterator<'a> {
     }
 }
 
-
-
-
-
 struct NAryQueryIterator<'a> {
-    operator: BooleanOperator,
+    pos_operator: Option<PositionalOperator>,
+    bool_operator: Option<BooleanOperator>,
     operands: Vec<QueryResultIterator<'a>>,
+    filter: Option<Box<(FilterOperator, QueryResultIterator<'a>)>>,
     peeked_value: Option<Option<&'a Posting>>,
 }
-
-macro_rules! unwrap_or_return_none{
-    ($operand:expr) => {
-        if let Some(x) = $operand {
-            x
-        } else {
-            return None;
-        }
-    }
-}
-
 
 impl<'a> Iterator for NAryQueryIterator<'a> {
     type Item = &'a Posting;
@@ -210,21 +235,48 @@ impl<'a> Iterator for NAryQueryIterator<'a> {
             self.peeked_value = None;
             return next;
         }
-        match self.operator {
-            BooleanOperator::And => self.next_and(),
-            BooleanOperator::Or => self.next_or()
+        match self.bool_operator {
+            Some(BooleanOperator::And) => self.next_and(),
+            Some(BooleanOperator::Or) => self.next_or(),
+            None => {
+                match self.pos_operator {
+                    Some(PositionalOperator::InOrder) => self.next_inorder(),
+                    None => {
+                        assert!(false);
+                        None
+                    }
+                }
+            }
         }
     }
 }
 
 impl<'a> NAryQueryIterator<'a> {
-    fn new(operator: BooleanOperator,
-           operands: Vec<QueryResultIterator<'a>>)
-           -> NAryQueryIterator<'a> {
+    fn new_positional(operator: PositionalOperator,
+        operands: Vec<QueryResultIterator<'a>>)
+                      -> NAryQueryIterator<'a> {
         let mut result = NAryQueryIterator {
-            operator: operator,
+            pos_operator: Some(operator),
+            bool_operator: None,
             operands: operands,
             peeked_value: None,
+            filter: None
+        };
+        result.operands.sort_by_key(|op| op.estimate_length());
+        result
+    }
+
+
+    fn new(operator: BooleanOperator,
+           operands: Vec<QueryResultIterator<'a>>,
+    filter: Option<Box<(FilterOperator, QueryResultIterator<'a>)>>)
+           -> NAryQueryIterator<'a> {
+        let mut result = NAryQueryIterator {
+            pos_operator: None,
+            bool_operator: Some(operator),
+            operands: operands,
+            peeked_value: None,
+            filter: filter
         };
         result.operands.sort_by_key(|op| op.estimate_length());
         result
@@ -232,9 +284,18 @@ impl<'a> NAryQueryIterator<'a> {
 
     fn peek(&mut self) -> Option<&'a Posting> {
         if self.peeked_value.is_none() {
-            self.peeked_value = Some(match self.operator {
-                BooleanOperator::And => self.next_and(),
-                BooleanOperator::Or => self.next_or(),
+            self.peeked_value = Some(match self.bool_operator {
+                Some(BooleanOperator::And) => self.next_and(),
+                Some(BooleanOperator::Or) => self.next_or(),
+                None => {
+                    match self.pos_operator {
+                        Some(PositionalOperator::InOrder) => self.next_inorder(),
+                        None => {
+                            assert!(false);
+                            None
+                        }
+                    }
+                }
             })
         }
         self.peeked_value.unwrap()
@@ -243,7 +304,9 @@ impl<'a> NAryQueryIterator<'a> {
     fn next_inorder(&mut self) -> Option<&'a Posting> {
         let mut focus = None; //Acts as temporary to be compared against
         let mut focus_positions = vec![];
-        let mut last_doc_iter = self.operands.len() + 1; //The iterator that last set 'focus'
+        // The iterator index that last set 'focus'
+        let mut last_doc_iter = self.operands.len() + 1;
+        // The the relative position of last_doc_iter
         let mut last_positions_iter = self.operands.len() + 1;
         'possible_documents: loop {
             // For every term
@@ -259,14 +322,15 @@ impl<'a> NAryQueryIterator<'a> {
                         focus = Some(v);
                         focus_positions = v.1.clone();
                         last_doc_iter = i;
-                        last_positions_iter = i;
+                        last_positions_iter = input.relative_position();
                         break 'term_documents;
                     } else if v.0 < focus.unwrap().0 {
                         // If the doc_id is smaller, get its next value
                         continue 'term_documents;
                     } else if v.0 == focus.unwrap().0 {
                         // If the doc_id is equal, check positions
-                        let position_offset = last_positions_iter as i64 - i as i64;
+                        let position_offset = last_positions_iter as i64 -
+                                              input.relative_position() as i64;
                         focus_positions = positional_intersect(&focus_positions,
                                                                &v.1,
                                                                (position_offset, position_offset))
@@ -279,10 +343,10 @@ impl<'a> NAryQueryIterator<'a> {
                             focus = Some(v);
                             focus_positions = v.1.clone();
                             last_doc_iter = i;
-                            last_positions_iter = i;
+                            last_positions_iter = input.relative_position();
                             continue 'possible_documents;
                         } else {
-                            last_positions_iter = i;
+                            last_positions_iter = input.relative_position();
                             break 'term_documents;
                         }
                     } else {
@@ -291,7 +355,7 @@ impl<'a> NAryQueryIterator<'a> {
                         focus = Some(v);
                         focus_positions = v.1.clone();
                         last_doc_iter = i;
-                        last_positions_iter = i;
+                        last_positions_iter = input.relative_position();
                         continue 'possible_documents;
                     }
                 }
@@ -372,12 +436,22 @@ impl<'a> NAryQueryIterator<'a> {
     }
 
     fn estimate_length(&self) -> usize {
-        match self.operator {
-            BooleanOperator::And => {
-                return self.operands.iter().map(|op| op.estimate_length()).min().unwrap_or(0);
+        match self.bool_operator {
+            Some(BooleanOperator::And) => {
+                return self.operands[0].estimate_length();
             }
-            BooleanOperator::Or => {
-                return self.operands.iter().map(|op| op.estimate_length()).max().unwrap_or(0);
+            Some(BooleanOperator::Or) => {
+                return self.operands[self.operands.len() - 1].estimate_length();
+            }
+            None => {
+                match self.pos_operator {
+                    Some(PositionalOperator::InOrder) => {
+                        return self.operands[0].estimate_length();
+                    }
+                    None => {
+                        unreachable!();
+                    }
+                }
             }
         }
     }
@@ -449,6 +523,10 @@ pub fn positional_intersect(lhs: &[usize],
     result
 }
 
+
+
+// --- Tests
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,7 +547,8 @@ mod tests {
         let mut qri = index.run_atom(0, &0);
         assert!(qri.peek() == qri.peek());
         qri = index.run_nary_query(&BooleanOperator::And,
-                                   &vec![BooleanQuery::Atom(0, 0), BooleanQuery::Atom(0, 0)],
+                                   &vec![BooleanQuery::Atom(QueryAtom::new(0, 0)),
+                                         BooleanQuery::Atom(QueryAtom::new(0, 0))],
                                    &None);
         assert!(qri.peek() == qri.peek());
 
@@ -482,11 +561,13 @@ mod tests {
         assert!(index.run_atom(0, &3).estimate_length() == 2);
         assert!(index.run_atom(0, &16).estimate_length() == 1);
         assert!(index.run_nary_query(&BooleanOperator::And,
-                            &vec![BooleanQuery::Atom(0, 3), BooleanQuery::Atom(0, 16)],
+                            &vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
+                                  BooleanQuery::Atom(QueryAtom::new(0, 16))],
                             &None)
             .estimate_length() == 1);
         assert!(index.run_nary_query(&BooleanOperator::Or,
-                            &vec![BooleanQuery::Atom(0, 3), BooleanQuery::Atom(0, 16)],
+                            &vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
+                                  BooleanQuery::Atom(QueryAtom::new(0, 16))],
                             &None)
             .estimate_length() == 2);
     }
@@ -496,7 +577,7 @@ mod tests {
         let index = prepare_index();
         // Check number of docs
         assert!(index.document_count == 3);
-        // Check number of terms (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18
+        // Check number of terms (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18)
         assert!(index.index.len() == 15);
         assert!(*index.index.get(&0).unwrap() == vec![(0, vec![0]), (1, vec![0]), (2, vec![5])]);
     }
@@ -505,10 +586,14 @@ mod tests {
     fn query_atom() {
         let index = prepare_index();
 
-        assert!(index.execute_query(&BooleanQuery::Atom(0, 7)).document_ids == vec![0]);
-        assert!(index.execute_query(&BooleanQuery::Atom(0, 5)).document_ids == vec![0, 2]);
-        assert!(index.execute_query(&BooleanQuery::Atom(0, 0)).document_ids == vec![0, 1, 2]);
-        assert!(index.execute_query(&BooleanQuery::Atom(0, 16)).document_ids == vec![1]);
+        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7))).document_ids ==
+                vec![0]);
+        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 5))).document_ids ==
+                vec![0, 2]);
+        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 0))).document_ids ==
+                vec![0, 1, 2]);
+        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 16))).document_ids ==
+                vec![1]);
     }
 
     #[test]
@@ -516,48 +601,54 @@ mod tests {
         let index = prepare_index();
 
         assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
-                                                    vec![BooleanQuery::Atom(0, 5),
-                                                         BooleanQuery::Atom(0, 0)],
+                                                    vec![BooleanQuery::Atom(QueryAtom::new(0,
+                                                                                           5)),
+                                                         BooleanQuery::Atom(QueryAtom::new(0,
+                                                                                           0))],
                                                     None))
-            .document_ids == vec![0, 2]);
+            .document_ids ==
+                vec![0, 2]);
         assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
-                                                    vec![BooleanQuery::Atom(0, 0),
-                                                         BooleanQuery::Atom(0, 5)],
+                                                    vec![BooleanQuery::Atom(QueryAtom::new(0,
+                                                                                           0)),
+                                                         BooleanQuery::Atom(QueryAtom::new(0,
+                                                                                           5))],
                                                     None))
-            .document_ids == vec![0, 2]);
+            .document_ids ==
+                vec![0, 2]);
     }
 
     #[test]
     fn and_query() {
         let index = prepare_index();
         assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
-                                                    vec![BooleanQuery::Atom(0, 3),
-                                                         BooleanQuery::Atom(0, 12)],
+                                                    vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
+                                                         BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .document_ids == vec![]);
         assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
-                                                    vec![BooleanQuery::Atom(0, 14),
-                                                         BooleanQuery::Atom(0, 12)],
+                                                    vec![BooleanQuery::Atom(QueryAtom::new(0, 14)),
+                                                         BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .document_ids == vec![1]);
         assert!(index.execute_query(
             &BooleanQuery::NAryQuery(
                 BooleanOperator::And,
                 vec![BooleanQuery::NAryQuery(BooleanOperator::And,
-                    vec![BooleanQuery::Atom(0, 3),
-                        BooleanQuery::Atom(0, 9)],
+                    vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
+                        BooleanQuery::Atom(QueryAtom::new(0, 9))],
                     None),
-                    BooleanQuery::Atom(0, 12)],
+                    BooleanQuery::Atom(QueryAtom::new(0, 12))],
                 None))
                 .document_ids == vec![]);
         assert!(index.execute_query(
             &BooleanQuery::NAryQuery(
                 BooleanOperator::And,
                 vec![BooleanQuery::NAryQuery(BooleanOperator::And,
-                    vec![BooleanQuery::Atom(0, 2),
-                        BooleanQuery::Atom(0, 4)],
+                    vec![BooleanQuery::Atom(QueryAtom::new(0, 2)),
+                        BooleanQuery::Atom(QueryAtom::new(0, 4))],
                     None),
-                    BooleanQuery::Atom(0, 16)],
+                    BooleanQuery::Atom(QueryAtom::new(0, 16))],
                 None))
                 .document_ids == vec![1]);
     }
@@ -566,23 +657,23 @@ mod tests {
     fn or_query() {
         let index = prepare_index();
         assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::Or,
-                                                    vec![BooleanQuery::Atom(0, 3),
-                                                         BooleanQuery::Atom(0, 12)],
+                                                    vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
+                                                         BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .document_ids == vec![0, 1, 2]);
         assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::Or,
-                                                    vec![BooleanQuery::Atom(0, 14),
-                                                         BooleanQuery::Atom(0, 12)],
+                                                    vec![BooleanQuery::Atom(QueryAtom::new(0, 14)),
+                                                         BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .document_ids == vec![1]);
         assert!(index.execute_query(
             &BooleanQuery::NAryQuery(
                 BooleanOperator::Or,
                 vec![BooleanQuery::NAryQuery(BooleanOperator::Or,
-                    vec![BooleanQuery::Atom(0, 3),
-                        BooleanQuery::Atom(0, 9)],
+                    vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
+                        BooleanQuery::Atom(QueryAtom::new(0, 9))],
                     None),
-                    BooleanQuery::Atom(0, 16)],
+                    BooleanQuery::Atom(QueryAtom::new(0, 16))],
                 None))
                 .document_ids == vec![0,1,2]);
     }
@@ -590,21 +681,35 @@ mod tests {
     #[test]
     fn inorder_query() {
         let index = prepare_index();
-        println!("{:?}",
-                 index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::InOrder,
-                                                             vec![BooleanQuery::Atom(0, 0),
-                                                                  BooleanQuery::Atom(1, 1)],
-                                                             None))
-                     .document_ids);
-        assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::InOrder,
-                                                    vec![BooleanQuery::Atom(0, 0),
-                                                         BooleanQuery::Atom(1, 1)],
-                                                    None))
+        println!("{:?}", index);
+        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+                                                          vec![QueryAtom::new(0, 0),
+                                                               QueryAtom::new(1, 1)]))
             .document_ids == vec![0]);
+        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+                                                          vec![QueryAtom::new(1, 0),
+                                                               QueryAtom::new(0, 1)]))
+            .document_ids == vec![2]);
+        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+                                                          vec![QueryAtom::new(0, 0),
+                                                               QueryAtom::new(1, 2)]))
+            .document_ids == vec![1]);
 
-
-
-
+        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+                                                          vec![QueryAtom::new(2, 2),
+                                                               QueryAtom::new(1, 1),
+                                                               QueryAtom::new(0, 0)]))
+            .document_ids == vec![0]);
+        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+                                                          vec![QueryAtom::new(0, 2),
+                                                               QueryAtom::new(1, 1),
+                                                               QueryAtom::new(2, 0)]))
+            .document_ids == vec![2]);
+        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+                                                          vec![QueryAtom::new(0, 2),
+                                                               QueryAtom::new(1, 1),
+                                                               QueryAtom::new(3, 0)]))
+            .document_ids == vec![]);
     }
 
     #[test]
