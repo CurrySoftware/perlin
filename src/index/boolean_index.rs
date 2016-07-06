@@ -5,6 +5,8 @@ use std::slice::Iter;
 use std::iter::Iterator;
 use std::iter::Peekable;
 
+use std::fmt::{Formatter, Result, Debug};
+
 // For each term-document pair the doc_id and the
 // positions of the term inside the document are stored
 type Posting = (usize /* doc_id */, Vec<usize> /* positions */);
@@ -19,10 +21,26 @@ macro_rules! unwrap_or_return_none{
     }
 }
 
-#[derive(Debug)]
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     index: BTreeMap<TTerm, Vec<Posting>>,
+}
+
+impl<TTerm: Debug + Ord> Debug for BooleanIndex<TTerm> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let res = writeln!(f,
+                           "Document Count: {} Term Count: {}",
+                           self.document_count,
+                           self.index.len());
+        for (term, postings) in self.index.iter() {
+            write!(f,
+                   "[{:?} df:{} cf:{}]",
+                   term,
+                   postings.len(),
+                   postings.iter().map(|&(_, ref positions)| positions.len()).fold(0, |acc, x| acc + x));
+        }
+        res
+    }
 }
 
 
@@ -66,7 +84,7 @@ pub enum BooleanQuery<TTerm> {
 }
 
 pub struct BooleanQueryResult {
-    document_ids: Vec<usize>,
+    pub document_ids: Vec<usize>,
 }
 
 impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
@@ -119,11 +137,7 @@ impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
 
     fn execute_query(&self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
-            QueryResultIterator::EmptyQuery => {
-                BooleanQueryResult{
-                    document_ids: vec![]
-                }
-            }
+            QueryResultIterator::EmptyQuery => BooleanQueryResult { document_ids: vec![] },
             QueryResultIterator::AtomQuery(_, iter) => {
                 BooleanQueryResult {
                     document_ids: iter.map(|&(doc_id, _)| doc_id).collect::<Vec<_>>(),
@@ -190,8 +204,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.index.get(atom) {
-        QueryResultIterator::AtomQuery(relative_position,
-                                       result.iter().peekable())
+            QueryResultIterator::AtomQuery(relative_position, result.iter().peekable())
         } else {
             QueryResultIterator::EmptyQuery
         }
@@ -328,7 +341,7 @@ impl<'a> NAryQueryIterator<'a> {
                     }
                 }
             };
-            if let Some(next_posting) = next {                
+            if let Some(next_posting) = next {
                 if self.filter_check(next_posting) {
                     return next;
                 }
@@ -646,7 +659,8 @@ mod tests {
     #[test]
     fn empty_query() {
         let index = prepare_index();
-        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 15))).document_ids == vec![]);
+        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 15))).document_ids ==
+                vec![]);
 
     }
 
