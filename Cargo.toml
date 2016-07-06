@@ -3,6 +3,6 @@ name = "perlin"
 version = "0.0.0"
 authors = ["Jakob Demler <jdemler@curry-software.com>"]
 
-[dependencies]
+[dev-dependencies]
 rand = "0.3"
 lazy_static = "0.2.1"
