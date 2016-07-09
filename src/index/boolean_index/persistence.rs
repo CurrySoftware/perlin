@@ -11,6 +11,8 @@ use std::io::{Read, Write};
 use std::collections::BTreeMap;
 use std;
 
+const CHUNKSIZE: usize = 1_000_000;
+
 impl ByteEncodable for String {
     fn encode(&self) -> Vec<u8> {
         let mut result = Vec::with_capacity(self.len());
@@ -20,8 +22,8 @@ impl ByteEncodable for String {
 }
 
 impl ByteDecodable for String {
-    fn decode(bytes: Vec<u8>) -> Self {
-        String::from_utf8(bytes).unwrap()
+    fn decode(bytes: Vec<u8>) -> Result<Self, String> {
+        String::from_utf8(bytes).map_err(|e| format!("{:?}", e))
     }
 }
 
@@ -34,62 +36,91 @@ impl ByteEncodable for usize {
 }
 
 impl ByteDecodable for usize {
-    fn decode(bytes: Vec<u8>) -> Self {
-        read_u64(bytes.as_slice()) as usize
+    fn decode(bytes: Vec<u8>) -> Result<Self, String> {
+        Ok(read_u64(bytes.as_slice()) as usize)
     }
 }
 
+
 impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
-    fn write_terms<TWrite: Write>(&self, write: &mut TWrite) -> std::io::Result<()> {
+    /// Writes all the terms with postings of the index to specified target
+    /// Layout:
+    /// [u8; 4] -> Number of bytes term + postings need encoded
+    /// [u8] -> term + postings
+    fn write_terms<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
+        // Write blocks of 1MB to target
+        let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
         for term in &self.index {
             let term_bytes = encode_term(&term);
             let term_bytes_len: [u8; 4] =
                 unsafe { transmute::<_, [u8; 4]>(term_bytes.len() as u32) };
-            write.write(&term_bytes_len).unwrap();
-            write.write(term_bytes.as_slice()).unwrap();
+
+            bytes.extend_from_slice(&term_bytes_len);
+            bytes.extend_from_slice(term_bytes.as_slice());
+            if bytes.len() > CHUNKSIZE {
+                if let Err(e) = target.write(bytes.as_slice()) {
+                    return Err(e);
+                } else {
+                    bytes.clear();
+                }
+            }
         }
-        write.flush().unwrap();
-        Ok(())
+        target.write(bytes.as_slice())
     }
 
-    fn read_terms<TRead: Read>(read: &mut TRead) -> BTreeMap<TTerm, Vec<Posting>> {
+    fn read_terms<TSource: Read>(source: &mut TSource)
+                                 -> Result<BTreeMap<TTerm, Vec<Posting>>, String> {
         let mut bytes = Vec::new();
-        read.read_to_end(&mut bytes).unwrap();
+        if let Err(e) = source.read_to_end(&mut bytes) {
+            return Err(format!("{:?}", e));
+        }
 
         let mut ptr = 0;
         let mut result = BTreeMap::new();
         while ptr < bytes.len() {
             let entry_size = read_u32(&bytes[ptr..ptr + 4]) as usize;
             ptr += 4;
-            let term_posting = decode_term(&bytes[ptr..ptr + entry_size]);
-            result.insert(term_posting.0, term_posting.1);
-            ptr += entry_size;
+            match decode_term(&bytes[ptr..ptr + entry_size]) {
+                Ok(term_posting) => { 
+                    result.insert(term_posting.0, term_posting.1);
+                    ptr += entry_size;
+                },
+                Err(e) => {
+                    return Err(e)
+                }
+            }
         }
-        result
+        Ok(result)
     }
 }
 
-fn decode_term<TTerm: ByteDecodable>(f: &[u8]) -> (TTerm, Vec<Posting>) {
+fn decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posting>), String> {
     let term_len: u8 = f[0] + 1;
     let term_bytes_vec = Vec::from(&f[1..(term_len) as usize]);
-    let term = TTerm::decode(term_bytes_vec);
-    let mut ptr = term_len as usize;
-    let mut postings = Vec::with_capacity(100);
-    while ptr < f.len() {
-        // 8bytes doc_id
-        let doc_id = read_u64(&f[ptr..ptr + 8]);
-        ptr += 8;
-        let positions_len = read_u32(&f[ptr..ptr + 4]);
-        ptr += 4;
-        let positions = unsafe {
-            std::slice::from_raw_parts(f[ptr..].as_ptr() as *const u32, positions_len as usize)
-        };
-        ptr += positions_len as usize * 4 as usize;
-        let mut positions_vec = Vec::with_capacity(positions_len as usize);
-        positions_vec.extend_from_slice(positions);
-        postings.push((doc_id, positions_vec));
+    match TTerm::decode(term_bytes_vec) {
+        Ok(term) => {
+        let mut ptr = term_len as usize;
+        let mut postings = Vec::with_capacity(100);
+        while ptr < f.len() {
+            // 8bytes doc_id
+            let doc_id = read_u64(&f[ptr..ptr + 8]);
+            ptr += 8;
+            let positions_len = read_u32(&f[ptr..ptr + 4]);
+            ptr += 4;
+            let positions = unsafe {
+                std::slice::from_raw_parts(f[ptr..].as_ptr() as *const u32, positions_len as usize)
+            };
+            ptr += positions_len as usize * 4 as usize;
+            let mut positions_vec = Vec::with_capacity(positions_len as usize);
+            positions_vec.extend_from_slice(positions);
+            postings.push((doc_id, positions_vec));
+        }
+            Ok((term, postings))
+        },
+        Err(e) => {
+            Err(e)
+        }
     }
-    (term, postings)
 }
 
 
@@ -122,18 +153,16 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
 }
 
 impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanIndex<TTerm> {
-    fn write_to<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<()> {
+    fn write_to<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
         self.write_terms(target)
     }
 
-    fn read_from<TSource: Read>(source: &mut TSource) -> std::io::Result<Self> {
-        let mut btree = BTreeMap::new();
-        for term in Self::read_terms(source) {
-            btree.insert(term.0, term.1);
-        }
-        Ok(BooleanIndex {
-            document_count: 0,
-            index: btree,
+    fn read_from<TSource: Read>(source: &mut TSource) -> Result<Self, String> {
+        Self::read_terms(source).map(|btree| {
+            BooleanIndex {
+                document_count: 0,
+                index: btree,
+            }
         })
     }
 }
@@ -169,17 +198,30 @@ fn read_u64(barry: &[u8]) -> u64 {
 mod tests {
     use index::boolean_index::BooleanIndex;
     use index::boolean_index::tests::prepare_index;
-    use index::PersistentIndex;
+    use index::{Index, PersistentIndex};
     use std::io::Cursor;
-    
+
     #[test]
-    fn basic_encoding_decoding() {
+    fn basic() {
         let index = prepare_index();
         let mut bytes: Vec<u8> = vec![];
         index.write_to(&mut bytes).unwrap();
         let mut buff = Cursor::new(bytes.clone());
         let mut bytes_2: Vec<u8> = vec![];
         BooleanIndex::<usize>::read_from(&mut buff).unwrap().write_to(&mut bytes_2).unwrap();
-        assert_eq!(bytes, bytes_2);        
+        assert_eq!(bytes, bytes_2);
+    }
+
+    #[test]
+    fn length() {
+        let index = prepare_index();
+        let mut bytes: Vec<u8> = vec![];
+        index.write_to(&mut bytes).unwrap();
+        let mut buff = Cursor::new(bytes.clone());
+        let mut bytes_2: Vec<u8> = vec![];
+        let mut read_index = BooleanIndex::<usize>::read_from(&mut buff).unwrap();
+        read_index.index_document(1..24);
+        read_index.write_to(&mut bytes_2).unwrap();
+        assert!(bytes.len() < bytes_2.len());
     }
 }

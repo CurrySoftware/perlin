@@ -12,7 +12,6 @@ mod query_result_iterator;
 mod persistence;
 
 mod posting {
-
     // For each term-document pair the doc_id and the
     // positions of the term inside the document are stored
     pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);

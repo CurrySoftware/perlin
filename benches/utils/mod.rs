@@ -15,14 +15,14 @@ pub fn prepare_index<TIndex: Index<usize> + Debug + PersistentIndex>(documents: 
     tmp_dir.push(&format!("bench_index_{}_{}.bin", documents, document_size));
 
     if tmp_dir.exists() {
-        TIndex::read_from_file(tmp_dir.as_path())
+        TIndex::read_from(&mut File::open(tmp_dir.as_path()).unwrap()).unwrap()
     } else {
         let mut index = TIndex::new();
         let mut rng = ZipfGenerator::new(voc_size(50, 0.5, documents * document_size));
         for _ in 0..documents {
             index.index_document(rng.clone().take(document_size));
         }
-        index.write_to_file(tmp_dir.as_path());
+        index.write_to(&mut File::create(tmp_dir.as_path()).unwrap());
         index
     }
 }
