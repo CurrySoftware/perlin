@@ -1,4 +1,4 @@
-use index::{Index};
+use index::Index;
 
 use std::collections::BTreeMap;
 use std::iter::Iterator;
@@ -11,7 +11,7 @@ use index::boolean_index::posting::Posting;
 mod query_result_iterator;
 mod persistence;
 
-mod posting{
+mod posting {
 
     // For each term-document pair the doc_id and the
     // positions of the term inside the document are stored
@@ -73,12 +73,14 @@ impl<TTerm: Debug + Ord> Debug for BooleanIndex<TTerm> {
                            "Document Count: {} Term Count: {}",
                            self.document_count,
                            self.index.len());
-        for (term, postings) in self.index.iter() {
+        for (term, postings) in &self.index {
             write!(f,
                    "[{:?} df:{} cf:{}]",
                    term,
                    postings.len(),
-                   postings.iter().map(|&(_, ref positions)| positions.len()).fold(0, |acc, x| acc + x));
+                   postings.iter()
+                       .map(|&(_, ref positions)| positions.len())
+                       .fold(0, |acc, x| acc + x));
         }
         res
     }
@@ -106,20 +108,21 @@ impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
             // Get all doc_ids in BTree for a term
             if let Some(listing) = self.index.get_mut(&term) {
                 // check if document is already there
-                match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&(new_doc_id as  u64))) {
+                match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&(new_doc_id as u64))) {
                     Ok(term_doc_index) => {
                         // Document already had that term.
                         // Look for where to put the current term in the positions list
-                        let ref mut term_doc_positions = listing.get_mut(term_doc_index).unwrap().1;
-                        match term_doc_positions.binary_search(&(term_position as u32)) {
-                            Err(index) => term_doc_positions.insert(index, term_position as u32),
-                            Ok(_) => {}
-                            // Two terms at the same position. Should at least be possible
-                            // so: Do nothing
+                        let term_doc_positions = &mut listing.get_mut(term_doc_index).unwrap().1;
+                        if let Err(index) =
+                               term_doc_positions.binary_search(&(term_position as u32)) {
+                                   // Two terms at the same position. Should at least be possible
+                                   //so do nothing if term_position already exists
+                            term_doc_positions.insert(index, term_position as u32)
                         }
                     }
                     Err(term_doc_index) => {
-                        listing.insert(term_doc_index, (new_doc_id as u64, vec![term_position as u32]))
+                        listing.insert(term_doc_index,
+                                       (new_doc_id as u64, vec![term_position as u32]))
                     }
 
                 }
@@ -153,14 +156,14 @@ impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
 
 impl<TTerm: Ord> BooleanIndex<TTerm> {
     fn run_query(&self, query: &BooleanQuery<TTerm>) -> QueryResultIterator {
-        match query {
-            &BooleanQuery::Atom(ref atom) => {
+        match *query {
+            BooleanQuery::Atom(ref atom) => {
                 self.run_atom(atom.relative_position, &atom.query_term)
             }
-            &BooleanQuery::NAryQuery(ref operator, ref operands, ref filter) => {
+            BooleanQuery::NAryQuery(ref operator, ref operands, ref filter) => {
                 self.run_nary_query(operator, operands, filter)
             }
-            &BooleanQuery::PositionalQuery(ref operator, ref operands) => {
+            BooleanQuery::PositionalQuery(ref operator, ref operands) => {
                 self.run_positional_query(operator, operands)
             }
         }
@@ -169,34 +172,34 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
     fn run_nary_query(&self,
                       operator: &BooleanOperator,
-                      operands: &Vec<BooleanQuery<TTerm>>,
+                      operands: &[BooleanQuery<TTerm>],
                       filter: &Option<(FilterOperator, Box<BooleanQuery<TTerm>>)>)
                       -> QueryResultIterator {
 
-        let new_filter = if let &Some((ref operator, ref operand)) = filter {
-            Some((operator.clone(), Box::new(self.run_query(&operand))))
+        let new_filter = if let Some((ref operator, ref operand)) = *filter {
+            Some((operator.clone(), Box::new(self.run_query(operand))))
         } else {
             None
         };
         QueryResultIterator::NAry(NAryQueryIterator::new(operator.clone(),
-                                                              operands.iter()
-                                                                  .map(|op| self.run_query(op))
-                                                                  .collect::<Vec<_>>(),
-                                                              new_filter))
+                                                         operands.iter()
+                                                             .map(|op| self.run_query(op))
+                                                             .collect::<Vec<_>>(),
+                                                         new_filter))
     }
 
     fn run_positional_query(&self,
                             operator: &PositionalOperator,
-                            operands: &Vec<QueryAtom<TTerm>>)
+                            operands: &[QueryAtom<TTerm>])
                             -> QueryResultIterator {
         QueryResultIterator::NAry(NAryQueryIterator::new_positional(operator.clone(),
-                                                                         operands.into_iter()
-                                                                             .map(|op| {
-                                                                                 self.run_atom(
+                                                                    operands.into_iter()
+                                                                        .map(|op| {
+                                                                            self.run_atom(
                                                       op.relative_position,
                                                       &op.query_term)
-                                                                             })
-                                                                             .collect::<Vec<_>>()))
+                                                                        })
+                                                                        .collect::<Vec<_>>()))
     }
 
 
@@ -228,7 +231,7 @@ mod tests {
         index
     }
 
-  
+
 
     #[test]
     fn empty_query() {
@@ -238,7 +241,7 @@ mod tests {
 
     }
 
-   
+
 
     #[test]
     fn indexing() {

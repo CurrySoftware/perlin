@@ -8,8 +8,6 @@ use index::boolean_index::posting::Posting;
 
 use std::mem::transmute;
 use std::io::{Read, Write};
-use std::path::Path;
-use std::fs::File;
 use std::collections::BTreeMap;
 use std;
 
@@ -43,7 +41,7 @@ impl ByteDecodable for usize {
 
 impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     fn write_terms<TWrite: Write>(&self, write: &mut TWrite) -> std::io::Result<()> {
-        for term in self.index.iter() {
+        for term in &self.index {
             let term_bytes = encode_term(&term);
             let term_bytes_len: [u8; 4] =
                 unsafe { transmute::<_, [u8; 4]>(term_bytes.len() as u32) };
@@ -118,7 +116,7 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
         };
         bytes.extend_from_slice(&doc_id_bytes);
         bytes.extend_from_slice(&positions_len_bytes);
-        bytes.extend_from_slice(&position_bytes);
+        bytes.extend_from_slice(position_bytes);
     }
     bytes
 }

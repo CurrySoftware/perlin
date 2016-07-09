@@ -26,39 +26,38 @@ impl<'a> Iterator for QueryResultIterator<'a>{
     type Item = &'a Posting;
     
     fn next(&mut self) -> Option<&'a Posting> {
-        match self {
-            &mut QueryResultIterator::Empty => None,
-            &mut QueryResultIterator::Atom(_, ref mut iter) => iter.next(),
-            &mut QueryResultIterator::NAry(ref mut iter) => iter.next(),
+        match *self {
+            QueryResultIterator::Empty => None,
+            QueryResultIterator::Atom(_, ref mut iter) => iter.next(),
+            QueryResultIterator::NAry(ref mut iter) => iter.next(),
         }
     }
 }
 
 impl<'a> QueryResultIterator<'a> {
     fn estimate_length(&self) -> usize {
-        match self {
-            &QueryResultIterator::Empty => 0,
-            &QueryResultIterator::Atom(_, ref iter) => iter.len(),
-            &QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
+        match *self {
+            QueryResultIterator::Empty => 0,
+            QueryResultIterator::Atom(_, ref iter) => iter.len(),
+            QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
 
         }
     }
 
     fn relative_position(&self) -> usize {
-        match self {
-            &QueryResultIterator::Empty => 0,
-            &QueryResultIterator::Atom(rpos, _) => rpos,
-            &QueryResultIterator::NAry(_) => 0,
+        match *self {
+            QueryResultIterator::Atom(rpos, _) => rpos,
+            _ => 0
         }
 
     }
 
 
     fn peek(&mut self) -> Option<&'a Posting> {
-        match self {
-            &mut QueryResultIterator::Empty => None,
-            &mut QueryResultIterator::Atom(_, ref mut iter) => iter.peek().map(|val| *val),
-            &mut QueryResultIterator::NAry(ref mut iter) => iter.peek(),
+        match *self {
+            QueryResultIterator::Empty => None,
+            QueryResultIterator::Atom(_, ref mut iter) => iter.peek().map(|val| *val),
+            QueryResultIterator::NAry(ref mut iter) => iter.peek(),
         }
     }
 }
