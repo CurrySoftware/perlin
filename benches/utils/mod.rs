@@ -8,7 +8,7 @@ use rand::{StdRng, Rng};
 use rand::Rand;
 use rand;
 
-pub fn prepare_index<TIndex: Index<usize> + Debug + PersistentIndex>(documents: usize,
+pub fn prepare_index<'a, TIndex: Index<'a, usize> + Debug + PersistentIndex>(documents: usize,
                                                                      document_size: usize)
                                                                      -> TIndex {
     let mut tmp_dir = env::temp_dir();

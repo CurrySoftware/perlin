@@ -3,7 +3,7 @@ use std;
 
 pub mod boolean_index;
 
-pub trait Index<TTerm> {
+pub trait Index<'a, TTerm> {
     type Query;
     type QueryResult;
     
@@ -11,7 +11,7 @@ pub trait Index<TTerm> {
 
     fn index_document<TDocIterator: Iterator<Item=TTerm>>(&mut self, document: TDocIterator) -> u64;
 
-    fn execute_query(&self, query: &Self::Query) -> Self::QueryResult;
+    fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult;
 }
 
 

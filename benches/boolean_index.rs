@@ -47,7 +47,7 @@ fn atom_query_frequent_1000_1000(b: &mut Bencher) {
 #[bench]
 fn atom_query_frequent_10000_1000(b: &mut Bencher) {
     b.iter(|| {
-      INDEX_10000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4))).document_ids;
+      INDEX_10000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4))).count()
     });
 }
 
@@ -76,7 +76,7 @@ fn atom_query_seldom_1000_1000(b: &mut Bencher) {
 #[bench]
 fn atom_query_seldom_10000_1000(b: &mut Bencher) {
     b.iter(|| {
-      INDEX_10000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 400000))).document_ids;
+      INDEX_10000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 400000))).count();
     });
 }
 
@@ -86,7 +86,7 @@ fn and_query_frequent_frequent_10000_1000(b: &mut Bencher) {
         INDEX_10000_1000.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
                                                                 vec![BooleanQuery::Atom(QueryAtom::new(0, 10)),
                                                                      BooleanQuery::Atom(QueryAtom::new(0, 15))],
-                                                                None));
+                                                                None)).take(1000).count();
     });    
 }
 
@@ -96,7 +96,7 @@ fn and_query_frequent_seldom_10000_1000(b: &mut Bencher) {
         INDEX_10000_1000.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
                                                                 vec![BooleanQuery::Atom(QueryAtom::new(0, 10)),
                                                                      BooleanQuery::Atom(QueryAtom::new(0, 40000))],
-                                                                None));
+                                                                None)).count();
     });    
 }
 
@@ -106,7 +106,7 @@ fn and_query_seldom_seldom_10000_1000(b: &mut Bencher) {
         INDEX_10000_1000.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
                                                                 vec![BooleanQuery::Atom(QueryAtom::new(0, 42300)),
                                                                      BooleanQuery::Atom(QueryAtom::new(0, 40000))],
-                                                                None));
+                                                                None)).count();
     });    
 }
 

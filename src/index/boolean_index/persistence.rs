@@ -9,6 +9,7 @@ use index::boolean_index::posting::Posting;
 use std::mem::transmute;
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 use std;
 
 const CHUNKSIZE: usize = 1_000_000;
