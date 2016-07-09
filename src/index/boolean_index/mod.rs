@@ -57,10 +57,6 @@ pub enum BooleanQuery<TTerm> {
               Option<(FilterOperator, Box<BooleanQuery<TTerm>>)>),
 }
 
-pub struct BooleanQueryResult<'a> {
-    pub document_ids: Box<Iterator<Item=u64> + 'a>
-}
-
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     index: BTreeMap<TTerm, Vec<Posting>>
@@ -73,13 +69,15 @@ impl<TTerm: Debug + Ord> Debug for BooleanIndex<TTerm> {
                            self.document_count,
                            self.index.len());
         for (term, postings) in &self.index {
-            write!(f,
+            if let Err(e) = write!(f,
                    "[{:?} df:{} cf:{}]",
                    term,
                    postings.len(),
                    postings.iter()
                        .map(|&(_, ref positions)| positions.len())
-                       .fold(0, |acc, x| acc + x));
+                                   .fold(0, |acc, x| acc + x)) {
+                return Err(e);
+            }
         }
         res
     }

@@ -9,7 +9,6 @@ use index::boolean_index::posting::Posting;
 use std::mem::transmute;
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
-use std::marker::PhantomData;
 use std;
 
 const CHUNKSIZE: usize = 1_000_000;
@@ -166,15 +165,6 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanInde
             }
         })
     }
-}
-
-
-fn read_u16(barry: &[u8]) -> u16 {
-    let mut array = [0u8; 2];
-    for (&x, p) in barry.iter().zip(array.iter_mut()) {
-        *p = x;
-    }
-    unsafe { transmute::<_, u16>(array) }
 }
 
 fn read_u32(barry: &[u8]) -> u32 {
