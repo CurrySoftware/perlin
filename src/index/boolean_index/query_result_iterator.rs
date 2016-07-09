@@ -17,43 +17,48 @@ macro_rules! unwrap_or_return_none{
 
 
 pub enum QueryResultIterator<'a> {
-    EmptyQuery,
-    AtomQuery(usize, Peekable<Iter<'a, Posting>>),
-    NAryQuery(NAryQueryIterator<'a>),
+    Empty,
+    Atom(usize, Peekable<Iter<'a, Posting>>),
+    NAry(NAryQueryIterator<'a>),
+}
+
+impl<'a> Iterator for QueryResultIterator<'a>{
+    type Item = &'a Posting;
+    
+    fn next(&mut self) -> Option<&'a Posting> {
+        match self {
+            &mut QueryResultIterator::Empty => None,
+            &mut QueryResultIterator::Atom(_, ref mut iter) => iter.next(),
+            &mut QueryResultIterator::NAry(ref mut iter) => iter.next(),
+        }
+    }
 }
 
 impl<'a> QueryResultIterator<'a> {
     fn estimate_length(&self) -> usize {
         match self {
-            &QueryResultIterator::EmptyQuery => 0,
-            &QueryResultIterator::AtomQuery(_, ref iter) => iter.len(),
-            &QueryResultIterator::NAryQuery(ref iter) => iter.estimate_length(),
+            &QueryResultIterator::Empty => 0,
+            &QueryResultIterator::Atom(_, ref iter) => iter.len(),
+            &QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
 
         }
     }
 
     fn relative_position(&self) -> usize {
         match self {
-            &QueryResultIterator::EmptyQuery => 0,
-            &QueryResultIterator::AtomQuery(rpos, _) => rpos,
-            &QueryResultIterator::NAryQuery(_) => 0,
+            &QueryResultIterator::Empty => 0,
+            &QueryResultIterator::Atom(rpos, _) => rpos,
+            &QueryResultIterator::NAry(_) => 0,
         }
 
     }
 
-    fn next(&mut self) -> Option<&'a Posting> {
-        match self {
-            &mut QueryResultIterator::EmptyQuery => None,
-            &mut QueryResultIterator::AtomQuery(_, ref mut iter) => iter.next(),
-            &mut QueryResultIterator::NAryQuery(ref mut iter) => iter.next(),
-        }
-    }
 
     fn peek(&mut self) -> Option<&'a Posting> {
         match self {
-            &mut QueryResultIterator::EmptyQuery => None,
-            &mut QueryResultIterator::AtomQuery(_, ref mut iter) => iter.peek().map(|val| *val),
-            &mut QueryResultIterator::NAryQuery(ref mut iter) => iter.peek(),
+            &mut QueryResultIterator::Empty => None,
+            &mut QueryResultIterator::Atom(_, ref mut iter) => iter.peek().map(|val| *val),
+            &mut QueryResultIterator::NAry(ref mut iter) => iter.peek(),
         }
     }
 }
@@ -345,15 +350,15 @@ impl<'a> NAryQueryIterator<'a> {
     fn estimate_length(&self) -> usize {
         match self.bool_operator {
             Some(BooleanOperator::And) => {
-                return self.operands[0].estimate_length();
+                self.operands[0].estimate_length()
             }
             Some(BooleanOperator::Or) => {
-                return self.operands[self.operands.len() - 1].estimate_length();
+                self.operands[self.operands.len() - 1].estimate_length()
             }
             None => {
                 match self.pos_operator {
                     Some(PositionalOperator::InOrder) => {
-                        return self.operands[0].estimate_length();
+                        self.operands[0].estimate_length()
                     }
                     None => {
                         unreachable!();
@@ -365,10 +370,10 @@ impl<'a> NAryQueryIterator<'a> {
 }
 
 
-pub fn positional_intersect(lhs: &[usize],
-                            rhs: &[usize],
+pub fn positional_intersect(lhs: &[u32],
+                            rhs: &[u32],
                             bounds: (i64, i64))
-                            -> Vec<(usize, usize)> {
+                            -> Vec<(u32, u32)> {
 
     // To understand this algorithm imagine a table.
     // The columns are headed with the values from the rhs slice

@@ -1,4 +1,4 @@
-use index::Index;
+use index::{Index};
 
 use std::collections::BTreeMap;
 use std::iter::Iterator;
@@ -9,35 +9,13 @@ use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::posting::Posting;
 
 mod query_result_iterator;
+mod persistence;
 
 mod posting{
 
     // For each term-document pair the doc_id and the
     // positions of the term inside the document are stored
-    pub type Posting = (usize /* doc_id */, Vec<usize> /* positions */);
-}
-
-
-pub struct BooleanIndex<TTerm: Ord> {
-    document_count: usize,
-    index: BTreeMap<TTerm, Vec<Posting>>,
-}
-
-impl<TTerm: Debug + Ord> Debug for BooleanIndex<TTerm> {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        let res = writeln!(f,
-                           "Document Count: {} Term Count: {}",
-                           self.document_count,
-                           self.index.len());
-        for (term, postings) in self.index.iter() {
-            write!(f,
-                   "[{:?} df:{} cf:{}]",
-                   term,
-                   postings.len(),
-                   postings.iter().map(|&(_, ref positions)| positions.len()).fold(0, |acc, x| acc + x));
-        }
-        res
-    }
+    pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);
 }
 
 
@@ -81,8 +59,31 @@ pub enum BooleanQuery<TTerm> {
 }
 
 pub struct BooleanQueryResult {
-    pub document_ids: Vec<usize>,
+    pub document_ids: Vec<u64>,
 }
+
+pub struct BooleanIndex<TTerm: Ord> {
+    document_count: usize,
+    index: BTreeMap<TTerm, Vec<Posting>>,
+}
+
+impl<TTerm: Debug + Ord> Debug for BooleanIndex<TTerm> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        let res = writeln!(f,
+                           "Document Count: {} Term Count: {}",
+                           self.document_count,
+                           self.index.len());
+        for (term, postings) in self.index.iter() {
+            write!(f,
+                   "[{:?} df:{} cf:{}]",
+                   term,
+                   postings.len(),
+                   postings.iter().map(|&(_, ref positions)| positions.len()).fold(0, |acc, x| acc + x));
+        }
+        res
+    }
+}
+
 
 impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
@@ -99,26 +100,26 @@ impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
     /// Returns the document_id used by the index
     fn index_document<TDocIterator: Iterator<Item = TTerm>>(&mut self,
                                                             document: TDocIterator)
-                                                            -> usize {
+                                                            -> u64 {
         let new_doc_id = self.document_count;
         for (term_position, term) in document.enumerate() {
             // Get all doc_ids in BTree for a term
             if let Some(listing) = self.index.get_mut(&term) {
                 // check if document is already there
-                match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&new_doc_id)) {
+                match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&(new_doc_id as  u64))) {
                     Ok(term_doc_index) => {
                         // Document already had that term.
                         // Look for where to put the current term in the positions list
                         let ref mut term_doc_positions = listing.get_mut(term_doc_index).unwrap().1;
-                        match term_doc_positions.binary_search(&term_position) {
-                            Err(index) => term_doc_positions.insert(index, term_position),
+                        match term_doc_positions.binary_search(&(term_position as u32)) {
+                            Err(index) => term_doc_positions.insert(index, term_position as u32),
                             Ok(_) => {}
                             // Two terms at the same position. Should at least be possible
                             // so: Do nothing
                         }
                     }
                     Err(term_doc_index) => {
-                        listing.insert(term_doc_index, (new_doc_id, vec![term_position]))
+                        listing.insert(term_doc_index, (new_doc_id as u64, vec![term_position as u32]))
                     }
 
                 }
@@ -126,21 +127,21 @@ impl<TTerm: Ord> Index<TTerm> for BooleanIndex<TTerm> {
                 continue;
             };
             // Term was not in BTree. Add it
-            self.index.insert(term, vec![(new_doc_id, vec![term_position])]);
+            self.index.insert(term, vec![(new_doc_id as u64, vec![term_position as u32])]);
         }
         self.document_count += 1;
-        new_doc_id
+        new_doc_id as u64
     }
 
     fn execute_query(&self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
-            QueryResultIterator::EmptyQuery => BooleanQueryResult { document_ids: vec![] },
-            QueryResultIterator::AtomQuery(_, iter) => {
+            QueryResultIterator::Empty => BooleanQueryResult { document_ids: vec![] },
+            QueryResultIterator::Atom(_, iter) => {
                 BooleanQueryResult {
                     document_ids: iter.map(|&(doc_id, _)| doc_id).collect::<Vec<_>>(),
                 }
             }
-            QueryResultIterator::NAryQuery(iter) => {
+            QueryResultIterator::NAry(iter) => {
                 BooleanQueryResult {
                     document_ids: iter.map(|&(doc_id, _)| doc_id).collect::<Vec<_>>(),
                 }
@@ -177,7 +178,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         } else {
             None
         };
-        QueryResultIterator::NAryQuery(NAryQueryIterator::new(operator.clone(),
+        QueryResultIterator::NAry(NAryQueryIterator::new(operator.clone(),
                                                               operands.iter()
                                                                   .map(|op| self.run_query(op))
                                                                   .collect::<Vec<_>>(),
@@ -188,7 +189,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                             operator: &PositionalOperator,
                             operands: &Vec<QueryAtom<TTerm>>)
                             -> QueryResultIterator {
-        QueryResultIterator::NAryQuery(NAryQueryIterator::new_positional(operator.clone(),
+        QueryResultIterator::NAry(NAryQueryIterator::new_positional(operator.clone(),
                                                                          operands.into_iter()
                                                                              .map(|op| {
                                                                                  self.run_atom(
@@ -201,9 +202,9 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.index.get(atom) {
-            QueryResultIterator::AtomQuery(relative_position, result.iter().peekable())
+            QueryResultIterator::Atom(relative_position, result.iter().peekable())
         } else {
-            QueryResultIterator::EmptyQuery
+            QueryResultIterator::Empty
         }
     }
 }
@@ -218,7 +219,7 @@ mod tests {
     use super::*;
     use index::Index;
 
-    fn prepare_index() -> BooleanIndex<usize> {
+    pub fn prepare_index() -> BooleanIndex<usize> {
         let mut index = BooleanIndex::new();
         index.index_document(0..10);
         index.index_document((0..10).map(|i| i * 2));

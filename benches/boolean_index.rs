@@ -19,7 +19,7 @@ lazy_static!{
     static ref INDEX_100_100: BooleanIndex<usize> = prepare_index(100, 100);
     static ref INDEX_1000_1000: BooleanIndex<usize> = prepare_index(1000, 1000);
     static ref INDEX_10000_1000: BooleanIndex<usize> = prepare_index(10000, 1000);
-    //static ref INDEX_100000_1000: BooleanIndex<usize> = prepare_index(100000, 1000);
+//    static ref INDEX_100000_1000: BooleanIndex<usize> = prepare_index(100000, 1000);
 }
 
 #[bench]
