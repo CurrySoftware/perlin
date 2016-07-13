@@ -96,14 +96,11 @@ build_bench!(atom_frequent, &BooleanQuery::Atom(QueryAtom::new(0, 4)));
 build_bench!(atom_seldom, &BooleanQuery::Atom(QueryAtom::new(0, 10000)));
 build_bench!(and_freq_freq, &BooleanQuery::NAry(BooleanOperator::And,
                                                 vec![BooleanQuery::Atom(QueryAtom::new(0, 10)),
-                                                     BooleanQuery::Atom(QueryAtom::new(0, 15))],
-                                                None));
+                                                     BooleanQuery::Atom(QueryAtom::new(0, 15))]                                                ));
 build_bench!(nested_and, &BooleanQuery::NAry(BooleanOperator::And,
                                              vec![BooleanQuery::NAry(BooleanOperator::And,
-                                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 100)), BooleanQuery::Atom(QueryAtom::new(0, 200)), BooleanQuery::Atom(QueryAtom::new(0, 300))],
-                                                                     None),
-                                                  BooleanQuery::Atom(QueryAtom::new(0, 40))],
-                                             None));
+                                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 100)), BooleanQuery::Atom(QueryAtom::new(0, 200)), BooleanQuery::Atom(QueryAtom::new(0, 300))]                                                                     ),
+                                                  BooleanQuery::Atom(QueryAtom::new(0, 40))]                                             ));
                                                                          
                                                                                              
 
