@@ -1,28 +1,36 @@
 use perlin::index::{Index, PersistentIndex};
-use std::rc::Rc;
 use std::fmt::Debug;
 use std::env;
-use std::path::Path;
 use std::fs::File;
-use rand::{StdRng, Rng};
-use rand::Rand;
 use rand;
 
 pub fn prepare_index<'a, TIndex: Index<'a, usize> + Debug + PersistentIndex>(documents: usize,
                                                                      document_size: usize)
-                                                                     -> TIndex {
+                                                                             -> TIndex {
+
+  //  println!("Preparing Index with {} documents and {} terms per document", documents, document_size);
     let mut tmp_dir = env::temp_dir();
     tmp_dir.push(&format!("bench_index_{}_{}.bin", documents, document_size));
 
     if tmp_dir.exists() {
-        TIndex::read_from(&mut File::open(tmp_dir.as_path()).unwrap()).unwrap()
+    //    println!("Found index in temporary directory. Reading it!");
+        let result = TIndex::read_from(&mut File::open(tmp_dir.as_path()).unwrap()).unwrap();
+    //    println!("Finished!");
+        result
     } else {
+    //    println!("Index has to be created. Starting...");
         let mut index = TIndex::new();
-        let mut rng = ZipfGenerator::new(voc_size(50, 0.5, documents * document_size));
-        for _ in 0..documents {
+        let rng = ZipfGenerator::new(voc_size(20, 0.5, documents * document_size));
+        for i in 0..documents {
+            if i % 1000 == 0
+            {
+                println!("{}/{} documents", i, documents);
+            }
             index.index_document(rng.clone().take(document_size));
         }
-        index.write_to(&mut File::create(tmp_dir.as_path()).unwrap());
+      //  println!("Finished creating the Index! Writing to Disk!");
+        index.write_to(&mut File::create(tmp_dir.as_path()).unwrap()).unwrap();
+     //   println!("Finished!");
         index
     }
 }

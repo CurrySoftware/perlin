@@ -9,111 +9,104 @@ mod utils;
 
 use utils::*;
 
-use test::Bencher;
-
 use perlin::index::boolean_index::*;
-use perlin::index::Index;
 
 lazy_static!{
-    static ref INDEX_10_10: BooleanIndex<usize> = prepare_index(10, 10);
-    static ref INDEX_100_100: BooleanIndex<usize> = prepare_index(100, 100);
-    static ref INDEX_1000_1000: BooleanIndex<usize> = prepare_index(1000, 1000);
-    static ref INDEX_10000_1000: BooleanIndex<usize> = prepare_index(10000, 1000);
-//    static ref INDEX_100000_1000: BooleanIndex<usize> = prepare_index(100000, 1000);
+    pub static ref INDICES: [BooleanIndex<usize>; 7] = [
+        prepare_index(10, 10),      //100
+        prepare_index(100, 100),    //10.000
+        prepare_index(1000, 100),   //100.000
+        prepare_index(10000, 100),  //1.000.000
+        prepare_index(100000, 100), //10.000.000
+        prepare_index(10000, 1000), //10.000.000
+        prepare_index(10000, 10000),//100.000.000
+    ];
 }
 
-#[bench]
-fn atom_query_frequent_10_10(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_10_10.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4)));
-    });
+macro_rules! bench {
+    ($query:expr) =>
+    {
+        #[bench]
+        fn i_10_10(b: &mut Bencher) {
+            b.iter(||
+                INDICES[0].execute_query($query).count()
+            );
+        }
+
+        #[bench]
+        fn i_100_100(b: &mut Bencher) {
+            b.iter(||
+                INDICES[1].execute_query($query).count()
+            );
+        }
+
+        #[bench]
+        fn i_1000_100(b: &mut Bencher) {
+            b.iter(||
+                INDICES[2].execute_query($query).count()
+            );
+        }
+
+        #[bench]
+        fn i_10000_100(b: &mut Bencher) {
+            b.iter(||
+                INDICES[3].execute_query($query).count()
+            );
+        }
+
+        #[bench]
+        fn i_100000_100(b: &mut Bencher) {
+            b.iter(||
+                INDICES[4].execute_query($query).count()
+            );
+        }
+
+        #[bench]
+        fn i_10000_1000(b: &mut Bencher) {
+            b.iter(||
+                INDICES[5].execute_query($query).count()
+            );
+        }
+
+        #[bench]
+        fn i_10000_10000(b: &mut Bencher) {
+            b.iter(||
+                INDICES[6].execute_query($query).count()
+            );
+        }
+    }
 }
 
-#[bench]
-fn atom_query_frequent_100_100(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_100_100.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4)));
-    });
+macro_rules! build_bench {
+    ($name:ident, $query:expr) => (
+        mod $name {
+            use super::*;
+            use test::Bencher;
+            use perlin::index::boolean_index::*;
+            use perlin::index::Index;
+            bench!{$query}
+            
+        }
+
+    )
+
 }
 
-#[bench]
-fn atom_query_frequent_1000_1000(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_1000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4)));
-    });
-}
+build_bench!(atom_frequent, &BooleanQuery::Atom(QueryAtom::new(0, 4)));
+build_bench!(atom_seldom, &BooleanQuery::Atom(QueryAtom::new(0, 10000)));
+build_bench!(and_freq_freq, &BooleanQuery::NAry(BooleanOperator::And,
+                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 10)),
+                                                     BooleanQuery::Atom(QueryAtom::new(0, 15))],
+                                                None));
+build_bench!(nested_and, &BooleanQuery::NAry(BooleanOperator::And,
+                                             vec![BooleanQuery::NAry(BooleanOperator::And,
+                                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 100)), BooleanQuery::Atom(QueryAtom::new(0, 200)), BooleanQuery::Atom(QueryAtom::new(0, 300))],
+                                                                     None),
+                                                  BooleanQuery::Atom(QueryAtom::new(0, 40))],
+                                             None));
+                                                                         
+                                                                                             
+
+                                                     
 
 
-#[bench]
-fn atom_query_frequent_10000_1000(b: &mut Bencher) {
-    b.iter(|| {
-      INDEX_10000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4))).count()
-    });
-}
-
-#[bench]
-fn atom_query_seldom_10_10(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_10_10.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 40)));
-    });
-}
-
-#[bench]
-fn atom_query_seldom_100_100(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_100_100.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 400)));
-    });
-}
-
-#[bench]
-fn atom_query_seldom_1000_1000(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_1000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4000)));
-    });
-}
-
-
-#[bench]
-fn atom_query_seldom_10000_1000(b: &mut Bencher) {
-    b.iter(|| {
-      INDEX_10000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 400000))).count();
-    });
-}
-
-#[bench]
-fn and_query_frequent_frequent_10000_1000(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_10000_1000.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
-                                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 10)),
-                                                                     BooleanQuery::Atom(QueryAtom::new(0, 15))],
-                                                                None)).take(1000).count();
-    });    
-}
-
-#[bench]
-fn and_query_frequent_seldom_10000_1000(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_10000_1000.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
-                                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 10)),
-                                                                     BooleanQuery::Atom(QueryAtom::new(0, 40000))],
-                                                                None)).count();
-    });    
-}
-
-#[bench]
-fn and_query_seldom_seldom_10000_1000(b: &mut Bencher) {
-    b.iter(|| {
-        INDEX_10000_1000.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
-                                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 42300)),
-                                                                     BooleanQuery::Atom(QueryAtom::new(0, 40000))],
-                                                                None)).count();
-    });    
-}
-
-
-// #[bench]
-// fn atom_query_100000_1000(b: &mut Bencher) {
-//     b.iter(|| {
-//         INDEX_100000_1000.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 4)));
-//     });
-// }

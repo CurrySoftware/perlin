@@ -24,7 +24,7 @@ pub enum QueryResultIterator<'a> {
 
 impl<'a> Iterator for QueryResultIterator<'a>{
     type Item = &'a Posting;
-    
+
     fn next(&mut self) -> Option<&'a Posting> {
         match *self {
             QueryResultIterator::Empty => None,
@@ -35,6 +35,7 @@ impl<'a> Iterator for QueryResultIterator<'a>{
 }
 
 impl<'a> QueryResultIterator<'a> {
+
     fn estimate_length(&self) -> usize {
         match *self {
             QueryResultIterator::Empty => 0,
@@ -51,7 +52,6 @@ impl<'a> QueryResultIterator<'a> {
         }
 
     }
-
 
     fn peek(&mut self) -> Option<&'a Posting> {
         match *self {

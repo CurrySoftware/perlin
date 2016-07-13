@@ -51,8 +51,8 @@ impl<TTerm> QueryAtom<TTerm> {
 
 pub enum BooleanQuery<TTerm> {
     Atom(QueryAtom<TTerm>),
-    PositionalQuery(PositionalOperator, Vec<QueryAtom<TTerm>>),
-    NAryQuery(BooleanOperator,
+    Positional(PositionalOperator, Vec<QueryAtom<TTerm>>),
+    NAry(BooleanOperator,
               Vec<BooleanQuery<TTerm>>,
               Option<(FilterOperator, Box<BooleanQuery<TTerm>>)>),
 }
@@ -153,10 +153,10 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
             BooleanQuery::Atom(ref atom) => {
                 self.run_atom(atom.relative_position, &atom.query_term)
             }
-            BooleanQuery::NAryQuery(ref operator, ref operands, ref filter) => {
+            BooleanQuery::NAry(ref operator, ref operands, ref filter) => {
                 self.run_nary_query(operator, operands, filter)
             }
-            BooleanQuery::PositionalQuery(ref operator, ref operands) => {
+            BooleanQuery::Positional(ref operator, ref operands) => {
                 self.run_positional_query(operator, operands)
             }
         }
@@ -264,7 +264,7 @@ mod tests {
     fn nary_query() {
         let index = prepare_index();
 
-        assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
+        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                     vec![BooleanQuery::Atom(QueryAtom::new(0,
                                                                                            5)),
                                                          BooleanQuery::Atom(QueryAtom::new(0,
@@ -272,7 +272,7 @@ mod tests {
                                                     None))
             .collect::<Vec<_>>() ==
                 vec![0, 2]);
-        assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
+        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                     vec![BooleanQuery::Atom(QueryAtom::new(0,
                                                                                            0)),
                                                          BooleanQuery::Atom(QueryAtom::new(0,
@@ -285,20 +285,20 @@ mod tests {
     #[test]
     fn and_query() {
         let index = prepare_index();
-        assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
+        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                                                          BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .collect::<Vec<_>>() == vec![]);
-        assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::And,
+        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 14)),
                                                          BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .collect::<Vec<_>>() == vec![1]);
         assert!(index.execute_query(
-            &BooleanQuery::NAryQuery(
+            &BooleanQuery::NAry(
                 BooleanOperator::And,
-                vec![BooleanQuery::NAryQuery(BooleanOperator::And,
+                vec![BooleanQuery::NAry(BooleanOperator::And,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                         BooleanQuery::Atom(QueryAtom::new(0, 9))],
                     None),
@@ -306,9 +306,9 @@ mod tests {
                 None))
                 .collect::<Vec<_>>() == vec![]);
         assert!(index.execute_query(
-            &BooleanQuery::NAryQuery(
+            &BooleanQuery::NAry(
                 BooleanOperator::And,
-                vec![BooleanQuery::NAryQuery(BooleanOperator::And,
+                vec![BooleanQuery::NAry(BooleanOperator::And,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 2)),
                         BooleanQuery::Atom(QueryAtom::new(0, 4))],
                     None),
@@ -320,20 +320,20 @@ mod tests {
     #[test]
     fn or_query() {
         let index = prepare_index();
-        assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::Or,
+        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                                                          BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .collect::<Vec<_>>() == vec![0, 1, 2]);
-        assert!(index.execute_query(&BooleanQuery::NAryQuery(BooleanOperator::Or,
+        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 14)),
                                                          BooleanQuery::Atom(QueryAtom::new(0, 12))],
                                                     None))
             .collect::<Vec<_>>() == vec![1]);
         assert!(index.execute_query(
-            &BooleanQuery::NAryQuery(
+            &BooleanQuery::NAry(
                 BooleanOperator::Or,
-                vec![BooleanQuery::NAryQuery(BooleanOperator::Or,
+                vec![BooleanQuery::NAry(BooleanOperator::Or,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                         BooleanQuery::Atom(QueryAtom::new(0, 9))],
                     None),
@@ -345,30 +345,30 @@ mod tests {
     #[test]
     fn inorder_query() {
         let index = prepare_index();
-        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+        assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                           vec![QueryAtom::new(0, 0),
                                                                QueryAtom::new(1, 1)]))
             .collect::<Vec<_>>() == vec![0]);
-        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+        assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                           vec![QueryAtom::new(1, 0),
                                                                QueryAtom::new(0, 1)]))
             .collect::<Vec<_>>() == vec![2]);
-        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+        assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                           vec![QueryAtom::new(0, 0),
                                                                QueryAtom::new(1, 2)]))
             .collect::<Vec<_>>() == vec![1]);
 
-        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+        assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                           vec![QueryAtom::new(2, 2),
                                                                QueryAtom::new(1, 1),
                                                                QueryAtom::new(0, 0)]))
             .collect::<Vec<_>>() == vec![0]);
-        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+        assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                           vec![QueryAtom::new(0, 2),
                                                                QueryAtom::new(1, 1),
                                                                QueryAtom::new(2, 0)]))
             .collect::<Vec<_>>() == vec![2]);
-        assert!(index.execute_query(&BooleanQuery::PositionalQuery(PositionalOperator::InOrder,
+        assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                           vec![QueryAtom::new(0, 2),
                                                                QueryAtom::new(1, 1),
                                                                QueryAtom::new(3, 0)]))
@@ -379,7 +379,7 @@ mod tests {
     fn query_filter() {
         let index = prepare_index();
         assert!(index.execute_query(
-            &BooleanQuery::NAryQuery(
+            &BooleanQuery::NAry(
                 BooleanOperator::And,
                 vec![BooleanQuery::Atom(QueryAtom::new(0, 2)),
                      BooleanQuery::Atom(QueryAtom::new(0, 0))],
