@@ -32,19 +32,3 @@ test nested_and::i_10_10          ... bench:         418 ns/iter (+/- 11)
 test result: ok. 0 passed; 0 failed; 0 ignored; 28 measured
 
 
-running 12 tests
-test index::boolean_index::persistence::tests::basic ... ignored
-test index::boolean_index::persistence::tests::length ... ignored
-test index::boolean_index::query_result_iterator::tests::estimate_length ... ignored
-test index::boolean_index::query_result_iterator::tests::peek ... ignored
-test index::boolean_index::tests::and_query ... ignored
-test index::boolean_index::tests::empty_query ... ignored
-test index::boolean_index::tests::indexing ... ignored
-test index::boolean_index::tests::inorder_query ... ignored
-test index::boolean_index::tests::nary_query ... ignored
-test index::boolean_index::tests::or_query ... ignored
-test index::boolean_index::tests::query_atom ... ignored
-test index::boolean_index::tests::query_filter ... ignored
-
-test result: ok. 0 passed; 0 failed; 12 ignored; 0 measured
-
