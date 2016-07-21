@@ -6,7 +6,6 @@ use index::{PersistentIndex, ByteEncodable, ByteDecodable};
 use index::boolean_index::BooleanIndex;
 use index::boolean_index::posting::Posting;
 
-use std::mem::transmute;
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
 use std;
@@ -29,15 +28,18 @@ impl ByteDecodable for String {
 
 impl ByteEncodable for usize {
     fn encode(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(8);
-        result.extend_from_slice(unsafe { &transmute::<_, [u8; 8]>(*self as u64) });
-        result
+        vbyte_encode(*self)
     }
 }
 
 impl ByteDecodable for usize {
     fn decode(bytes: Vec<u8>) -> Result<Self, String> {
-        Ok(read_u64(bytes.as_slice()) as usize)
+        let mut decoder = VByteDecoder::new(bytes.into_iter());
+        if let Some(res) = decoder.next() {
+            Ok(res)
+        } else {
+            Err("Tried to decode bytevector with variable byte code. Failed".to_string())
+        }
     }
 }
 
@@ -52,10 +54,6 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
         let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
         for term in &self.index {
             let term_bytes = encode_term(&term);
-            let term_bytes_len: [u8; 4] =
-                unsafe { transmute::<_, [u8; 4]>(term_bytes.len() as u32) };
-
-            bytes.extend_from_slice(&term_bytes_len);
             bytes.extend_from_slice(term_bytes.as_slice());
             if bytes.len() > CHUNKSIZE {
                 if let Err(e) = target.write(bytes.as_slice()) {
@@ -74,17 +72,14 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
         if let Err(e) = source.read_to_end(&mut bytes) {
             return Err(format!("{:?}", e));
         }
-
-        let mut ptr = 0;
+        let mut decoder = VByteDecoder::new(bytes.into_iter());
         let mut result = BTreeMap::new();
-        while ptr < bytes.len() {
-            let entry_size = read_u32(&bytes[ptr..ptr + 4]) as usize;
-            ptr += 4;
-            match decode_term(&bytes[ptr..ptr + entry_size]) {
-                Ok(term_posting) => {
+        loop {
+            match decode_term(&mut decoder) {
+                Ok(Some(term_posting)) => {
                     result.insert(term_posting.0, term_posting.1);
-                    ptr += entry_size;
                 }
+                Ok(None) => break,
                 Err(e) => return Err(e),
             }
         }
@@ -92,27 +87,34 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     }
 }
 
-fn decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posting>), String> {
-    let term_len: u8 = f[0] + 1;
-    let term_bytes_vec = Vec::from(&f[1..(term_len) as usize]);
-    match TTerm::decode(term_bytes_vec) {
-        Ok(term) => {
-            let mut postings = Vec::new();
-            let mut decoder = VByteDecoder::new((&f[term_len as usize..]).iter().map(|x| *x));
-            while let Some(doc_id) = decoder.next() {
-                let positions_len = decoder.next().unwrap();
-                let mut positions = Vec::with_capacity(positions_len as usize);
-                let mut last_position = 0;
-                for _ in 0..positions_len {
-                    last_position += decoder.next().unwrap();
-                    positions.push(last_position as u32);
-                }
-                postings.push((doc_id as u64, positions));
+fn decode_term<TTerm: ByteDecodable, T: Iterator<Item = u8>>
+    (decoder: &mut VByteDecoder<T>)
+     -> Result<Option<(TTerm, Vec<Posting>)>, String> {
+    if let Some(term_len) = decoder.next() {
+        let term_bytes_vec =
+            decoder.underlying_iterator().take(term_len as usize).collect::<Vec<_>>();
+        match TTerm::decode(term_bytes_vec) {
+            Ok(term) => {
+                let postings_len = decoder.next().unwrap();
+                let mut postings = Vec::with_capacity(postings_len);
+                for _ in 0..postings_len {
+                    let doc_id = decoder.next().unwrap();
+                    let positions_len = decoder.next().unwrap();
+                    let mut positions = Vec::with_capacity(positions_len as usize);
+                    let mut last_position = 0;
+                    for _ in 0..positions_len {
+                        last_position += decoder.next().unwrap();
+                        positions.push(last_position as u32);
+                    }
+                    postings.push((doc_id as u64, positions));
 
+                }
+                Ok(Some((term, postings)))
             }
-            Ok((term, postings))
+            Err(e) => Err(e),
         }
-        Err(e) => Err(e),
+    } else {
+        Ok(None)
     }
 
 }
@@ -126,9 +128,10 @@ fn decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posting>), 
 fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
     let term_bytes = term.0.encode();
-    let term_len: u8 = term_bytes.len() as u8;
-    bytes.push(term_len);
+    let mut term_len = vbyte_encode(term_bytes.len());
+    bytes.append(&mut term_len);
     bytes.extend_from_slice(term_bytes.as_slice());
+    bytes.append(&mut vbyte_encode(term.1.len()));
     for posting in term.1.iter() {
         bytes.append(&mut vbyte_encode(posting.0 as usize));
         bytes.append(&mut vbyte_encode(posting.1.len() as usize));
@@ -155,22 +158,6 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanInde
             }
         })
     }
-}
-
-fn read_u32(barry: &[u8]) -> u32 {
-    let mut array = [0u8; 4];
-    for (&x, p) in barry.iter().zip(array.iter_mut()) {
-        *p = x;
-    }
-    unsafe { transmute::<_, u32>(array) }
-}
-
-fn read_u64(barry: &[u8]) -> u64 {
-    let mut array = [0u8; 8];
-    for (&x, p) in barry.iter().zip(array.iter_mut()) {
-        *p = x;
-    }
-    unsafe { transmute::<_, u64>(array) }
 }
 
 fn vbyte_encode(mut number: usize) -> Vec<u8> {
@@ -206,6 +193,10 @@ struct VByteDecoder<T: Iterator<Item = u8>> {
 impl<T: Iterator<Item = u8>> VByteDecoder<T> {
     fn new(bytes: T) -> Self {
         VByteDecoder { bytes: bytes }
+    }
+
+    fn underlying_iterator(&mut self) -> &mut T {
+        &mut self.bytes
     }
 }
 
@@ -268,6 +259,19 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    fn simple() {
+        let mut index = BooleanIndex::new();
+        index.index_document(0..2);
+        let mut bytes: Vec<u8> = vec![];
+        index.write_to(&mut bytes).unwrap();
+        assert_eq!(bytes,
+                   vec![129 /* #TermBytes */, 128 /* Term: 0 */, 129 /* #docs */,
+                        128 /* doc_id */, 129 /* #positions */, 128 /* position: 0 */,
+                        129 /* #TermBytes */, 129 /* Term: 1 */, 129 /* #docs */,
+                        128 /* doc_id */, 129 /* #positions */, 129 /* position */]);
+    }
+
+    #[test]
     fn basic() {
         let index = prepare_index();
         let mut bytes: Vec<u8> = vec![];
@@ -289,5 +293,5 @@ mod tests {
         read_index.index_document(1..24);
         read_index.write_to(&mut bytes_2).unwrap();
         assert!(bytes.len() < bytes_2.len());
-    }    
+    }
 }
