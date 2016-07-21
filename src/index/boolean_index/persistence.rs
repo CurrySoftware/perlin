@@ -51,7 +51,7 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
         // Write blocks of 1MB to target
         let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
         for term in &self.index {
-            let term_bytes = encode_term(&term);
+            let term_bytes = vbyte_encode_term(&term);
             let term_bytes_len: [u8; 4] =
                 unsafe { transmute::<_, [u8; 4]>(term_bytes.len() as u32) };
 
@@ -80,7 +80,7 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
         while ptr < bytes.len() {
             let entry_size = read_u32(&bytes[ptr..ptr + 4]) as usize;
             ptr += 4;
-            match decode_term(&bytes[ptr..ptr + entry_size]) {
+            match vbyte_decode_term(&bytes[ptr..ptr + entry_size]) {
                 Ok(term_posting) => {
                     result.insert(term_posting.0, term_posting.1);
                     ptr += entry_size;
@@ -120,15 +120,40 @@ fn decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posting>), 
     }
 }
 
+fn vbyte_decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posting>), String> {
+    let term_len: u8 = f[0] + 1;
+    let term_bytes_vec = Vec::from(&f[1..(term_len) as usize]);
+    match TTerm::decode(term_bytes_vec) {
+        Ok(term) => {
+            let mut postings = Vec::new();
+            let mut decoder = VByteDecoder::new((&f[term_len as usize..]).iter().map(|x| *x));
+            while let Some(doc_id) = decoder.next() {
+                let positions_len = decoder.next().unwrap();
+                let mut positions = Vec::with_capacity(positions_len as usize);
+                for _ in 0..positions_len {
+                    positions.push(decoder.next().unwrap() as u32);
+                }
+                postings.push((doc_id as u64, positions));
+
+            }
+            Ok((term, postings))
+        }
+        Err(e) => Err(e),
+    }
+
+}
+
+
 // Represents a term-entry in the inverted index as a vector of bytes
 // Layout:
 // [u8; 1] length of term in bytes
-// [u8] term0
-// [u8; 8] doc_id
-// [u8; 4] #positions
-// [u8] u32 encoded positions
+// [u8] term
+// Loop over postings
+// |  [u8; 8] doc_id
+// |  [u8; 4] #positions
+// |  [u8] u32 encoded positions
 fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::with_capacity(10);
+    let mut bytes: Vec<u8> = Vec::new();
     let term_bytes = term.0.encode();
     let term_len: u8 = term_bytes.len() as u8;
     bytes.push(term_len);
@@ -146,6 +171,29 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
     }
     bytes
 }
+
+// Represents a term-entry in the inverted index as a vector of bytes
+// Layout:
+// [u8; 1] length of term in bytes
+// [u8] term
+// For every posting:
+// [u8] stream of vbyte encoded numbers: doc_id, #positions, [positions]
+fn vbyte_encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> {
+    let mut bytes: Vec<u8> = Vec::new();
+    let term_bytes = term.0.encode();
+    let term_len: u8 = term_bytes.len() as u8;
+    bytes.push(term_len);
+    bytes.extend_from_slice(term_bytes.as_slice());
+    for posting in term.1.iter() {
+        bytes.append(&mut vbyte_encode(posting.0 as usize));
+        bytes.append(&mut vbyte_encode(posting.1.len() as usize));
+        for position in posting.1.iter() {
+            bytes.append(&mut vbyte_encode(*position as usize));
+        }
+    }
+    bytes
+}
+
 
 impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanIndex<TTerm> {
     fn write_to<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
@@ -178,7 +226,7 @@ fn read_u64(barry: &[u8]) -> u64 {
     unsafe { transmute::<_, u64>(array) }
 }
 
-fn vbyte_encode(mut number: usize) -> Vec<u8>{
+fn vbyte_encode(mut number: usize) -> Vec<u8> {
     let mut result = Vec::new();
     loop {
         result.insert(0, (number % 128) as u8);
@@ -204,26 +252,24 @@ macro_rules! unwrap_or_return_none{
 }
 
 
-struct VByteDecoder<T: Iterator<Item=u8>> {
-    bytes: T
+struct VByteDecoder<T: Iterator<Item = u8>> {
+    bytes: T,
 }
 
-impl<T: Iterator<Item=u8>> VByteDecoder<T> {
+impl<T: Iterator<Item = u8>> VByteDecoder<T> {
     fn new(bytes: T) -> Self {
-        VByteDecoder{
-            bytes: bytes            
-        }        
+        VByteDecoder { bytes: bytes }
     }
 }
 
-impl<T: Iterator<Item=u8>> Iterator for VByteDecoder<T>{
+impl<T: Iterator<Item = u8>> Iterator for VByteDecoder<T> {
     type Item = usize;
     fn next(&mut self) -> Option<Self::Item> {
 
         let mut result: usize = 0;
         loop {
             result *= 128;
-            let val = unwrap_or_return_none!(self.bytes.next());            
+            let val = unwrap_or_return_none!(self.bytes.next());
             result += val as usize;
             if val >= 128 {
                 result -= 128;
@@ -249,12 +295,19 @@ fn test_vbyte_encode() {
 
 #[test]
 fn test_vbyte_decode() {
-    assert_eq!(VByteDecoder::new(vec![0x80].into_iter()).collect::<Vec<_>>(), vec![0]);
-    assert_eq!(VByteDecoder::new(vec![0x85].into_iter()).collect::<Vec<_>>(), vec![5]);
-    assert_eq!(VByteDecoder::new(vec![0xFF].into_iter()).collect::<Vec<_>>(), vec![127]);
-    assert_eq!(VByteDecoder::new(vec![0x80, 0x81].into_iter()).collect::<Vec<_>>(), vec![0, 1]);
-    assert_eq!(VByteDecoder::new(vec![0x03, 0x7F, 0xFF, 0x01, 0x82, 0x85].into_iter()).collect::<Vec<_>>(), vec![0xFFFF, 130, 5]);
-    assert_eq!(VByteDecoder::new(vec![0x80].into_iter()).collect::<Vec<_>>(), vec![0]);
+    assert_eq!(VByteDecoder::new(vec![0x80].into_iter()).collect::<Vec<_>>(),
+               vec![0]);
+    assert_eq!(VByteDecoder::new(vec![0x85].into_iter()).collect::<Vec<_>>(),
+               vec![5]);
+    assert_eq!(VByteDecoder::new(vec![0xFF].into_iter()).collect::<Vec<_>>(),
+               vec![127]);
+    assert_eq!(VByteDecoder::new(vec![0x80, 0x81].into_iter()).collect::<Vec<_>>(),
+               vec![0, 1]);
+    assert_eq!(VByteDecoder::new(vec![0x03, 0x7F, 0xFF, 0x01, 0x82, 0x85].into_iter())
+                   .collect::<Vec<_>>(),
+               vec![0xFFFF, 130, 5]);
+    assert_eq!(VByteDecoder::new(vec![0x80].into_iter()).collect::<Vec<_>>(),
+               vec![0]);
 }
 
 
