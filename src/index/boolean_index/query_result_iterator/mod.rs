@@ -18,6 +18,9 @@ macro_rules! unwrap_or_return_none{
     }
 }
 
+// The BooleanIndex implementation works with query iterators only. Why?
+// 1. It is faster (no stack or heap allocation)
+// 2. It is lazy
 /// Wrapper around different query iterator types
 /// Used to be able to simply and elegantly use nested queries of different types
 pub enum QueryResultIterator<'a> {
@@ -35,7 +38,7 @@ impl<'a> Iterator for QueryResultIterator<'a> {
             QueryResultIterator::Empty => None,
             QueryResultIterator::Atom(_, ref mut iter) => iter.next(),
             QueryResultIterator::NAry(ref mut iter) => iter.next(),
-            QueryResultIterator::Filter(ref mut iter) => iter.next()
+            QueryResultIterator::Filter(ref mut iter) => iter.next(),
         }
     }
 }
@@ -48,7 +51,7 @@ impl<'a> QueryResultIterator<'a> {
             QueryResultIterator::Empty => 0,
             QueryResultIterator::Atom(_, ref iter) => iter.len(),
             QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
-            QueryResultIterator::Filter(ref iter) => iter.estimate_length()
+            QueryResultIterator::Filter(ref iter) => iter.estimate_length(),
         }
     }
 
@@ -69,7 +72,7 @@ impl<'a> QueryResultIterator<'a> {
             QueryResultIterator::Empty => None,
             QueryResultIterator::Atom(_, ref mut iter) => iter.peek().map(|val| *val),
             QueryResultIterator::NAry(ref mut iter) => iter.peek(),
-            QueryResultIterator::Filter(ref mut iter) => iter.peek()
+            QueryResultIterator::Filter(ref mut iter) => iter.peek(),
         }
     }
 }
@@ -92,19 +95,22 @@ impl<'a> Iterator for FilterIterator<'a> {
         } else {
             self.peeked_value.take().unwrap()
         }
-    }   
+    }
 }
 
 impl<'a> FilterIterator<'a> {
-    pub fn new(operator: FilterOperator, sand: Box<QueryResultIterator<'a>>, sieve: Box<QueryResultIterator<'a>>) -> Self {
-        FilterIterator{
+    pub fn new(operator: FilterOperator,
+               sand: Box<QueryResultIterator<'a>>,
+               sieve: Box<QueryResultIterator<'a>>)
+               -> Self {
+        FilterIterator {
             operator: operator,
             sand: sand,
             sieve: sieve,
-            peeked_value: None
+            peeked_value: None,
         }
     }
-        
+
     fn peek(&mut self) -> Option<&'a Posting> {
         if self.peeked_value.is_none() {
             self.peeked_value = Some(self.next())
@@ -115,7 +121,7 @@ impl<'a> FilterIterator<'a> {
     fn estimate_length(&self) -> usize {
         let sand_len = self.sand.estimate_length();
         let sieve_len = self.sieve.estimate_length();
-        if  sand_len > sieve_len {
+        if sand_len > sieve_len {
             sand_len - sieve_len
         } else {
             0

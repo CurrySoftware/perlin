@@ -3,7 +3,7 @@ use index::Index;
 use std::collections::BTreeMap;
 use std::iter::Iterator;
 
-use std::fmt::{Formatter, Result, Debug};
+use std::fmt::{Formatter, Result, Debug, Display};
 
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
@@ -12,29 +12,36 @@ use index::boolean_index::posting::Posting;
 mod query_result_iterator;
 mod persistence;
 
+
+// not intended for public use. Thus the wrapper module
 mod posting {
     // For each term-document pair the doc_id and the
     // positions of the term inside the document are stored
     pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);
 }
 
-
+/// Basic boolean operator. Use it in combination with a `BooleanQuery`
 #[derive(Copy ,Clone)]
 pub enum BooleanOperator {
     Or,
     And,
 }
 
+/// Basic filter operator. Use it in combination with a `BooleanQuery`
 #[derive(Copy, Clone)]
 pub enum FilterOperator {
     Not,
 }
 
+/// Basic positional operator. Use it in combination with a `BooleanQuery`
 #[derive(Copy, Clone)]
 pub enum PositionalOperator {
+    /// Ensures that QueryAtoms are in the specified order and placement
+    /// See `BooleanQuery::Positional` for more information
     InOrder,
 }
 
+/// Stores term to be compared against and relative position of a query atom
 pub struct QueryAtom<TTerm> {
     relative_position: usize,
     query_term: TTerm,
@@ -52,6 +59,10 @@ impl<TTerm> QueryAtom<TTerm> {
 
 pub enum BooleanQuery<TTerm> {
     Atom(QueryAtom<TTerm>),
+    //Different from NAry because positional queries can currently only run on query-atoms.
+    //To ensure correct usage, this rather inelegant abstraction was implemented
+    //Nevertheless, internally both are handled by the same code
+    //See `NAryQueryIterator::new` and `NAryQueryIterator::new_positional`
     Positional(PositionalOperator, Vec<QueryAtom<TTerm>>),
     NAry(BooleanOperator, Vec<BooleanQuery<TTerm>>),
     Filter(FilterOperator,
@@ -64,6 +75,16 @@ pub enum BooleanQuery<TTerm> {
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     index: BTreeMap<TTerm, Vec<Posting>>,
+}
+
+
+impl<TTerm: Ord> Display for BooleanIndex<TTerm> {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        writeln!(f,
+                 "Document Count: {} Term Count: {}",
+                 self.document_count,
+                 self.index.len())
+    }
 }
 
 impl<TTerm: Debug + Ord> Debug for BooleanIndex<TTerm> {
@@ -184,8 +205,8 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                                                                     operands.into_iter()
                                                                         .map(|op| {
                                                                             self.run_atom(
-                                              op.relative_position,
-                                              &op.query_term)
+                                                      op.relative_position,
+                                                      &op.query_term)
                                                                         })
                                                                         .collect::<Vec<_>>()))
     }
@@ -200,6 +221,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                                                         Box::new(self.run_query(sieve))))
     }
 
+    
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.index.get(atom) {
             QueryResultIterator::Atom(relative_position, result.iter().peekable())
@@ -270,13 +292,11 @@ mod tests {
 
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 5)),
-                                                    BooleanQuery::Atom(QueryAtom::new(0, 0))]
-                                               ))
+                                                    BooleanQuery::Atom(QueryAtom::new(0, 0))]))
             .collect::<Vec<_>>() == vec![0, 2]);
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 0)),
-                                                    BooleanQuery::Atom(QueryAtom::new(0, 5))]
-                                               ))
+                                                    BooleanQuery::Atom(QueryAtom::new(0, 5))]))
             .collect::<Vec<_>>() == vec![0, 2]);
     }
 
@@ -286,31 +306,27 @@ mod tests {
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,
-                                                                                      12))]
-                                               ))
+                                                                                      12))]))
             .collect::<Vec<_>>() == vec![]);
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0,
                                                                                       14)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,
-                                                                                      12))]
-                                               ))
+                                                                                      12))]))
             .collect::<Vec<_>>() == vec![1]);
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                vec![BooleanQuery::NAry(BooleanOperator::And,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                         BooleanQuery::Atom(QueryAtom::new(0, 9))]
                     ),
-                    BooleanQuery::Atom(QueryAtom::new(0, 12))]
-                                               ))
+                    BooleanQuery::Atom(QueryAtom::new(0, 12))]))
             .collect::<Vec<_>>() == vec![]);
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
                                                vec![BooleanQuery::NAry(BooleanOperator::And,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 2)),
                         BooleanQuery::Atom(QueryAtom::new(0, 4))]
                     ),
-                    BooleanQuery::Atom(QueryAtom::new(0, 16))]
-                                               ))
+                    BooleanQuery::Atom(QueryAtom::new(0, 16))]))
             .collect::<Vec<_>>() == vec![1]);
     }
 
@@ -320,23 +336,20 @@ mod tests {
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,
-                                                                                      12))]
-                                               ))
+                                                                                      12))]))
             .collect::<Vec<_>>() == vec![0, 1, 2]);
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0,
                                                                                       14)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,
-                                                                                      12))]
-                                               ))
+                                                                                      12))]))
             .collect::<Vec<_>>() == vec![1]);
         assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::NAry(BooleanOperator::Or,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                         BooleanQuery::Atom(QueryAtom::new(0, 9))]
                     ),
-                    BooleanQuery::Atom(QueryAtom::new(0, 16))]
-                                               ))
+                    BooleanQuery::Atom(QueryAtom::new(0, 16))]))
             .collect::<Vec<_>>() == vec![0, 1, 2]);
     }
 
