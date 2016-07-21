@@ -51,7 +51,7 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
         // Write blocks of 1MB to target
         let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
         for term in &self.index {
-            let term_bytes = vbyte_encode_term(&term);
+            let term_bytes = encode_term(&term);
             let term_bytes_len: [u8; 4] =
                 unsafe { transmute::<_, [u8; 4]>(term_bytes.len() as u32) };
 
@@ -80,7 +80,7 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
         while ptr < bytes.len() {
             let entry_size = read_u32(&bytes[ptr..ptr + 4]) as usize;
             ptr += 4;
-            match vbyte_decode_term(&bytes[ptr..ptr + entry_size]) {
+            match decode_term(&bytes[ptr..ptr + entry_size]) {
                 Ok(term_posting) => {
                     result.insert(term_posting.0, term_posting.1);
                     ptr += entry_size;
@@ -97,41 +97,15 @@ fn decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posting>), 
     let term_bytes_vec = Vec::from(&f[1..(term_len) as usize]);
     match TTerm::decode(term_bytes_vec) {
         Ok(term) => {
-            let mut ptr = term_len as usize;
-            let mut postings = Vec::with_capacity(100);
-            while ptr < f.len() {
-                // 8bytes doc_id
-                let doc_id = read_u64(&f[ptr..ptr + 8]);
-                ptr += 8;
-                let positions_len = read_u32(&f[ptr..ptr + 4]);
-                ptr += 4;
-                let positions = unsafe {
-                    std::slice::from_raw_parts(f[ptr..].as_ptr() as *const u32,
-                                               positions_len as usize)
-                };
-                ptr += positions_len as usize * 4 as usize;
-                let mut positions_vec = Vec::with_capacity(positions_len as usize);
-                positions_vec.extend_from_slice(positions);
-                postings.push((doc_id, positions_vec));
-            }
-            Ok((term, postings))
-        }
-        Err(e) => Err(e),
-    }
-}
-
-fn vbyte_decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posting>), String> {
-    let term_len: u8 = f[0] + 1;
-    let term_bytes_vec = Vec::from(&f[1..(term_len) as usize]);
-    match TTerm::decode(term_bytes_vec) {
-        Ok(term) => {
             let mut postings = Vec::new();
             let mut decoder = VByteDecoder::new((&f[term_len as usize..]).iter().map(|x| *x));
             while let Some(doc_id) = decoder.next() {
                 let positions_len = decoder.next().unwrap();
                 let mut positions = Vec::with_capacity(positions_len as usize);
+                let mut last_position = 0;
                 for _ in 0..positions_len {
-                    positions.push(decoder.next().unwrap() as u32);
+                    last_position += decoder.next().unwrap();
+                    positions.push(last_position as u32);
                 }
                 postings.push((doc_id as u64, positions));
 
@@ -143,42 +117,13 @@ fn vbyte_decode_term<TTerm: ByteDecodable>(f: &[u8]) -> Result<(TTerm, Vec<Posti
 
 }
 
-
-// Represents a term-entry in the inverted index as a vector of bytes
-// Layout:
-// [u8; 1] length of term in bytes
-// [u8] term
-// Loop over postings
-// |  [u8; 8] doc_id
-// |  [u8; 4] #positions
-// |  [u8] u32 encoded positions
-fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::new();
-    let term_bytes = term.0.encode();
-    let term_len: u8 = term_bytes.len() as u8;
-    bytes.push(term_len);
-    bytes.extend_from_slice(term_bytes.as_slice());
-    for posting in term.1.iter() {
-        let doc_id_bytes = unsafe { transmute::<_, [u8; 8]>(posting.0) };
-        let positions_len_bytes: [u8; 4] =
-            unsafe { transmute::<_, [u8; 4]>(posting.1.len() as u32) };
-        let position_bytes = unsafe {
-            std::slice::from_raw_parts(posting.1.as_ptr() as *const u8, posting.1.len() * 4)
-        };
-        bytes.extend_from_slice(&doc_id_bytes);
-        bytes.extend_from_slice(&positions_len_bytes);
-        bytes.extend_from_slice(position_bytes);
-    }
-    bytes
-}
-
 // Represents a term-entry in the inverted index as a vector of bytes
 // Layout:
 // [u8; 1] length of term in bytes
 // [u8] term
 // For every posting:
 // [u8] stream of vbyte encoded numbers: doc_id, #positions, [positions]
-fn vbyte_encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> {
+fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
     let term_bytes = term.0.encode();
     let term_len: u8 = term_bytes.len() as u8;
@@ -187,8 +132,10 @@ fn vbyte_encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Ve
     for posting in term.1.iter() {
         bytes.append(&mut vbyte_encode(posting.0 as usize));
         bytes.append(&mut vbyte_encode(posting.1.len() as usize));
+        let mut last_position = 0;
         for position in posting.1.iter() {
-            bytes.append(&mut vbyte_encode(*position as usize));
+            bytes.append(&mut vbyte_encode((*position - last_position) as usize));
+            last_position = *position;
         }
     }
     bytes
@@ -342,5 +289,5 @@ mod tests {
         read_index.index_document(1..24);
         read_index.write_to(&mut bytes_2).unwrap();
         assert!(bytes.len() < bytes_2.len());
-    }
+    }    
 }
