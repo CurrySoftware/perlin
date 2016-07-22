@@ -1,0 +1,7 @@
+-rw-r--r-- 1 jdemler jdemler  39M Jul 21 16:06 bench_index_100000_100.bin
+-rw-r--r-- 1 jdemler jdemler 299M Jul 21 16:26 bench_index_10000_10000.bin
+-rw-r--r-- 1 jdemler jdemler  33M Jul 21 16:06 bench_index_10000_1000.bin
+-rw-r--r-- 1 jdemler jdemler 3.3M Jul 21 16:05 bench_index_10000_100.bin
+-rw-r--r-- 1 jdemler jdemler 325K Jul 21 16:05 bench_index_1000_100.bin
+-rw-r--r-- 1 jdemler jdemler  29K Jul 21 16:05 bench_index_100_100.bin
+-rw-r--r-- 1 jdemler jdemler  420 Jul 21 16:05 bench_index_10_10.bin
