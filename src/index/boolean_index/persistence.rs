@@ -87,8 +87,8 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     }
 }
 
-fn decode_term<TTerm: ByteDecodable, T: Iterator<Item = u8>>
-    (decoder: &mut VByteDecoder<T>)
+fn decode_term<TTerm: ByteDecodable>
+    (decoder: &mut VByteDecoder)
      -> Result<Option<(TTerm, Vec<Posting>)>, String> {
     if let Some(term_len) = decoder.next() {
         let term_bytes_vec =
@@ -186,21 +186,21 @@ macro_rules! unwrap_or_return_none{
 }
 
 
-struct VByteDecoder<T: Iterator<Item = u8>> {
-    bytes: T,
+struct VByteDecoder<'a> {
+    bytes: Box<Iterator<Item=u8> + 'a>
 }
 
-impl<T: Iterator<Item = u8>> VByteDecoder<T> {
-    fn new(bytes: T) -> Self {
-        VByteDecoder { bytes: bytes }
+impl<'a> VByteDecoder<'a> {
+    fn new<T: Iterator<Item=u8> + 'a>(bytes: T) -> Self {
+        VByteDecoder { bytes: Box::new(bytes) }
     }
 
-    fn underlying_iterator(&mut self) -> &mut T {
-        &mut self.bytes
+    fn underlying_iterator(&mut self) -> &mut Iterator<Item=u8> {
+       &mut self.bytes
     }
 }
 
-impl<T: Iterator<Item = u8>> Iterator for VByteDecoder<T> {
+impl<'a> Iterator for VByteDecoder<'a> {
     type Item = usize;
     fn next(&mut self) -> Option<Self::Item> {
 
