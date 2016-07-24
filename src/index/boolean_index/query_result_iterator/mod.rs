@@ -3,6 +3,7 @@ use std::iter::Iterator;
 use std::iter::Peekable;
 use std::io::{Read, Result};
 
+use index::Provider;
 use index::boolean_index::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
@@ -76,28 +77,6 @@ impl<'a> QueryResultIterator<'a> {
             QueryResultIterator::NAry(ref mut iter) => iter.peek(),
             QueryResultIterator::Filter(ref mut iter) => iter.peek(),
         }
-    }
-}
-
-pub struct PostingDecoder{
-    bytes: VByteDecoder<>
-}
-
-impl<'a> PostingDecoder<'a> {
-    pub fn new<TSource: Read>(source: &mut TSource) -> Result<Self> {
-        let mut bytes = Vec::new();
-        try!(source.read_to_end(&mut bytes));
-        Ok(PostingDecoder{
-            bytes: Box::new(bytes.into_iter())
-        })          
-    }
-}
-
-impl<'a> Iterator for PostingDecoder<'a>{
-    type Item = &'a Posting;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        
     }
 }
 

@@ -5,6 +5,7 @@ use std::iter::Iterator;
 
 use std::fmt::{Formatter, Result, Debug, Display};
 
+use index::Provider;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::Posting;
@@ -74,40 +75,9 @@ pub enum BooleanQuery<TTerm> {
 
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
-    index: BTreeMap<TTerm, Vec<Posting>>,
+    index: BTreeMap<TTerm, u64>,
+    postings: RamPostingProvider
 }
-
-
-impl<TTerm: Ord> Display for BooleanIndex<TTerm> {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        writeln!(f,
-                 "Document Count: {} Term Count: {}",
-                 self.document_count,
-                 self.index.len())
-    }
-}
-
-impl<TTerm: Debug + Ord> Debug for BooleanIndex<TTerm> {
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        let res = writeln!(f,
-                           "Document Count: {} Term Count: {}",
-                           self.document_count,
-                           self.index.len());
-        for (term, postings) in &self.index {
-            if let Err(e) = write!(f,
-                                   "[{:?} df:{} cf:{}]",
-                                   term,
-                                   postings.len(),
-                                   postings.iter()
-                                       .map(|&(_, ref positions)| positions.len())
-                                       .fold(0, |acc, x| acc + x)) {
-                return Err(e);
-            }
-        }
-        res
-    }
-}
-
 
 impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
@@ -117,6 +87,7 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
         BooleanIndex {
             document_count: 0,
             index: BTreeMap::new(),
+            postings: RamPostingProvider::new()
         }
     }
 
@@ -137,10 +108,10 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
                         let term_doc_positions = &mut listing.get_mut(term_doc_index).unwrap().1;
                         if let Err(index) =
                                term_doc_positions.binary_search(&(term_position as u32)) {
-                            // Two terms at the same position. Should at least be possible
-                            // so do nothing if term_position already exists
                             term_doc_positions.insert(index, term_position as u32)
                         }
+                        // Two terms at the same position. Should at least be possible
+                        // so do nothing if term_position already exists
                     }
                     Err(term_doc_index) => {
                         listing.insert(term_doc_index,
@@ -157,6 +128,8 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
         self.document_count += 1;
         new_doc_id as u64
     }
+
+    
 
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
@@ -224,13 +197,38 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.index.get(atom) {
-            QueryResultIterator::Atom(relative_position, result.iter().peekable())
+            QueryResultIterator::Atom(relative_position, self.postings.get(*result).unwrap().iter().peekable())
         } else {
             QueryResultIterator::Empty
         }
     }
 }
 
+
+struct RamPostingProvider {
+    data: BTreeMap<u64, Vec<Posting>>
+}
+
+impl RamPostingProvider{
+    pub fn new() -> Self{
+        RamPostingProvider{
+            data: BTreeMap::new()
+        }
+    }
+
+}
+
+impl Provider<Vec<Posting>> for RamPostingProvider {
+    fn get<'a>(&'a self, id: u64) -> Option<&'a Vec<Posting>>{
+        self.data.get(&id)
+    }
+
+    fn store(&mut self, data: Vec<Posting>) -> u64 {
+        let id = self.data.len() as u64;
+        self.data.insert(id, data);
+        id
+    }
+}
 
 
 

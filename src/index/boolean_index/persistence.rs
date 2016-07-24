@@ -186,7 +186,7 @@ macro_rules! unwrap_or_return_none{
 }
 
 
-struct VByteDecoder<'a> {
+pub struct VByteDecoder<'a> {
     bytes: Box<Iterator<Item=u8> + 'a>
 }
 

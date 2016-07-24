@@ -16,6 +16,10 @@ pub trait Index<'a, TTerm> {
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult;
 }
 
+pub trait Provider<T>{
+    fn get<'a>(&'a self, id: u64) -> Option<&'a T>;
+    fn store(&mut self, data: T) -> u64;
+}
 
 /// Defines API calls for writing and reading an index from/to binary
 /// Can be used for example to persist an Index as a file or send it as `TcpStream`.
