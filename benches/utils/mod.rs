@@ -4,7 +4,7 @@ use std::env;
 use std::fs::File;
 use rand;
 
-pub fn prepare_index<'a, TIndex: Index<'a, usize> + Debug + PersistentIndex>(documents: usize,
+pub fn prepare_index<'a, TIndex: Index<'a, usize> + PersistentIndex>(documents: usize,
                                                                      document_size: usize)
                                                                              -> TIndex {
 
@@ -18,16 +18,18 @@ pub fn prepare_index<'a, TIndex: Index<'a, usize> + Debug + PersistentIndex>(doc
     //    println!("Finished!");
         result
     } else {
+        let rng = ZipfGenerator::new(voc_size(20, 0.5, documents * document_size));
     //    println!("Index has to be created. Starting...");
         let mut index = TIndex::new();
-        let rng = ZipfGenerator::new(voc_size(20, 0.5, documents * document_size));
+        let mut docs = Vec::with_capacity(documents);
         for i in 0..documents {
             if i % 1000 == 0
-            {
+            {                
                 println!("{}/{} documents", i, documents);
             }
-            index.index_document(rng.clone().take(document_size));
+            docs.push(rng.take(document_size));
         }
+        index.index_documents(docs);
       //  println!("Finished creating the Index! Writing to Disk!");
         index.write_to(&mut File::create(tmp_dir.as_path()).unwrap()).unwrap();
      //   println!("Finished!");
@@ -63,7 +65,7 @@ impl ZipfGenerator {
     }
 }
 
-impl Iterator for ZipfGenerator {
+impl<'a> Iterator for &'a ZipfGenerator {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
