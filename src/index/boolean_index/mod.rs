@@ -60,10 +60,10 @@ impl<TTerm> QueryAtom<TTerm> {
 
 pub enum BooleanQuery<TTerm> {
     Atom(QueryAtom<TTerm>),
-    //Different from NAry because positional queries can currently only run on query-atoms.
-    //To ensure correct usage, this rather inelegant abstraction was implemented
-    //Nevertheless, internally both are handled by the same code
-    //See `NAryQueryIterator::new` and `NAryQueryIterator::new_positional`
+    // Different from NAry because positional queries can currently only run on query-atoms.
+    // To ensure correct usage, this rather inelegant abstraction was implemented
+    // Nevertheless, internally both are handled by the same code
+    // See `NAryQueryIterator::new` and `NAryQueryIterator::new_positional`
     Positional(PositionalOperator, Vec<QueryAtom<TTerm>>),
     NAry(BooleanOperator, Vec<BooleanQuery<TTerm>>),
     Filter(FilterOperator,
@@ -75,8 +75,8 @@ pub enum BooleanQuery<TTerm> {
 
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
-    index: BTreeMap<TTerm, u64>,
-    postings: RamPostingProvider
+    term_ids: BTreeMap<TTerm, u64>,
+    postings: RamPostingProvider,
 }
 
 impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
@@ -86,50 +86,69 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     fn new() -> BooleanIndex<TTerm> {
         BooleanIndex {
             document_count: 0,
-            index: BTreeMap::new(),
-            postings: RamPostingProvider::new()
+            term_ids: BTreeMap::new(),
+            postings: RamPostingProvider::new(),
         }
     }
 
-    /// Indexes a document for later retrieval
-    /// Returns the document_id used by the index
-    fn index_document<TDocIterator: Iterator<Item = TTerm>>(&mut self,
-                                                            document: TDocIterator)
-                                                            -> u64 {
-        let new_doc_id = self.document_count;
-        for (term_position, term) in document.enumerate() {
-            // Get all doc_ids in BTree for a term
-            if let Some(listing) = self.index.get_mut(&term) {
-                // check if document is already there
-                match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&(new_doc_id as u64))) {
-                    Ok(term_doc_index) => {
-                        // Document already had that term.
-                        // Look for where to put the current term in the positions list
-                        let term_doc_positions = &mut listing.get_mut(term_doc_index).unwrap().1;
-                        if let Err(index) =
-                               term_doc_positions.binary_search(&(term_position as u32)) {
-                            term_doc_positions.insert(index, term_position as u32)
+    /// Indexes a document collection for later retrieval
+    /// Returns the document_ids used by the index
+// First Shot
+    fn index_documents<TDocIterator: Iterator<Item = TTerm>>(&mut self,
+                                                             documents: Vec<TDocIterator>)
+                                                             -> Vec<u64> {
+        let mut inv_index: BTreeMap<u64, Vec<Posting>> = BTreeMap::new();
+        let mut result = Vec::with_capacity(documents.len());
+        //For every document in the collection
+        for document in documents {
+            //Determine its id. consecutively numbered
+            let new_doc_id = self.document_count as u64;
+            //Enumerate over its terms
+            for (term_position, term) in document.enumerate() {
+                //Has term already been seen? Is it already in the vocabulary?
+                if let Some(term_id) = self.term_ids.get(&term) {
+                    //Get its listing from the temporary. And add doc_id and/or position to it
+                    let listing = inv_index.get_mut(&term_id).unwrap();
+                    match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&new_doc_id)) {
+                        Ok(term_doc_index) => {
+                            // Document already had that term.
+                            // Look for where to put the current term in the positions list
+                            let term_doc_positions =
+                                &mut listing.get_mut(term_doc_index).unwrap().1;
+                            if let Err(index) =
+                                   term_doc_positions.binary_search(&(term_position as u32)) {
+                                term_doc_positions.insert(index, term_position as u32)
+                            }
+                            // Two terms at the same position. Should at least be possible
+                            // so do nothing if term_position already exists
                         }
-                        // Two terms at the same position. Should at least be possible
-                        // so do nothing if term_position already exists
+                        Err(term_doc_index) => {
+                            listing.insert(term_doc_index,
+                                           (new_doc_id as u64, vec![term_position as u32]))
+                        }
                     }
-                    Err(term_doc_index) => {
-                        listing.insert(term_doc_index,
-                                       (new_doc_id as u64, vec![term_position as u32]))
-                    }
-
-                }
-                // Term is indexed. Continue with the next one
-                continue;
-            };
-            // Term was not in BTree. Add it
-            self.index.insert(term, vec![(new_doc_id as u64, vec![term_position as u32])]);
+                    // Term is indexed. Continue with the next one
+                    continue;
+                };
+                // Term was not yet indexed. Add it
+                let term_id = self.term_ids.len() as u64;
+                self.term_ids.insert(term, term_id);
+                inv_index.insert(term_id, vec![(new_doc_id, vec![term_position as u32])]);
+            }
+            self.document_count += 1;
+            result.push(new_doc_id);
         }
-        self.document_count += 1;
-        new_doc_id as u64
+
+        //everything is now indexed. Hand it to our provider.
+        //We do not care where it saves our data.
+        for (term_id, listing) in inv_index {
+            self.postings.store(term_id, listing);
+        }                       
+
+        result
     }
 
-    
+
 
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
@@ -194,10 +213,11 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                                                         Box::new(self.run_query(sieve))))
     }
 
-    
+
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
-        if let Some(result) = self.index.get(atom) {
-            QueryResultIterator::Atom(relative_position, self.postings.get(*result).unwrap().iter().peekable())
+        if let Some(result) = self.term_ids.get(atom) {
+            QueryResultIterator::Atom(relative_position,
+                                      self.postings.get(*result).unwrap().iter().peekable())
         } else {
             QueryResultIterator::Empty
         }
@@ -206,27 +226,22 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
 
 struct RamPostingProvider {
-    data: BTreeMap<u64, Vec<Posting>>
+    data: BTreeMap<u64, Vec<Posting>>,
 }
 
-impl RamPostingProvider{
-    pub fn new() -> Self{
-        RamPostingProvider{
-            data: BTreeMap::new()
-        }
+impl RamPostingProvider {
+    pub fn new() -> Self {
+        RamPostingProvider { data: BTreeMap::new() }
     }
-
 }
 
 impl Provider<Vec<Posting>> for RamPostingProvider {
-    fn get<'a>(&'a self, id: u64) -> Option<&'a Vec<Posting>>{
+    fn get<'a>(&'a self, id: u64) -> Option<&'a Vec<Posting>> {
         self.data.get(&id)
     }
 
-    fn store(&mut self, data: Vec<Posting>) -> u64 {
-        let id = self.data.len() as u64;
+    fn store(&mut self, id: u64, data: Vec<Posting>) {
         self.data.insert(id, data);
-        id
     }
 }
 
@@ -238,16 +253,16 @@ impl Provider<Vec<Posting>> for RamPostingProvider {
 mod tests {
     use super::*;
     use index::Index;
+    use index::Provider;
+
 
     pub fn prepare_index() -> BooleanIndex<usize> {
         let mut index = BooleanIndex::new();
-        index.index_document(0..10);
-        index.index_document((0..10).map(|i| i * 2));
-        index.index_document(vec![5, 4, 3, 2, 1, 0].into_iter());
-
+        index.index_documents(vec![(0..10).collect::<Vec<_>>().into_iter(),
+                                   (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
+                                   vec![5, 4, 3, 2, 1, 0].into_iter()] );
         index
     }
-
 
 
     #[test]
@@ -266,8 +281,8 @@ mod tests {
         // Check number of docs
         assert!(index.document_count == 3);
         // Check number of terms (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18)
-        assert!(index.index.len() == 15);
-        assert!(*index.index.get(&0).unwrap() == vec![(0, vec![0]), (1, vec![0]), (2, vec![5])]);
+        assert!(index.term_ids.len() == 15);
+        assert!(*index.postings.get(*index.term_ids.get(&0).unwrap()).unwrap() == vec![(0, vec![0]), (1, vec![0]), (2, vec![5])]);
     }
 
     #[test]

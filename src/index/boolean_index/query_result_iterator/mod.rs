@@ -161,16 +161,7 @@ impl<'a> FilterIterator<'a> {
 mod tests {
     use index::Index;
     use index::boolean_index::*;
-
-
-    fn prepare_index() -> BooleanIndex<usize> {
-        let mut index = BooleanIndex::new();
-        index.index_document(0..10);
-        index.index_document((0..10).map(|i| i * 2));
-        index.index_document(vec![5, 4, 3, 2, 1, 0].into_iter());
-
-        index
-    }
+    use index::boolean_index::tests::prepare_index;
 
 
     #[test]

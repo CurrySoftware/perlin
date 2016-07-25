@@ -11,14 +11,14 @@ pub trait Index<'a, TTerm> {
     
     fn new() -> Self;
 
-    fn index_document<TDocIterator: Iterator<Item=TTerm>>(&mut self, document: TDocIterator) -> u64;
+    fn index_documents<TDocIterator: Iterator<Item=TTerm>>(&mut self, documents: Vec<TDocIterator>) -> Vec<u64>;
 
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult;
 }
 
 pub trait Provider<T>{
     fn get<'a>(&'a self, id: u64) -> Option<&'a T>;
-    fn store(&mut self, data: T) -> u64;
+    fn store(&mut self, id: u64, data: T);
 }
 
 /// Defines API calls for writing and reading an index from/to binary

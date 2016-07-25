@@ -2,9 +2,10 @@
 //! e.g. writing the index to a bytestream; reading the index from a bytestream.
 //! The API-Entrypoints are defined in the trait `index::PersistentIndex`
 
-use index::{PersistentIndex, ByteEncodable, ByteDecodable};
+use index::{Index, Provider, PersistentIndex, ByteEncodable, ByteDecodable};
 use index::boolean_index::BooleanIndex;
 use index::boolean_index::posting::Posting;
+use index::boolean_index::RamPostingProvider;
 
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
@@ -52,7 +53,7 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     fn write_terms<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
         // Write blocks of 1MB to target
         let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
-        for term in &self.index {
+        for term in self.term_ids.iter().map(|(term, term_id)| (term, self.postings.get(*term_id).unwrap())) {
             let term_bytes = encode_term(&term);
             bytes.extend_from_slice(term_bytes.as_slice());
             if bytes.len() > CHUNKSIZE {
@@ -151,12 +152,14 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanInde
     }
 
     fn read_from<TSource: Read>(source: &mut TSource) -> Result<Self, String> {
-        Self::read_terms(source).map(|btree| {
-            BooleanIndex {
-                document_count: 0,
-                index: btree,
-            }
-        })
+        let inv_index = Self::read_terms(source).unwrap();
+        let mut index = BooleanIndex::new();
+        for (term, listing) in inv_index {
+            let term_id = index.term_ids.len() as u64;
+            index.term_ids.insert(term, term_id);
+            index.postings.store(term_id, listing);
+        }
+        Ok(index)
     }
 }
 
@@ -261,7 +264,7 @@ mod tests {
     #[test]
     fn simple() {
         let mut index = BooleanIndex::new();
-        index.index_document(0..2);
+        index.index_documents(vec![0..2]);
         let mut bytes: Vec<u8> = vec![];
         index.write_to(&mut bytes).unwrap();
         assert_eq!(bytes,
@@ -280,18 +283,5 @@ mod tests {
         let mut bytes_2: Vec<u8> = vec![];
         BooleanIndex::<usize>::read_from(&mut buff).unwrap().write_to(&mut bytes_2).unwrap();
         assert_eq!(bytes, bytes_2);
-    }
-
-    #[test]
-    fn length() {
-        let index = prepare_index();
-        let mut bytes: Vec<u8> = vec![];
-        index.write_to(&mut bytes).unwrap();
-        let mut buff = Cursor::new(bytes.clone());
-        let mut bytes_2: Vec<u8> = vec![];
-        let mut read_index = BooleanIndex::<usize>::read_from(&mut buff).unwrap();
-        read_index.index_document(1..24);
-        read_index.write_to(&mut bytes_2).unwrap();
-        assert!(bytes.len() < bytes_2.len());
     }
 }
