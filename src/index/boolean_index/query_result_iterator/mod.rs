@@ -1,16 +1,8 @@
-use std::slice::Iter;
-use std::vec::IntoIter;
-use std::iter::Iterator;
-use std::iter::Peekable;
-use std::io::{Read, Result};
-use std::rc::Rc;
 use std::cell::RefCell;
 
-use index::Provider;
 use index::boolean_index::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::persistence::VByteDecoder;
 
 pub mod nary_query_iterator;
 
@@ -158,7 +150,6 @@ impl<'a> FilterIterator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use index::Index;
     use index::boolean_index::*;
     use index::boolean_index::tests::prepare_index;
 
@@ -171,7 +162,7 @@ mod tests {
         let qri2 = index.run_nary_query(&BooleanOperator::And,
                                    &vec![BooleanQuery::Atom(QueryAtom::new(0, 0)),
                                          BooleanQuery::Atom(QueryAtom::new(0, 0))]);
-        assert!(qri.peek() == qri.peek());
+        assert!(qri2.peek() == qri2.peek());
 
     }
 

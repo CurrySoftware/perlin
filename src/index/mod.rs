@@ -1,4 +1,3 @@
-use std::vec::IntoIter;
 use std::io::{Read, Result, Write};
 use std::rc::Rc;
 use std;

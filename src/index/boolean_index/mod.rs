@@ -1,14 +1,12 @@
 use index::Index;
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap};
 use std::iter::Iterator;
 use std::fs::{OpenOptions, File};
 use std::io::{Seek, SeekFrom, Write, Read};
 use std::path::Path;
-use std::fmt::{Formatter, Result, Debug, Display};
 use std::rc::Rc;
-use std::cell::{Ref, RefCell};
-use std::vec::IntoIter;
+use std::cell::{RefCell};
 
 use index::Provider;
 use index::boolean_index::query_result_iterator::*;
@@ -278,7 +276,12 @@ impl<'a, T: 'a> OwningIterator<'a> for RcIter<T>{
     }
 
     fn peek(&'a self) -> Option<Self::Item> {
-        Some(&self.data[*self.pos.borrow()])
+        let pos = self.pos.borrow();
+        if *pos >= self.len() {
+            None
+        } else {
+            Some(&self.data[*pos])
+        }
     }
 }
 
@@ -477,24 +480,25 @@ mod tests {
     #[test]
     fn or_query() {
         let index = prepare_index();
-        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
+        println!("OR_QUERY!");
+        assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,
                                                                                       12))]))
-            .collect::<Vec<_>>() == vec![0, 1, 2]);
-        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
+            .collect::<Vec<_>>(), vec![0, 1, 2]);
+        assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0,
                                                                                       14)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,
                                                                                       12))]))
-            .collect::<Vec<_>>() == vec![1]);
-        assert!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
+            .collect::<Vec<_>>(), vec![1]);
+        assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::NAry(BooleanOperator::Or,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                         BooleanQuery::Atom(QueryAtom::new(0, 9))]
                     ),
                     BooleanQuery::Atom(QueryAtom::new(0, 16))]))
-            .collect::<Vec<_>>() == vec![0, 1, 2]);
+            .collect::<Vec<_>>(), vec![0, 1, 2]);
     }
 
     #[test]

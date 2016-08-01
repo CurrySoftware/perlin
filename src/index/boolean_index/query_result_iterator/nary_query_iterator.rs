@@ -170,15 +170,16 @@ impl<'a> NAryQueryIterator<'a> {
     }
 
     fn next_or(&'a self) -> Option<&'a Posting> {
-        let mut ignore_list = Vec::new();
         // Find the smallest current value of all operands
+        println!("nextor");
+
         let min_value = self.operands
             .iter()
             .map(|op| op.peek())
             .filter(|val| val.is_some())
             .map(|val| val.unwrap().0)
             .min();
-
+        println!("{:?}", min_value);
         // If there is such a value
         if let Some(min) = min_value {
             let mut tmp = None;
@@ -190,13 +191,8 @@ impl<'a> NAryQueryIterator<'a> {
                     if val.0 == min {
                         tmp = self.operands[i].next();
                     }
-                    i += 1;
-                } else {
-                    // Operand does not yield any more results. Kick it out.
-                    //TODO: FIX: THIS IS GONNA BE A BUG. IGNORE Iterators on the ignore list.
-                    //Do not just put them there
-                    ignore_list.push(i);
                 }
+                i += 1;
             }
             return tmp;
         } else {

@@ -5,9 +5,7 @@
 use index::{Index, Provider, PersistentIndex, ByteEncodable, ByteDecodable};
 use index::boolean_index::BooleanIndex;
 use index::boolean_index::posting::Posting;
-use index::boolean_index::RamPostingProvider;
 
-use std::rc::Rc;
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
 use std;
@@ -51,20 +49,21 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     /// Layout:
     /// [u8; 4] -> Number of bytes term + postings need encoded
     /// [u8] -> term + postings
-    fn write_terms<TTarget: Write>(&mut self, target: &mut TTarget) -> std::io::Result<usize> {
+    fn write_terms<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
         // Write blocks of 1MB to target
         let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
-        // for term in self.term_ids.iter().map(|(term, term_id)| (term, self.postings.get(*term_id).unwrap())) {
-        //     let term_bytes = encode_term(&term);
-        //     bytes.extend_from_slice(term_bytes.as_slice());
-        //     if bytes.len() > CHUNKSIZE {
-        //         if let Err(e) = target.write(bytes.as_slice()) {
-        //             return Err(e);
-        //         } else {
-        //             bytes.clear();
-        //         }
-        //     }
-        // }
+        for term in self.term_ids.iter() {
+            let term_postings = self.postings.get(*term.1).unwrap();
+            let term_bytes = encode_term(&(term.0, &term_postings));
+            bytes.extend_from_slice(term_bytes.as_slice());
+            if bytes.len() > CHUNKSIZE {
+                if let Err(e) = target.write(bytes.as_slice()) {
+                    return Err(e);
+                } else {
+                    bytes.clear();
+                }
+            }
+        }
         target.write(bytes.as_slice())
     }
 
