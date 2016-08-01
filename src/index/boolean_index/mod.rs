@@ -166,8 +166,19 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
                 }
                 Box::new(res.into_iter())
             }
-            QueryResultIterator::NAry(iter) => Box::new(iter.map(|&(doc_id, _)| doc_id)),
-            QueryResultIterator::Filter(iter) => Box::new(iter.map(|&(doc_id, _)| doc_id)),
+            QueryResultIterator::NAry(iter) =>  {
+                let mut res = Vec::new();
+                while let Some(posting) = iter.next(){
+                    res.push(posting.0)
+                }
+                Box::new(res.into_iter())
+            }
+            QueryResultIterator::Filter(iter) =>  {
+                let mut res = Vec::new();
+                while let Some(posting) = iter.next(){
+                    res.push(posting.0)
+                }
+                Box::new(res.into_iter())            }
         }
     }
 }

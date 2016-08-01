@@ -7,6 +7,7 @@ use index::boolean_index::BooleanIndex;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::RamPostingProvider;
 
+use std::rc::Rc;
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
 use std;
@@ -50,20 +51,20 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     /// Layout:
     /// [u8; 4] -> Number of bytes term + postings need encoded
     /// [u8] -> term + postings
-    fn write_terms<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
+    fn write_terms<TTarget: Write>(&mut self, target: &mut TTarget) -> std::io::Result<usize> {
         // Write blocks of 1MB to target
         let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
-        for term in self.term_ids.iter().map(|(term, term_id)| (term, self.postings.get(*term_id).unwrap())) {
-            let term_bytes = encode_term(&term);
-            bytes.extend_from_slice(term_bytes.as_slice());
-            if bytes.len() > CHUNKSIZE {
-                if let Err(e) = target.write(bytes.as_slice()) {
-                    return Err(e);
-                } else {
-                    bytes.clear();
-                }
-            }
-        }
+        // for term in self.term_ids.iter().map(|(term, term_id)| (term, self.postings.get(*term_id).unwrap())) {
+        //     let term_bytes = encode_term(&term);
+        //     bytes.extend_from_slice(term_bytes.as_slice());
+        //     if bytes.len() > CHUNKSIZE {
+        //         if let Err(e) = target.write(bytes.as_slice()) {
+        //             return Err(e);
+        //         } else {
+        //             bytes.clear();
+        //         }
+        //     }
+        // }
         target.write(bytes.as_slice())
     }
 
@@ -147,7 +148,7 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
 
 
 impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanIndex<TTerm> {
-    fn write_to<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
+    fn write_to<TTarget: Write>(&mut self, target: &mut TTarget) -> std::io::Result<usize> {
         self.write_terms(target)
     }
 
@@ -163,7 +164,7 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanInde
     }
 }
 
-fn vbyte_encode(mut number: usize) -> Vec<u8> {
+pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     let mut result = Vec::new();
     loop {
         result.insert(0, (number % 128) as u8);
@@ -194,7 +195,7 @@ pub struct VByteDecoder<'a> {
 }
 
 impl<'a> VByteDecoder<'a> {
-    fn new<T: Iterator<Item=u8> + 'a>(bytes: T) -> Self {
+    pub fn new<T: Iterator<Item=u8> + 'a>(bytes: T) -> Self {
         VByteDecoder { bytes: Box::new(bytes) }
     }
 
@@ -276,7 +277,7 @@ mod tests {
 
     #[test]
     fn basic() {
-        let index = prepare_index();
+        let mut index = prepare_index();
         let mut bytes: Vec<u8> = vec![];
         index.write_to(&mut bytes).unwrap();
         let mut buff = Cursor::new(bytes.clone());

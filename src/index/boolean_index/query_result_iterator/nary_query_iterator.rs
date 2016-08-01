@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use index::boolean_index::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::*;
@@ -17,16 +19,16 @@ pub struct NAryQueryIterator<'a> {
     pos_operator: Option<PositionalOperator>,
     bool_operator: Option<BooleanOperator>,
     operands: Vec<QueryResultIterator<'a>>,
-    peeked_value: Option<Option<&'a Posting>>,
+    peeked_value: RefCell<Option<Option<&'a Posting>>>,
 }
 
-impl<'a> Iterator for NAryQueryIterator<'a> {
-    type Item = &'a Posting;
-    fn next(&mut self) -> Option<&'a Posting> {
 
-        if let Some(next) = self.peeked_value {
-            self.peeked_value = None;
-            return next;
+impl<'a> NAryQueryIterator<'a> {
+
+    pub fn next(&'a self) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_some() {
+            return peeked_value.take().unwrap()
         }
         match self.bool_operator {
             Some(BooleanOperator::And) => self.next_and(),
@@ -41,9 +43,6 @@ impl<'a> Iterator for NAryQueryIterator<'a> {
             }
         }
     }
-}
-
-impl<'a> NAryQueryIterator<'a> {
 
     
     pub fn new_positional(operator: PositionalOperator,
@@ -53,7 +52,7 @@ impl<'a> NAryQueryIterator<'a> {
             pos_operator: Some(operator),
             bool_operator: None,
             operands: operands,
-            peeked_value: None,
+            peeked_value: RefCell::new(None),
         };
         result.operands.sort_by_key(|op| op.estimate_length());
         result
@@ -67,7 +66,7 @@ impl<'a> NAryQueryIterator<'a> {
             pos_operator: None,
             bool_operator: Some(operator),
             operands: operands,
-            peeked_value: None,
+            peeked_value: RefCell::new(None),
         };
         result.operands.sort_by_key(|op| op.estimate_length());
         result
@@ -88,9 +87,10 @@ impl<'a> NAryQueryIterator<'a> {
         }
     }
 
-    pub fn peek(&mut self) -> Option<&'a Posting> {
-        if self.peeked_value.is_none() {
-            self.peeked_value = Some(match self.bool_operator {
+    pub fn peek(&'a self) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_none() {
+            *peeked_value = Some(match self.bool_operator {
                 Some(BooleanOperator::And) => self.next_and(),
                 Some(BooleanOperator::Or) => self.next_or(),
                 None => {
@@ -103,10 +103,10 @@ impl<'a> NAryQueryIterator<'a> {
                 }
             })
         }
-        self.peeked_value.unwrap()
+        peeked_value.unwrap()
     }
 
-    fn next_inorder(&mut self) -> Option<&'a Posting> {
+    fn next_inorder(&'a self) -> Option<&'a Posting> {
         let mut focus = None; //Acts as temporary to be compared against
         let mut focus_positions = vec![];
         // The iterator index that last set 'focus'
@@ -115,7 +115,7 @@ impl<'a> NAryQueryIterator<'a> {
         let mut last_positions_iter = self.operands.len() + 1;
         'possible_documents: loop {
             // For every term
-            for (i, input) in self.operands.iter_mut().enumerate() {
+            for (i, input) in self.operands.iter().enumerate() {
                 'term_documents: loop {
                     // If the focus was set by the current iterator, we have a match
                     if last_doc_iter == i {
@@ -169,11 +169,11 @@ impl<'a> NAryQueryIterator<'a> {
         }
     }
 
-    fn next_or(&mut self) -> Option<&'a Posting> {
-
+    fn next_or(&'a self) -> Option<&'a Posting> {
+        let mut ignore_list = Vec::new();
         // Find the smallest current value of all operands
         let min_value = self.operands
-            .iter_mut()
+            .iter()
             .map(|op| op.peek())
             .filter(|val| val.is_some())
             .map(|val| val.unwrap().0)
@@ -186,7 +186,6 @@ impl<'a> NAryQueryIterator<'a> {
             // Loop over all operands. Advance the ones which currently yield that minimal value
             // Throw the ones out which are empty. Then return the minimal value as reference
             while i < self.operands.len() {
-                println!("i: {:?}", i);
                 if let Some(val) = self.operands[i].peek() {
                     if val.0 == min {
                         tmp = self.operands[i].next();
@@ -194,7 +193,9 @@ impl<'a> NAryQueryIterator<'a> {
                     i += 1;
                 } else {
                     // Operand does not yield any more results. Kick it out.
-                    self.operands.remove(i);
+                    //TODO: FIX: THIS IS GONNA BE A BUG. IGNORE Iterators on the ignore list.
+                    //Do not just put them there
+                    ignore_list.push(i);
                 }
             }
             return tmp;
@@ -203,12 +204,12 @@ impl<'a> NAryQueryIterator<'a> {
         }
     }
 
-    fn next_and(&mut self) -> Option<&'a Posting> {
+    fn next_and(&'a self) -> Option<&'a Posting> {
         let mut focus = None; //Acts as temporary to be compared against
         let mut last_iter = self.operands.len() + 1; //The iterator that last set 'focus'
         'possible_documents: loop {
             // For every term
-            for (i, input) in self.operands.iter_mut().enumerate() {
+            for (i, input) in self.operands.iter().enumerate() {
                 'term_documents: loop {
                     // If the focus was set by the current iterator, we have a match
                     // We cycled through all the iterators once

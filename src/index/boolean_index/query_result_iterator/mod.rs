@@ -4,6 +4,7 @@ use std::iter::Iterator;
 use std::iter::Peekable;
 use std::io::{Read, Result};
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use index::Provider;
 use index::boolean_index::*;
@@ -35,20 +36,17 @@ pub enum QueryResultIterator<'a> {
     Filter(FilterIterator<'a>),
 }
 
-impl<'a> Iterator for QueryResultIterator<'a> {
-    type Item = &'a Posting;
-
-    fn next(&mut self) -> Option<&'a Posting> {
+impl<'a> QueryResultIterator<'a> {
+    
+    fn next(&'a self) -> Option<&'a Posting> {
         match *self {
             QueryResultIterator::Empty => None, 
             QueryResultIterator::Atom(_, ref iter) => iter.next(),
-            QueryResultIterator::NAry(ref mut iter) => iter.next(),
-            QueryResultIterator::Filter(ref mut iter) => iter.next(),
+            QueryResultIterator::NAry(ref iter) => iter.next(),
+            QueryResultIterator::Filter(ref iter) => iter.next(),
         }
     }
-}
 
-impl<'a> QueryResultIterator<'a> {
     /// Used to be able to sort queries according to their estimated number of results
     /// This can be used to optimize efficiency on intersecting queries
     fn estimate_length(&self) -> usize {
@@ -72,12 +70,12 @@ impl<'a> QueryResultIterator<'a> {
 
     /// Allows peeking. Used for union queries,
     /// which need to advance operands in some cases and peek in others
-    fn peek(&mut self) -> Option<&'a Posting> {
+    fn peek(&'a self) -> Option<&'a Posting> {
         match *self {
             QueryResultIterator::Empty => None,
-            QueryResultIterator::Atom(_, iter) => iter.peek(),
-            QueryResultIterator::NAry(ref mut iter) => iter.peek(),
-            QueryResultIterator::Filter(ref mut iter) => iter.peek(),
+            QueryResultIterator::Atom(_, ref iter) => iter.peek(),
+            QueryResultIterator::NAry(ref iter) => iter.peek(),
+            QueryResultIterator::Filter(ref iter) => iter.peek(),
         }
     }
 }
@@ -86,24 +84,22 @@ pub struct FilterIterator<'a> {
     operator: FilterOperator,
     sand: Box<QueryResultIterator<'a>>,
     sieve: Box<QueryResultIterator<'a>>,
-    peeked_value: Option<Option<&'a Posting>>,
+    peeked_value: RefCell<Option<Option<&'a Posting>>>,
 }
 
-impl<'a> Iterator for FilterIterator<'a> {
-    type Item = &'a Posting;
+impl<'a> FilterIterator<'a> {
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.peeked_value.is_none() {
+    pub fn next(&'a self) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_none() {
             match self.operator {
                 FilterOperator::Not => self.next_not(),
             }
         } else {
-            self.peeked_value.take().unwrap()
+            peeked_value.take().unwrap()
         }
     }
-}
-
-impl<'a> FilterIterator<'a> {
+    
     pub fn new(operator: FilterOperator,
                sand: Box<QueryResultIterator<'a>>,
                sieve: Box<QueryResultIterator<'a>>)
@@ -112,15 +108,16 @@ impl<'a> FilterIterator<'a> {
             operator: operator,
             sand: sand,
             sieve: sieve,
-            peeked_value: None,
+            peeked_value: RefCell::new(None),
         }
     }
 
-    fn peek(&mut self) -> Option<&'a Posting> {
-        if self.peeked_value.is_none() {
-            self.peeked_value = Some(self.next())
+    fn peek(&'a self) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_none() {
+            *peeked_value = Some(self.next())
         }
-        self.peeked_value.unwrap()
+        peeked_value.unwrap()
     }
 
     fn estimate_length(&self) -> usize {
@@ -134,7 +131,7 @@ impl<'a> FilterIterator<'a> {
     }
 
 
-    fn next_not(&mut self) -> Option<&'a Posting> {
+    fn next_not(&'a self) -> Option<&'a Posting> {
         'sand: loop {
             if let Some(sand) = self.sand.next() {
                 'sieve: loop {
@@ -169,9 +166,9 @@ mod tests {
     #[test]
     fn peek() {
         let index = prepare_index();
-        let mut qri = index.run_atom(0, &0);
+        let qri = index.run_atom(0, &0);
         assert!(qri.peek() == qri.peek());
-        qri = index.run_nary_query(&BooleanOperator::And,
+        let qri2 = index.run_nary_query(&BooleanOperator::And,
                                    &vec![BooleanQuery::Atom(QueryAtom::new(0, 0)),
                                          BooleanQuery::Atom(QueryAtom::new(0, 0))]);
         assert!(qri.peek() == qri.peek());
