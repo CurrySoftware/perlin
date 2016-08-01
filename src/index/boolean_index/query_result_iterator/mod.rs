@@ -1,7 +1,9 @@
 use std::slice::Iter;
+use std::vec::IntoIter;
 use std::iter::Iterator;
 use std::iter::Peekable;
 use std::io::{Read, Result};
+use std::rc::Rc;
 
 use index::Provider;
 use index::boolean_index::*;
@@ -28,7 +30,7 @@ macro_rules! unwrap_or_return_none{
 /// Used to be able to simply and elegantly use nested queries of different types
 pub enum QueryResultIterator<'a> {
     Empty,
-    Atom(usize, Peekable<Iter<'a, Posting>>),
+    Atom(usize, RcIter<Posting>),
     NAry(NAryQueryIterator<'a>),
     Filter(FilterIterator<'a>),
 }
@@ -38,8 +40,8 @@ impl<'a> Iterator for QueryResultIterator<'a> {
 
     fn next(&mut self) -> Option<&'a Posting> {
         match *self {
-            QueryResultIterator::Empty => None,
-            QueryResultIterator::Atom(_, ref mut iter) => iter.next(),
+            QueryResultIterator::Empty => None, 
+            QueryResultIterator::Atom(_, ref iter) => iter.next(),
             QueryResultIterator::NAry(ref mut iter) => iter.next(),
             QueryResultIterator::Filter(ref mut iter) => iter.next(),
         }
@@ -73,7 +75,7 @@ impl<'a> QueryResultIterator<'a> {
     fn peek(&mut self) -> Option<&'a Posting> {
         match *self {
             QueryResultIterator::Empty => None,
-            QueryResultIterator::Atom(_, ref mut iter) => iter.peek().map(|val| *val),
+            QueryResultIterator::Atom(_, iter) => iter.peek(),
             QueryResultIterator::NAry(ref mut iter) => iter.peek(),
             QueryResultIterator::Filter(ref mut iter) => iter.peek(),
         }

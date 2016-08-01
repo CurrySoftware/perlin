@@ -1,4 +1,6 @@
+use std::vec::IntoIter;
 use std::io::{Read, Result, Write};
+use std::rc::Rc;
 use std;
 
 pub mod boolean_index;
@@ -17,7 +19,7 @@ pub trait Index<'a, TTerm> {
 }
 
 pub trait Provider<T>{
-    fn get<'a>(&'a self, id: u64) -> Option<&'a T>;
+    fn get(&self, id: u64) -> Option<Rc<T>>;
     fn store(&mut self, id: u64, data: T);
 }
 
@@ -27,7 +29,7 @@ pub trait PersistentIndex where Self : Sized {
     
     /// Writes the index as byte to the specified target.
     /// Returns Error or the number of bytes written
-    fn write_to<TTarget: Write>(&self, target: &mut TTarget) -> Result<usize>;
+    fn write_to<TTarget: Write>(&mut self, target: &mut TTarget) -> Result<usize>;
 
     /// Reads an index from the specified source.
     fn read_from<TSource: Read>(source: &mut TSource) -> std::result::Result<Self, String>;

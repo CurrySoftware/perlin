@@ -1,14 +1,20 @@
 use index::Index;
 
-use std::collections::BTreeMap;
+use std::collections::{HashMap, BTreeMap};
 use std::iter::Iterator;
-
+use std::fs::{OpenOptions, File};
+use std::io::{Seek, SeekFrom, Write, Read};
+use std::path::Path;
 use std::fmt::{Formatter, Result, Debug, Display};
+use std::rc::Rc;
+use std::cell::{Ref, RefCell};
+use std::vec::IntoIter;
 
 use index::Provider;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::Posting;
+use index::boolean_index::persistence::{vbyte_encode, VByteDecoder};
 
 mod query_result_iterator;
 mod persistence;
@@ -93,21 +99,21 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
 
     /// Indexes a document collection for later retrieval
     /// Returns the document_ids used by the index
-// First Shot
+    // First Shot
     fn index_documents<TDocIterator: Iterator<Item = TTerm>>(&mut self,
                                                              documents: Vec<TDocIterator>)
                                                              -> Vec<u64> {
         let mut inv_index: BTreeMap<u64, Vec<Posting>> = BTreeMap::new();
         let mut result = Vec::with_capacity(documents.len());
-        //For every document in the collection
+        // For every document in the collection
         for document in documents {
-            //Determine its id. consecutively numbered
+            // Determine its id. consecutively numbered
             let new_doc_id = self.document_count as u64;
-            //Enumerate over its terms
+            // Enumerate over its terms
             for (term_position, term) in document.enumerate() {
-                //Has term already been seen? Is it already in the vocabulary?
+                // Has term already been seen? Is it already in the vocabulary?
                 if let Some(term_id) = self.term_ids.get(&term) {
-                    //Get its listing from the temporary. And add doc_id and/or position to it
+                    // Get its listing from the temporary. And add doc_id and/or position to it
                     let listing = inv_index.get_mut(&term_id).unwrap();
                     match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&new_doc_id)) {
                         Ok(term_doc_index) => {
@@ -139,11 +145,11 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
             result.push(new_doc_id);
         }
 
-        //everything is now indexed. Hand it to our provider.
-        //We do not care where it saves our data.
+        // everything is now indexed. Hand it to our provider.
+        // We do not care where it saves our data.
         for (term_id, listing) in inv_index {
             self.postings.store(term_id, listing);
-        }                       
+        }
 
         result
     }
@@ -153,7 +159,13 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
             QueryResultIterator::Empty => Box::new(Vec::<u64>::new().into_iter()),
-            QueryResultIterator::Atom(_, iter) => Box::new(iter.map(|&(doc_id, _)| doc_id)),
+            QueryResultIterator::Atom(_, iter) => {
+                let mut res = Vec::with_capacity(iter.len());
+                for _ in 0..iter.len() {
+                    res.push(iter.next().unwrap().0)
+                }
+                Box::new(res.into_iter())
+            }
             QueryResultIterator::NAry(iter) => Box::new(iter.map(|&(doc_id, _)| doc_id)),
             QueryResultIterator::Filter(iter) => Box::new(iter.map(|&(doc_id, _)| doc_id)),
         }
@@ -182,25 +194,24 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     fn run_nary_query(&self,
                       operator: &BooleanOperator,
                       operands: &[BooleanQuery<TTerm>])
-                      -> QueryResultIterator {
-        QueryResultIterator::NAry(NAryQueryIterator::new(*operator,
-                                                         operands.iter()
-                                                             .map(|op| self.run_query(op))
-                                                             .collect::<Vec<_>>()))
+                          -> QueryResultIterator {
+        let mut ops = Vec::new();
+        for operand in operands {
+            ops.push(self.run_query(operand))
+        }
+        QueryResultIterator::NAry(NAryQueryIterator::new(*operator, ops))
     }
 
     fn run_positional_query(&self,
                             operator: &PositionalOperator,
                             operands: &[QueryAtom<TTerm>])
                             -> QueryResultIterator {
+        let mut ops = Vec::new();
+        for operand in operands {
+            ops.push(self.run_atom(operand.relative_position, &operand.query_term));           
+        }
         QueryResultIterator::NAry(NAryQueryIterator::new_positional(*operator,
-                                                                    operands.into_iter()
-                                                                        .map(|op| {
-                                                                            self.run_atom(
-                                                      op.relative_position,
-                                                      &op.query_term)
-                                                                        })
-                                                                        .collect::<Vec<_>>()))
+                                                                    ops))
     }
 
     fn run_filter(&self,
@@ -217,16 +228,52 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
             QueryResultIterator::Atom(relative_position,
-                                      self.postings.get(*result).unwrap().iter().peekable())
+                                      RcIter{
+                                          data:self.postings.get(*result).unwrap(),
+                                          pos: RefCell::new(0)
+                                      })
         } else {
             QueryResultIterator::Empty
         }
     }
 }
 
+pub trait OwningIterator<'a>{
+    type Item;
+    fn next(&'a self) -> Option<Self::Item>;
+    fn peek(&'a self) -> Option<Self::Item>;
+    fn len(&self) -> usize;
+}
+
+pub struct RcIter<T>{
+    data: Rc<Vec<T>>,
+    pos: RefCell<usize>
+}
+
+impl<'a, T: 'a> OwningIterator<'a> for RcIter<T>{
+    type Item = &'a T;
+
+    fn next(&'a self) -> Option<Self::Item> {
+        let mut pos = self.pos.borrow_mut();
+        if *pos < self.data.len() {
+            *pos += 1;
+            return Some(&self.data[*pos - 1]);
+        }
+        None
+    }
+
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn peek(&'a self) -> Option<Self::Item> {
+        Some(&self.data[*self.pos.borrow()])
+    }
+}
+
 
 struct RamPostingProvider {
-    data: BTreeMap<u64, Vec<Posting>>,
+    data: BTreeMap<u64, Rc<Vec<Posting>>>,
 }
 
 impl RamPostingProvider {
@@ -236,15 +283,87 @@ impl RamPostingProvider {
 }
 
 impl Provider<Vec<Posting>> for RamPostingProvider {
-    fn get<'a>(&'a self, id: u64) -> Option<&'a Vec<Posting>> {
-        self.data.get(&id)
+    fn get(&self, id: u64) -> Option<Rc<Vec<Posting>>> {
+        self.data.get(&id).map(|v| v.clone())
     }
 
     fn store(&mut self, id: u64, data: Vec<Posting>) {
-        self.data.insert(id, data);
+        self.data.insert(id, Rc::new(data));
     }
 }
 
+struct FsPostingProvider {
+    data: BTreeMap<u64, (u64, u32)>,
+    dir: File,
+    offset: u64
+}
+
+impl FsPostingProvider {
+    pub fn new(path: &Path) -> Self {
+       FsPostingProvider {
+            offset: 0,
+            data: BTreeMap::new(),
+            dir: OpenOptions::new().append(true).create(true).open(path).unwrap()
+       }
+    }
+}
+
+
+impl Provider<Vec<Posting>> for FsPostingProvider {
+    fn get(&self, id: u64) -> Option<Rc<Vec<Posting>>> {
+        let posting_offset = self.data.get(&id).unwrap();
+        let mut f = self.dir.try_clone().unwrap();
+        f.seek(SeekFrom::Start(posting_offset.0));
+        let mut bytes = Vec::with_capacity(posting_offset.1 as usize);
+        f.read_exact(&mut bytes);
+        let mut decoder = VByteDecoder::new(bytes.into_iter());
+        let dec_id = decoder.next().unwrap() as u64;
+        assert_eq!(id, dec_id);
+        let postings = decode_listing(decoder);
+        Some(Rc::new(postings))
+    }
+
+    fn store(&mut self, id: u64, data: Vec<Posting>) {
+        let bytes = encode_listing(id, &data);
+        self.dir.write_all(&bytes);
+        self.offset += bytes.len() as u64;
+        self.data.insert(id, (self.offset, bytes.len() as u32));
+    }
+}
+
+fn decode_listing(mut decoder: VByteDecoder) -> Vec<Posting> {
+    let postings_len = decoder.next().unwrap();
+    let mut postings = Vec::with_capacity(postings_len);
+    for _ in 0..postings_len {
+        let doc_id = decoder.next().unwrap();
+        let positions_len = decoder.next().unwrap();
+        let mut positions = Vec::with_capacity(positions_len as usize);
+        let mut last_position = 0;
+        for _ in 0..positions_len {
+            last_position += decoder.next().unwrap();
+            positions.push(last_position as u32);
+        }
+        postings.push((doc_id as u64, positions));
+    }
+    postings
+}
+
+
+fn encode_listing(term_id: u64, listing: &Vec<Posting>) -> Vec<u8> {
+    let mut bytes: Vec<u8> = Vec::new();
+    bytes.append(&mut vbyte_encode(term_id as usize));
+    bytes.append(&mut vbyte_encode(listing.len()));
+    for posting in listing {
+        bytes.append(&mut vbyte_encode(posting.0 as usize));
+        bytes.append(&mut vbyte_encode(posting.1.len() as usize));
+        let mut last_position = 0;
+        for position in posting.1.iter() {
+            bytes.append(&mut vbyte_encode((*position - last_position) as usize));
+            last_position = *position;
+        }
+    }
+    bytes
+}
 
 
 // --- Tests
@@ -260,7 +379,7 @@ mod tests {
         let mut index = BooleanIndex::new();
         index.index_documents(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                    (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
-                                   vec![5, 4, 3, 2, 1, 0].into_iter()] );
+                                   vec![5, 4, 3, 2, 1, 0].into_iter()]);
         index
     }
 
@@ -282,7 +401,8 @@ mod tests {
         assert!(index.document_count == 3);
         // Check number of terms (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18)
         assert!(index.term_ids.len() == 15);
-        assert!(*index.postings.get(*index.term_ids.get(&0).unwrap()).unwrap() == vec![(0, vec![0]), (1, vec![0]), (2, vec![5])]);
+        assert!(*index.postings.get(*index.term_ids.get(&0).unwrap()).unwrap() ==
+                vec![(0, vec![0]), (1, vec![0]), (2, vec![5])]);
     }
 
     #[test]
