@@ -52,7 +52,7 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     fn write_terms<TTarget: Write>(&self, target: &mut TTarget) -> std::io::Result<usize> {
         // Write blocks of 1MB to target
         let mut bytes = Vec::with_capacity(2 * CHUNKSIZE);
-        for term in self.term_ids.iter() {
+        for term in &self.term_ids {
             let term_postings = self.postings.get(*term.1).unwrap();
             let term_bytes = encode_term(&(term.0, &term_postings));
             bytes.extend_from_slice(term_bytes.as_slice());
@@ -137,7 +137,7 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
         bytes.append(&mut vbyte_encode(posting.0 as usize));
         bytes.append(&mut vbyte_encode(posting.1.len() as usize));
         let mut last_position = 0;
-        for position in posting.1.iter() {
+        for position in &posting.1 {
             bytes.append(&mut vbyte_encode((*position - last_position) as usize));
             last_position = *position;
         }

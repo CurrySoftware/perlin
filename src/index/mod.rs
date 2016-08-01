@@ -1,5 +1,5 @@
 use std::io::{Read, Result, Write};
-use std::rc::Rc;
+use std::sync::Arc;
 use std;
 
 pub mod boolean_index;
@@ -18,7 +18,7 @@ pub trait Index<'a, TTerm> {
 }
 
 pub trait Provider<T>{
-    fn get(&self, id: u64) -> Option<Rc<T>>;
+    fn get(&self, id: u64) -> Option<Arc<T>>;
     fn store(&mut self, id: u64, data: T);
 }
 

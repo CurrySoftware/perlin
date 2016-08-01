@@ -1,12 +1,12 @@
 use index::Index;
 
-use std::collections::{BTreeMap};
+use std::collections::BTreeMap;
 use std::iter::Iterator;
 use std::fs::{OpenOptions, File};
 use std::io::{Seek, SeekFrom, Write, Read};
 use std::path::Path;
-use std::rc::Rc;
-use std::cell::{RefCell};
+use std::sync::Arc;
+use std::cell::Cell;
 
 use index::Provider;
 use index::boolean_index::query_result_iterator::*;
@@ -112,7 +112,7 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
                 // Has term already been seen? Is it already in the vocabulary?
                 if let Some(term_id) = self.term_ids.get(&term) {
                     // Get its listing from the temporary. And add doc_id and/or position to it
-                    let listing = inv_index.get_mut(&term_id).unwrap();
+                    let listing = inv_index.get_mut(term_id).unwrap();
                     match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&new_doc_id)) {
                         Ok(term_doc_index) => {
                             // Document already had that term.
@@ -164,19 +164,20 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
                 }
                 Box::new(res.into_iter())
             }
-            QueryResultIterator::NAry(iter) =>  {
+            QueryResultIterator::NAry(iter) => {
                 let mut res = Vec::new();
-                while let Some(posting) = iter.next(){
+                while let Some(posting) = iter.next() {
                     res.push(posting.0)
                 }
                 Box::new(res.into_iter())
             }
-            QueryResultIterator::Filter(iter) =>  {
+            QueryResultIterator::Filter(iter) => {
                 let mut res = Vec::new();
-                while let Some(posting) = iter.next(){
+                while let Some(posting) = iter.next() {
                     res.push(posting.0)
                 }
-                Box::new(res.into_iter())            }
+                Box::new(res.into_iter())
+            }
         }
     }
 }
@@ -203,7 +204,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     fn run_nary_query(&self,
                       operator: &BooleanOperator,
                       operands: &[BooleanQuery<TTerm>])
-                          -> QueryResultIterator {
+                      -> QueryResultIterator {
         let mut ops = Vec::new();
         for operand in operands {
             ops.push(self.run_query(operand))
@@ -217,10 +218,9 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                             -> QueryResultIterator {
         let mut ops = Vec::new();
         for operand in operands {
-            ops.push(self.run_atom(operand.relative_position, &operand.query_term));           
+            ops.push(self.run_atom(operand.relative_position, &operand.query_term));
         }
-        QueryResultIterator::NAry(NAryQueryIterator::new_positional(*operator,
-                                                                    ops))
+        QueryResultIterator::NAry(NAryQueryIterator::new_positional(*operator, ops))
     }
 
     fn run_filter(&self,
@@ -237,9 +237,9 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
             QueryResultIterator::Atom(relative_position,
-                                      RcIter{
-                                          data:self.postings.get(*result).unwrap(),
-                                          pos: RefCell::new(0)
+                                      ArcIter {
+                                          data: self.postings.get(*result).unwrap(),
+                                          pos: Cell::new(0),
                                       })
         } else {
             QueryResultIterator::Empty
@@ -247,26 +247,27 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     }
 }
 
-pub trait OwningIterator<'a>{
+
+pub trait OwningIterator<'a> {
     type Item;
     fn next(&'a self) -> Option<Self::Item>;
     fn peek(&'a self) -> Option<Self::Item>;
     fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
 }
 
-pub struct RcIter<T>{
-    data: Rc<Vec<T>>,
-    pos: RefCell<usize>
+pub struct ArcIter<T> {
+    data: Arc<Vec<T>>,
+    pos: Cell<usize>,
 }
 
-impl<'a, T: 'a> OwningIterator<'a> for RcIter<T>{
+impl<'a, T: 'a> OwningIterator<'a> for ArcIter<T> {
     type Item = &'a T;
 
     fn next(&'a self) -> Option<Self::Item> {
-        let mut pos = self.pos.borrow_mut();
-        if *pos < self.data.len() {
-            *pos += 1;
-            return Some(&self.data[*pos - 1]);
+        if self.pos.get() < self.data.len() {
+            self.pos.set(self.pos.get() + 1);
+            return Some(&self.data[self.pos.get() - 1]);
         }
         None
     }
@@ -276,18 +277,20 @@ impl<'a, T: 'a> OwningIterator<'a> for RcIter<T>{
     }
 
     fn peek(&'a self) -> Option<Self::Item> {
-        let pos = self.pos.borrow();
-        if *pos >= self.len() {
+        if self.pos.get() >= self.len() {
             None
         } else {
-            Some(&self.data[*pos])
+            Some(&self.data[self.pos.get()])
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 }
 
-
 struct RamPostingProvider {
-    data: BTreeMap<u64, Rc<Vec<Posting>>>,
+    data: BTreeMap<u64, Arc<Vec<Posting>>>,
 }
 
 impl RamPostingProvider {
@@ -297,34 +300,34 @@ impl RamPostingProvider {
 }
 
 impl Provider<Vec<Posting>> for RamPostingProvider {
-    fn get(&self, id: u64) -> Option<Rc<Vec<Posting>>> {
-        self.data.get(&id).map(|v| v.clone())
+    fn get(&self, id: u64) -> Option<Arc<Vec<Posting>>> {
+        self.data.get(&id).cloned()
     }
 
     fn store(&mut self, id: u64, data: Vec<Posting>) {
-        self.data.insert(id, Rc::new(data));
+        self.data.insert(id, Arc::new(data));
     }
 }
 
 struct FsPostingProvider {
     data: BTreeMap<u64, (u64, u32)>,
     dir: File,
-    offset: u64
+    offset: u64,
 }
 
 impl FsPostingProvider {
     pub fn new(path: &Path) -> Self {
-       FsPostingProvider {
+        FsPostingProvider {
             offset: 0,
             data: BTreeMap::new(),
-            dir: OpenOptions::new().append(true).create(true).open(path).unwrap()
-       }
+            dir: OpenOptions::new().append(true).create(true).open(path).unwrap(),
+        }
     }
 }
 
 
 impl Provider<Vec<Posting>> for FsPostingProvider {
-    fn get(&self, id: u64) -> Option<Rc<Vec<Posting>>> {
+    fn get(&self, id: u64) -> Option<Arc<Vec<Posting>>> {
         let posting_offset = self.data.get(&id).unwrap();
         let mut f = self.dir.try_clone().unwrap();
         f.seek(SeekFrom::Start(posting_offset.0));
@@ -334,7 +337,7 @@ impl Provider<Vec<Posting>> for FsPostingProvider {
         let dec_id = decoder.next().unwrap() as u64;
         assert_eq!(id, dec_id);
         let postings = decode_listing(decoder);
-        Some(Rc::new(postings))
+        Some(Arc::new(postings))
     }
 
     fn store(&mut self, id: u64, data: Vec<Posting>) {
@@ -363,7 +366,7 @@ fn decode_listing(mut decoder: VByteDecoder) -> Vec<Posting> {
 }
 
 
-fn encode_listing(term_id: u64, listing: &Vec<Posting>) -> Vec<u8> {
+fn encode_listing(term_id: u64, listing: &[Posting]) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
     bytes.append(&mut vbyte_encode(term_id as usize));
     bytes.append(&mut vbyte_encode(listing.len()));
@@ -371,7 +374,7 @@ fn encode_listing(term_id: u64, listing: &Vec<Posting>) -> Vec<u8> {
         bytes.append(&mut vbyte_encode(posting.0 as usize));
         bytes.append(&mut vbyte_encode(posting.1.len() as usize));
         let mut last_position = 0;
-        for position in posting.1.iter() {
+        for position in &posting.1 {
             bytes.append(&mut vbyte_encode((*position - last_position) as usize));
             last_position = *position;
         }
@@ -487,11 +490,12 @@ mod tests {
                                                                                       12))]))
             .collect::<Vec<_>>(), vec![0, 1, 2]);
         assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
-                                               vec![BooleanQuery::Atom(QueryAtom::new(0,
+                                                          vec![BooleanQuery::Atom(QueryAtom::new(0,
                                                                                       14)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,
                                                                                       12))]))
-            .collect::<Vec<_>>(), vec![1]);
+                       .collect::<Vec<_>>(),
+                   vec![1]);
         assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::NAry(BooleanOperator::Or,
                     vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),

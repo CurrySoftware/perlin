@@ -23,7 +23,7 @@ macro_rules! unwrap_or_return_none{
 /// Used to be able to simply and elegantly use nested queries of different types
 pub enum QueryResultIterator<'a> {
     Empty,
-    Atom(usize, RcIter<Posting>),
+    Atom(usize, ArcIter<Posting>),
     NAry(NAryQueryIterator<'a>),
     Filter(FilterIterator<'a>),
 }
