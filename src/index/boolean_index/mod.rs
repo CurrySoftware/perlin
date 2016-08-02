@@ -80,20 +80,12 @@ pub enum BooleanQuery<TTerm> {
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     term_ids: BTreeMap<TTerm, u64>,
-    postings: RamPostingProvider,
+    postings: Box<Provider<Vec<Posting>>>,
 }
 
 impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64> + 'a>;
-
-    fn new() -> BooleanIndex<TTerm> {
-        BooleanIndex {
-            document_count: 0,
-            term_ids: BTreeMap::new(),
-            postings: RamPostingProvider::new(),
-        }
-    }
 
     /// Indexes a document collection for later retrieval
     /// Returns the document_ids used by the index
@@ -184,6 +176,15 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
 
 
 impl<TTerm: Ord> BooleanIndex<TTerm> {
+    pub fn new(provider: Box<Provider<Vec<Posting>>>) -> BooleanIndex<TTerm> {
+        BooleanIndex {
+            document_count: 0,
+            term_ids: BTreeMap::new(),
+            postings: provider,
+        }
+    }
+
+
     fn run_query(&self, query: &BooleanQuery<TTerm>) -> QueryResultIterator {
         match *query {
             BooleanQuery::Atom(ref atom) => self.run_atom(atom.relative_position, &atom.query_term),
@@ -289,7 +290,7 @@ impl<'a, T: 'a> OwningIterator<'a> for ArcIter<T> {
     }
 }
 
-struct RamPostingProvider {
+pub struct RamPostingProvider {
     data: BTreeMap<u64, Arc<Vec<Posting>>>,
 }
 
@@ -309,7 +310,8 @@ impl Provider<Vec<Posting>> for RamPostingProvider {
     }
 }
 
-struct FsPostingProvider {
+pub struct FsPostingProvider {
+    // Stores for every id the offset in the file and the length
     data: BTreeMap<u64, (u64, u32)>,
     dir: File,
     offset: u64,
@@ -320,7 +322,13 @@ impl FsPostingProvider {
         FsPostingProvider {
             offset: 0,
             data: BTreeMap::new(),
-            dir: OpenOptions::new().append(true).create(true).open(path).unwrap(),
+            dir: OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(path)
+                .unwrap(),
         }
     }
 }
@@ -330,9 +338,11 @@ impl Provider<Vec<Posting>> for FsPostingProvider {
     fn get(&self, id: u64) -> Option<Arc<Vec<Posting>>> {
         let posting_offset = self.data.get(&id).unwrap();
         let mut f = self.dir.try_clone().unwrap();
-        f.seek(SeekFrom::Start(posting_offset.0));
-        let mut bytes = Vec::with_capacity(posting_offset.1 as usize);
-        f.read_exact(&mut bytes);
+        f.seek(SeekFrom::Start(posting_offset.0)).unwrap();
+        //        let mut bytes = Vec::with_capacity(posting_offset.1 as usize);
+        let mut bytes = vec![0; posting_offset.1 as usize];
+        f.read_exact(&mut bytes).unwrap();
+        println!("Read Bytes:{:?}", bytes);
         let mut decoder = VByteDecoder::new(bytes.into_iter());
         let dec_id = decoder.next().unwrap() as u64;
         assert_eq!(id, dec_id);
@@ -343,8 +353,10 @@ impl Provider<Vec<Posting>> for FsPostingProvider {
     fn store(&mut self, id: u64, data: Vec<Posting>) {
         let bytes = encode_listing(id, &data);
         self.dir.write_all(&bytes);
-        self.offset += bytes.len() as u64;
         self.data.insert(id, (self.offset, bytes.len() as u32));
+        self.offset += bytes.len() as u64;
+        println!("{:?} was encoded to {:?}", data, bytes);
+        println!("{}, {}", self.offset, bytes.len());
     }
 }
 
@@ -390,16 +402,41 @@ mod tests {
     use super::*;
     use index::Index;
     use index::Provider;
+    use std::path::Path;
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {
-        let mut index = BooleanIndex::new();
+        let mut index = BooleanIndex::new(Box::new(RamPostingProvider::new()));
         index.index_documents(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                    (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
                                    vec![5, 4, 3, 2, 1, 0].into_iter()]);
         index
     }
 
+    #[test]
+    pub fn ram_provider() {
+        let posting1 = vec![(0, vec![0, 1, 2, 3, 4]), (1, vec![5])];
+        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5]), (5, vec![0, 24, 56])];
+        let mut prov = RamPostingProvider::new();
+        prov.store(0, posting1.clone());
+        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
+        prov.store(1, posting2.clone());
+        assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
+        assert!(prov.get(0).unwrap().as_ref() != &posting2);
+    }
+
+    #[test]
+    pub fn fs_provider() {
+        let posting1 = vec![(0, vec![0, 1, 2, 3, 4]), (1, vec![5])];
+        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5]), (5, vec![0, 24, 56])];
+        let mut prov = FsPostingProvider::new(Path::new("/tmp/test_index.bin"));
+        prov.store(0, posting1.clone());
+        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
+        prov.store(1, posting2.clone());
+        assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
+        assert!(prov.get(0).unwrap().as_ref() != &posting2);
+
+    }
 
     #[test]
     fn empty_query() {

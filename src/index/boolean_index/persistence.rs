@@ -2,8 +2,8 @@
 //! e.g. writing the index to a bytestream; reading the index from a bytestream.
 //! The API-Entrypoints are defined in the trait `index::PersistentIndex`
 
-use index::{Index, Provider, PersistentIndex, ByteEncodable, ByteDecodable};
-use index::boolean_index::BooleanIndex;
+use index::{PersistentIndex, ByteEncodable, ByteDecodable};
+use index::boolean_index::{RamPostingProvider, BooleanIndex};
 use index::boolean_index::posting::Posting;
 
 use std::io::{Read, Write};
@@ -153,7 +153,7 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanInde
 
     fn read_from<TSource: Read>(source: &mut TSource) -> Result<Self, String> {
         let inv_index = Self::read_terms(source).unwrap();
-        let mut index = BooleanIndex::new();
+        let mut index = BooleanIndex::new(Box::new(RamPostingProvider::new()));
         for (term, listing) in inv_index {
             let term_id = index.term_ids.len() as u64;
             index.term_ids.insert(term, term_id);
@@ -256,14 +256,14 @@ fn test_vbyte_decode() {
 
 #[cfg(test)]
 mod tests {
-    use index::boolean_index::BooleanIndex;
+    use index::boolean_index::{RamPostingProvider, BooleanIndex};
     use index::boolean_index::tests::prepare_index;
     use index::{Index, PersistentIndex};
     use std::io::Cursor;
 
     #[test]
     fn simple() {
-        let mut index = BooleanIndex::new();
+        let mut index = BooleanIndex::new(Box::new(RamPostingProvider::new()));
         index.index_documents(vec![0..2]);
         let mut bytes: Vec<u8> = vec![];
         index.write_to(&mut bytes).unwrap();

@@ -10,8 +10,6 @@ pub trait Index<'a, TTerm> {
     type Query;
     type QueryResult;
     
-    fn new() -> Self;
-
     fn index_documents<TDocIterator: Iterator<Item=TTerm>>(&mut self, documents: Vec<TDocIterator>) -> Vec<u64>;
 
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult;
