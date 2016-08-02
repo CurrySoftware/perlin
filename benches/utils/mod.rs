@@ -1,26 +1,25 @@
 use perlin::index::{Index, PersistentIndex};
+use perlin::index::boolean_index::{FsPostingProvider, BooleanIndex};
 use std::fmt::Debug;
 use std::env;
+use std::path::Path;
 use std::fs::File;
 use rand;
 
-pub fn prepare_index<'a, TIndex: Index<'a, usize> + PersistentIndex>(documents: usize,
+pub fn prepare_index(documents: usize,
                                                                      document_size: usize)
-                                                                             -> TIndex {
+                                                                             -> BooleanIndex<usize> {
 
   //  println!("Preparing Index with {} documents and {} terms per document", documents, document_size);
     let mut tmp_dir = env::temp_dir();
     tmp_dir.push(&format!("bench_index_{}_{}.bin", documents, document_size));
 
     if tmp_dir.exists() {
-    //    println!("Found index in temporary directory. Reading it!");
-        let result = TIndex::read_from(&mut File::open(tmp_dir.as_path()).unwrap()).unwrap();
-    //    println!("Finished!");
+        let result = BooleanIndex::read_from(&mut File::open(tmp_dir.as_path()).unwrap()).unwrap();
         result
     } else {
         let rng = ZipfGenerator::new(voc_size(20, 0.5, documents * document_size));
-    //    println!("Index has to be created. Starting...");
-        let mut index = TIndex::new();
+        let mut index = BooleanIndex::new(Box::new(FsPostingProvider::new(Path::new(&format!("/tmp/fs_{}{}.bin", documents, document_size)))));
         let mut docs = Vec::with_capacity(documents);
         for i in 0..documents {
             if i % 1000 == 0
@@ -30,9 +29,7 @@ pub fn prepare_index<'a, TIndex: Index<'a, usize> + PersistentIndex>(documents: 
             docs.push(rng.take(document_size));
         }
         index.index_documents(docs);
-      //  println!("Finished creating the Index! Writing to Disk!");
         index.write_to(&mut File::create(tmp_dir.as_path()).unwrap()).unwrap();
-     //   println!("Finished!");
         index
     }
 }

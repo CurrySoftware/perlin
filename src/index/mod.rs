@@ -15,7 +15,7 @@ pub trait Index<'a, TTerm> {
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult;
 }
 
-pub trait Provider<T>{
+pub trait Provider<T> : Sync{
     fn get(&self, id: u64) -> Option<Arc<T>>;
     fn store(&mut self, id: u64, data: T);
 }
