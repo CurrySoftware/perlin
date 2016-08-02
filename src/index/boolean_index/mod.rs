@@ -339,10 +339,8 @@ impl Provider<Vec<Posting>> for FsPostingProvider {
         let posting_offset = self.data.get(&id).unwrap();
         let mut f = self.dir.try_clone().unwrap();
         f.seek(SeekFrom::Start(posting_offset.0)).unwrap();
-        //        let mut bytes = Vec::with_capacity(posting_offset.1 as usize);
         let mut bytes = vec![0; posting_offset.1 as usize];
         f.read_exact(&mut bytes).unwrap();
-        println!("Read Bytes:{:?}", bytes);
         let mut decoder = VByteDecoder::new(bytes.into_iter());
         let dec_id = decoder.next().unwrap() as u64;
         assert_eq!(id, dec_id);
@@ -355,8 +353,6 @@ impl Provider<Vec<Posting>> for FsPostingProvider {
         self.dir.write_all(&bytes);
         self.data.insert(id, (self.offset, bytes.len() as u32));
         self.offset += bytes.len() as u64;
-        println!("{:?} was encoded to {:?}", data, bytes);
-        println!("{}, {}", self.offset, bytes.len());
     }
 }
 
@@ -520,7 +516,6 @@ mod tests {
     #[test]
     fn or_query() {
         let index = prepare_index();
-        println!("OR_QUERY!");
         assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::Or,
                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                                                     BooleanQuery::Atom(QueryAtom::new(0,

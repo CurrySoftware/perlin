@@ -171,7 +171,6 @@ impl<'a> NAryQueryIterator<'a> {
 
     fn next_or(&'a self) -> Option<&'a Posting> {
         // Find the smallest current value of all operands
-        println!("nextor");
 
         let min_value = self.operands
             .iter()
@@ -179,7 +178,6 @@ impl<'a> NAryQueryIterator<'a> {
             .filter(|val| val.is_some())
             .map(|val| val.unwrap().0)
             .min();
-        println!("{:?}", min_value);
         // If there is such a value
         if let Some(min) = min_value {
             let mut tmp = None;
