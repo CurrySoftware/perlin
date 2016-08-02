@@ -1,7 +1,7 @@
 use std::io::{Read, Result, Write};
-use std::sync::Arc;
 use std;
 
+pub mod storage;
 pub mod boolean_index;
 
 /// The central trait of perlin. Indices tend to differ alot in implementation details
@@ -13,11 +13,6 @@ pub trait Index<'a, TTerm> {
     fn index_documents<TDocIterator: Iterator<Item=TTerm>>(&mut self, documents: Vec<TDocIterator>) -> Vec<u64>;
 
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult;
-}
-
-pub trait Provider<T> : Sync{
-    fn get(&self, id: u64) -> Option<Arc<T>>;
-    fn store(&mut self, id: u64, data: T);
 }
 
 /// Defines API calls for writing and reading an index from/to binary

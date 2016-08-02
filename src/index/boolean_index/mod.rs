@@ -2,24 +2,25 @@ use index::Index;
 
 use std::collections::BTreeMap;
 use std::iter::Iterator;
-use std::fs::{OpenOptions, File};
-use std::io::{Seek, SeekFrom, Write, Read};
-use std::path::Path;
 use std::sync::Arc;
 use std::cell::Cell;
 
-use index::Provider;
+use index::storage::Storage;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::Posting;
-use index::boolean_index::persistence::{vbyte_encode, VByteDecoder};
 
 mod query_result_iterator;
-mod persistence;
+
+// TODO: Remove Pub. WRONG!.
+// Remove as soon as vbyte_encode and VByteDecoder are abstracted away from perlin or at least boolean index
+pub mod persistence;
 
 
 // not intended for public use. Thus the wrapper module
-mod posting {
+// TODO: REMOVE PUB. WRONG!.
+// Remove as soon as Posting is abstraced from fs_storage
+pub mod posting {
     // For each term-document pair the doc_id and the
     // positions of the term inside the document are stored
     pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);
@@ -80,7 +81,7 @@ pub enum BooleanQuery<TTerm> {
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     term_ids: BTreeMap<TTerm, u64>,
-    postings: Box<Provider<Vec<Posting>>>,
+    postings: Box<Storage<Vec<Posting>>>,
 }
 
 impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
@@ -176,7 +177,7 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
 
 
 impl<TTerm: Ord> BooleanIndex<TTerm> {
-    pub fn new(provider: Box<Provider<Vec<Posting>>>) -> BooleanIndex<TTerm> {
+    pub fn new(provider: Box<Storage<Vec<Posting>>>) -> BooleanIndex<TTerm> {
         BooleanIndex {
             document_count: 0,
             term_ids: BTreeMap::new(),
@@ -290,106 +291,6 @@ impl<'a, T: 'a> OwningIterator<'a> for ArcIter<T> {
     }
 }
 
-pub struct RamPostingProvider {
-    data: BTreeMap<u64, Arc<Vec<Posting>>>,
-}
-
-impl RamPostingProvider {
-    pub fn new() -> Self {
-        RamPostingProvider { data: BTreeMap::new() }
-    }
-}
-
-impl Provider<Vec<Posting>> for RamPostingProvider {
-    fn get(&self, id: u64) -> Option<Arc<Vec<Posting>>> {
-        self.data.get(&id).cloned()
-    }
-
-    fn store(&mut self, id: u64, data: Vec<Posting>) {
-        self.data.insert(id, Arc::new(data));
-    }
-}
-
-pub struct FsPostingProvider {
-    // Stores for every id the offset in the file and the length
-    data: BTreeMap<u64, (u64, u32)>,
-    dir: File,
-    offset: u64,
-}
-
-impl FsPostingProvider {
-    pub fn new(path: &Path) -> Self {
-        FsPostingProvider {
-            offset: 0,
-            data: BTreeMap::new(),
-            dir: OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(path)
-                .unwrap(),
-        }
-    }
-}
-
-
-impl Provider<Vec<Posting>> for FsPostingProvider {
-    fn get(&self, id: u64) -> Option<Arc<Vec<Posting>>> {
-        let posting_offset = self.data.get(&id).unwrap();
-        let mut f = self.dir.try_clone().unwrap();
-        f.seek(SeekFrom::Start(posting_offset.0)).unwrap();
-        let mut bytes = vec![0; posting_offset.1 as usize];
-        f.read_exact(&mut bytes).unwrap();
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
-        let dec_id = decoder.next().unwrap() as u64;
-        assert_eq!(id, dec_id);
-        let postings = decode_listing(decoder);
-        Some(Arc::new(postings))
-    }
-
-    fn store(&mut self, id: u64, data: Vec<Posting>) {
-        let bytes = encode_listing(id, &data);
-        self.dir.write_all(&bytes);
-        self.data.insert(id, (self.offset, bytes.len() as u32));
-        self.offset += bytes.len() as u64;
-    }
-}
-
-fn decode_listing(mut decoder: VByteDecoder) -> Vec<Posting> {
-    let postings_len = decoder.next().unwrap();
-    let mut postings = Vec::with_capacity(postings_len);
-    for _ in 0..postings_len {
-        let doc_id = decoder.next().unwrap();
-        let positions_len = decoder.next().unwrap();
-        let mut positions = Vec::with_capacity(positions_len as usize);
-        let mut last_position = 0;
-        for _ in 0..positions_len {
-            last_position += decoder.next().unwrap();
-            positions.push(last_position as u32);
-        }
-        postings.push((doc_id as u64, positions));
-    }
-    postings
-}
-
-
-fn encode_listing(term_id: u64, listing: &[Posting]) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::new();
-    bytes.append(&mut vbyte_encode(term_id as usize));
-    bytes.append(&mut vbyte_encode(listing.len()));
-    for posting in listing {
-        bytes.append(&mut vbyte_encode(posting.0 as usize));
-        bytes.append(&mut vbyte_encode(posting.1.len() as usize));
-        let mut last_position = 0;
-        for position in &posting.1 {
-            bytes.append(&mut vbyte_encode((*position - last_position) as usize));
-            last_position = *position;
-        }
-    }
-    bytes
-}
-
 
 // --- Tests
 
@@ -397,42 +298,17 @@ fn encode_listing(term_id: u64, listing: &[Posting]) -> Vec<u8> {
 mod tests {
     use super::*;
     use index::Index;
-    use index::Provider;
-    use std::path::Path;
+    use index::storage::ram_storage::RamStorage;
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {
-        let mut index = BooleanIndex::new(Box::new(RamPostingProvider::new()));
+        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
         index.index_documents(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                    (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
                                    vec![5, 4, 3, 2, 1, 0].into_iter()]);
         index
     }
 
-    #[test]
-    pub fn ram_provider() {
-        let posting1 = vec![(0, vec![0, 1, 2, 3, 4]), (1, vec![5])];
-        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5]), (5, vec![0, 24, 56])];
-        let mut prov = RamPostingProvider::new();
-        prov.store(0, posting1.clone());
-        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
-        prov.store(1, posting2.clone());
-        assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
-        assert!(prov.get(0).unwrap().as_ref() != &posting2);
-    }
-
-    #[test]
-    pub fn fs_provider() {
-        let posting1 = vec![(0, vec![0, 1, 2, 3, 4]), (1, vec![5])];
-        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5]), (5, vec![0, 24, 56])];
-        let mut prov = FsPostingProvider::new(Path::new("/tmp/test_index.bin"));
-        prov.store(0, posting1.clone());
-        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
-        prov.store(1, posting2.clone());
-        assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
-        assert!(prov.get(0).unwrap().as_ref() != &posting2);
-
-    }
 
     #[test]
     fn empty_query() {

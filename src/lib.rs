@@ -22,15 +22,12 @@
 //! ```rust
 //! use std::path::Path;
 //! use perlin::index::Index;
-//! use perlin::index::boolean_index::{BooleanIndex, RamPostingProvider, FsPostingProvider};
+//! use perlin::index::storage::ram_storage::RamStorage;
+//! use perlin::index::boolean_index::{BooleanIndex};
 
 //! //Create a new index and tell it where to store its data.
 //! //In this case we will tell it to store its data in memory
-//! let mut index = BooleanIndex::new(Box::new(RamPostingProvider::new()));
-//! //If you want it to store data on disk, because you have limited RAM or lots of data
-//! //use FsPostingProvider like
-//! let mut fs_index: BooleanIndex<usize> = BooleanIndex::new(
-//!                           Box::new(FsPostingProvider::new(Path::new("/tmp/index.bin"))));
+//! let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
 //! index.index_documents(vec![(0..10), (0..15), (10..34)]);
 //! ```
 //!
