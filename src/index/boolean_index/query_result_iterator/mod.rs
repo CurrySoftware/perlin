@@ -3,6 +3,7 @@ use std::cell::RefCell;
 use index::boolean_index::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
+use utils::owning_iterator::{OwningIterator, ArcIter};
 
 pub mod nary_query_iterator;
 

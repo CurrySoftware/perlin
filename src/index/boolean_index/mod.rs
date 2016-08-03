@@ -2,13 +2,12 @@ use index::Index;
 
 use std::collections::BTreeMap;
 use std::iter::Iterator;
-use std::sync::Arc;
-use std::cell::Cell;
 
 use index::storage::Storage;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::Posting;
+use utils::owning_iterator::{OwningIterator, ArcIter};
 
 mod query_result_iterator;
 
@@ -239,57 +238,13 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
             QueryResultIterator::Atom(relative_position,
-                                      ArcIter {
-                                          data: self.postings.get(*result).unwrap(),
-                                          pos: Cell::new(0),
-                                      })
+                                      ArcIter::new(self.postings.get(*result).unwrap()))
         } else {
             QueryResultIterator::Empty
         }
     }
 }
 
-
-pub trait OwningIterator<'a> {
-    type Item;
-    fn next(&'a self) -> Option<Self::Item>;
-    fn peek(&'a self) -> Option<Self::Item>;
-    fn len(&self) -> usize;
-    fn is_empty(&self) -> bool;
-}
-
-pub struct ArcIter<T> {
-    data: Arc<Vec<T>>,
-    pos: Cell<usize>,
-}
-
-impl<'a, T: 'a> OwningIterator<'a> for ArcIter<T> {
-    type Item = &'a T;
-
-    fn next(&'a self) -> Option<Self::Item> {
-        if self.pos.get() < self.data.len() {
-            self.pos.set(self.pos.get() + 1);
-            return Some(&self.data[self.pos.get() - 1]);
-        }
-        None
-    }
-
-    fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    fn peek(&'a self) -> Option<Self::Item> {
-        if self.pos.get() >= self.len() {
-            None
-        } else {
-            Some(&self.data[self.pos.get()])
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
-}
 
 
 // --- Tests

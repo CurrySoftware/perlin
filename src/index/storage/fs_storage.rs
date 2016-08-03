@@ -9,8 +9,7 @@ use std::sync::Arc;
 use index::storage::{Result, Storage, StorageError};
 // TODO: WRONG! FIX
 use index::boolean_index::posting::Posting;
-// WRONG TOO! (At least probably!)
-use index::boolean_index::persistence::{vbyte_encode, VByteDecoder};
+use utils::compression::{vbyte_encode, VByteDecoder};
 
 
 pub struct FsPostingStorage {
