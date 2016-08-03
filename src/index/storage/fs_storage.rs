@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 
 
-use index::storage::{Result, Storage};
-//TODO: WRONG! FIX
+use index::storage::{Result, Storage, StorageError};
+// TODO: WRONG! FIX
 use index::boolean_index::posting::Posting;
-//WRONG TOO! (At leas probably!)
+// WRONG TOO! (At least probably!)
 use index::boolean_index::persistence::{vbyte_encode, VByteDecoder};
 
 
@@ -51,10 +51,16 @@ impl Storage<Vec<Posting>> for FsPostingStorage {
         Ok(Arc::new(postings))
     }
 
-    fn store(&mut self, id: u64, data: Vec<Posting>) -> Result<()>{
+    fn store(&mut self, id: u64, data: Vec<Posting>) -> Result<()> {
+        //Encode the data
         let bytes = encode_listing(id, &data);
-        self.dir.write_all(&bytes);
+        //Append it to the file
+        if let Err(e) = self.dir.write_all(&bytes) {
+            return Err(StorageError::WriteError(Some(e)))
+        }
+        //And save the offset and the number of bytes written for later recovery
         self.data.insert(id, (self.offset, bytes.len() as u32));
+        //Update offset
         self.offset += bytes.len() as u64;
         Ok(())
     }
@@ -96,15 +102,15 @@ fn encode_listing(term_id: u64, listing: &[Posting]) -> Vec<u8> {
     bytes
 }
 
-    #[test]
-    pub fn fs_provider() {
-        let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
-        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
-        let mut prov = FsPostingStorage::new(Path::new("/tmp/test_index.bin"));
-        prov.store(0, posting1.clone());
-        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
-        prov.store(1, posting2.clone()); 
-        assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
-        assert!(prov.get(0).unwrap().as_ref() != &posting2);
-        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
-    }
+#[test]
+pub fn fs_provider() {
+    let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
+    let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
+    let mut prov = FsPostingStorage::new(Path::new("/tmp/test_index.bin"));
+    prov.store(0, posting1.clone());
+    assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
+    prov.store(1, posting2.clone());
+    assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
+    assert!(prov.get(0).unwrap().as_ref() != &posting2);
+    assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
+}

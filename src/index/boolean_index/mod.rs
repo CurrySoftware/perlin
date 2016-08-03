@@ -139,7 +139,7 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
         // everything is now indexed. Hand it to our provider.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index {
-            self.postings.store(term_id, listing);
+            self.postings.store(term_id, listing).unwrap();
         }
 
         result
