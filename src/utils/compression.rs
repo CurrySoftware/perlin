@@ -1,14 +1,20 @@
-macro_rules! unwrap_or_return_none{
-    ($operand:expr) => {
-        if let Some(x) = $operand {
-            x
-        } else {
-            return None;
-        }
-    }
-}
+//! This module provides utility methods and structs for variable byte encoding
+//!
+//! Encode unsigned integers by using the `vbyte_encode` method
+//! Decode a bytestream by instatiating a `VByteDecoder` and using its iterator implementation
+//!
+//! #Example
+//!
+//! ```
+//! use perlin::utils::compression::*;
+//!
+//! let bytes = vbyte_encode(3);
+//! let three = VByteDecoder::new(bytes.into_iter()).next().unwrap();
+//! assert_eq!(3, three);
+//! ```
 
-
+///Encode an usigned integer as a variable number of bytes 
+///as described in the [IR-Book|http://nlp.stanford.edu/IR-book/html/htmledition/variable-byte-codes-1.html] 
 pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     let mut result = Vec::new();
     loop {
@@ -25,16 +31,21 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
 }
 
 
-
+///Iterator that decodes a bytestream to unsigned integers
 pub struct VByteDecoder<'a> {
     bytes: Box<Iterator<Item=u8> + 'a>
 }
 
 impl<'a> VByteDecoder<'a> {
+
+    ///Create a new VByteDecoder by passing a bytestream
     pub fn new<T: Iterator<Item=u8> + 'a>(bytes: T) -> Self {
         VByteDecoder { bytes: Box::new(bytes) }
     }
 
+    ///Sometimes it is convenient to look at the original bytestream itself 
+    ///(e.g. when not only vbyte encoded integers are in the bytestream)
+    ///This method provides access to the underlying bytestream in form of a mutable borrow 
     pub fn underlying_iterator(&mut self) -> &mut Iterator<Item=u8> {
        &mut self.bytes
     }
@@ -42,12 +53,16 @@ impl<'a> VByteDecoder<'a> {
 
 impl<'a> Iterator for VByteDecoder<'a> {
     type Item = usize;
+
+    ///Returns the next unsigned integer which is encoded in the underlying bytestream
+    ///May iterate the underlying bytestream an arbitrary number of times
+    ///Returns None when the underlying bytream returns None
     fn next(&mut self) -> Option<Self::Item> {
 
         let mut result: usize = 0;
         loop {
             result *= 128;
-            let val = unwrap_or_return_none!(self.bytes.next());
+            let val = try_option!(self.bytes.next());
             result += val as usize;
             if val >= 128 {
                 result -= 128;
