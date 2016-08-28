@@ -42,6 +42,7 @@ impl Error for StorageError {
 
 /// Defines a common interface between multiple storage types
 /// The index uses them to store data like the posting lists
+//TODO: Needs methods to delete and/or update items
 pub trait Storage<T> : Sync {
     
     /// Tries to get a value for a given Id.

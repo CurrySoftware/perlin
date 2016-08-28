@@ -26,16 +26,27 @@ impl<T: Sync + Send> Storage<T> for RamStorage<T> {
     }
 }
 
-
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use index::storage::Storage;
+    
     #[test]
-    pub fn ram_provider() {
+    pub fn basic() {
         let posting1 = vec![(0, vec![0, 1, 2, 3, 4]), (1, vec![5])];
         let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5]), (5, vec![0, 24, 56])];
         let mut prov = RamStorage::new();
-        prov.store(0, posting1.clone());
+        assert!(prov.store(0, posting1.clone()).is_ok());
         assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
-        prov.store(1, posting2.clone());
+        assert!(prov.store(1, posting2.clone()).is_ok());
         assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
         assert!(prov.get(0).unwrap().as_ref() != &posting2);
     }
 
+    #[test]
+    pub fn not_found() {
+        let prov: RamStorage<usize> = RamStorage::new();
+        assert!(prov.get(0).is_err());
+    }
+    
+}

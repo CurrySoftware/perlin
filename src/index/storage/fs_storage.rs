@@ -60,7 +60,7 @@ impl FsPostingStorage {
             entries.insert(entry.0, (entry.1, entry.2));
         }
 
-        //Get data file length for offset
+        // Get data file length for offset
         let offset = File::open(path.join("data.bin"))
             .unwrap()
             .metadata()
@@ -86,16 +86,19 @@ impl FsPostingStorage {
 
 impl Storage<Vec<Posting>> for FsPostingStorage {
     fn get(&self, id: u64) -> Result<Arc<Vec<Posting>>> {
-        let posting_offset = self.entries.get(&id).unwrap();
-        let mut f = self.data.try_clone().unwrap();
-        f.seek(SeekFrom::Start(posting_offset.0)).unwrap();
-        let mut bytes = vec![0; posting_offset.1 as usize];
-        f.read_exact(&mut bytes).unwrap();
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
-        let dec_id = decoder.next().unwrap() as u64;
-        assert_eq!(id, dec_id);
-        let postings = decode_listing(decoder);
-        Ok(Arc::new(postings))
+        if let Some(posting_offset) = self.entries.get(&id) {
+            let mut f = self.data.try_clone().unwrap();
+            f.seek(SeekFrom::Start(posting_offset.0)).unwrap();
+            let mut bytes = vec![0; posting_offset.1 as usize];
+            f.read_exact(&mut bytes).unwrap();
+            let mut decoder = VByteDecoder::new(bytes.into_iter());
+            let dec_id = decoder.next().unwrap() as u64;
+            assert_eq!(id, dec_id);
+            let postings = decode_listing(decoder);
+            Ok(Arc::new(postings))
+        } else {
+            Err(StorageError::KeyNotFound)
+        }
     }
 
     fn store(&mut self, id: u64, data: Vec<Posting>) -> Result<()> {
@@ -177,7 +180,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use index::storage::Storage;
+    use index::storage::{Storage, StorageError};
 
 
     #[test]
@@ -192,6 +195,21 @@ mod tests {
         assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
         assert!(prov.get(0).unwrap().as_ref() != &posting2);
         assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
+    }
+
+    #[test]
+    pub fn not_found() {
+        let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
+        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
+        assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
+        let mut prov = FsPostingStorage::new(Path::new("/tmp/test_index"));
+        assert!(prov.store(0, posting1.clone()).is_ok());
+        assert!(prov.store(1, posting2.clone()).is_ok());
+        assert!(if let StorageError::KeyNotFound = prov.get(2).err().unwrap() {
+            true
+        } else {
+            false
+        });
     }
 
     #[test]

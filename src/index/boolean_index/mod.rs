@@ -10,10 +10,7 @@ use index::boolean_index::posting::Posting;
 use utils::owning_iterator::{OwningIterator, ArcIter};
 
 mod query_result_iterator;
-
-// TODO: Remove Pub. WRONG!.
-// Remove as soon as vbyte_encode and VByteDecoder are abstracted away from perlin or at least boolean index
-pub mod persistence;
+mod persistence;
 
 
 // not intended for public use. Thus the wrapper module
@@ -89,7 +86,7 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
 
     /// Indexes a document collection for later retrieval
     /// Returns the document_ids used by the index
-    // First Shot
+    // First Shot. TODO: Needs improvement!
     fn index_documents<TDocIterator: Iterator<Item = TTerm>>(&mut self,
                                                              documents: Vec<TDocIterator>)
                                                              -> Vec<u64> {
