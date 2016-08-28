@@ -7,16 +7,6 @@ use utils::owning_iterator::{OwningIterator, ArcIter};
 
 pub mod nary_query_iterator;
 
-macro_rules! unwrap_or_return_none{
-    ($operand:expr) => {
-        if let Some(x) = $operand {
-            x
-        } else {
-            return None;
-        }
-    }
-}
-
 // The BooleanIndex implementation works with query iterators only. Why?
 // 1. It is faster (no stack or heap allocation)
 // 2. It is lazy

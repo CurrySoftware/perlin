@@ -4,17 +4,6 @@ use index::boolean_index::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::*;
 
-macro_rules! unwrap_or_return_none{
-    ($operand:expr) => {
-        if let Some(x) = $operand {
-            x
-        } else {
-            return None;
-        }
-    }
-}
-
-
 pub struct NAryQueryIterator<'a> {
     pos_operator: Option<PositionalOperator>,
     bool_operator: Option<BooleanOperator>,
@@ -122,7 +111,7 @@ impl<'a> NAryQueryIterator<'a> {
                         break 'term_documents;
                     }
                     // Get the next doc_id for the current iterator
-                    let mut v = unwrap_or_return_none!(input.next());
+                    let mut v = try_option!(input.next());
                     if focus.is_none() {
                         focus = Some(v);
                         focus_positions = v.1.clone();
@@ -144,7 +133,7 @@ impl<'a> NAryQueryIterator<'a> {
                             .collect::<Vec<_>>();
                         if focus_positions.is_empty() {
                             // No suitable positions found. Next document
-                            v = unwrap_or_return_none!(input.next());
+                            v = try_option!(input.next());
                             focus = Some(v);
                             focus_positions = v.1.clone();
                             last_doc_iter = i;
@@ -211,7 +200,7 @@ impl<'a> NAryQueryIterator<'a> {
                         break 'term_documents;
                     }
                     // Get the next value for the current iterator
-                    let v = unwrap_or_return_none!(input.next());
+                    let v = try_option!(input.next());
                     if focus.is_none() {
                         focus = Some(v);
                         last_iter = i;
