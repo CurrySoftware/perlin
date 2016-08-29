@@ -1,16 +1,13 @@
 use perlin::index::{Index, PersistentIndex};
-use perlin::index::boolean_index::{FsPostingProvider, BooleanIndex};
+use perlin::index::boolean_index::BooleanIndex;
+use perlin::index::storage::fs_storage::FsStorage;
 use std::fmt::Debug;
 use std::env;
 use std::path::Path;
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use rand;
 
-pub fn prepare_index(documents: usize,
-                                                                     document_size: usize)
-                                                                             -> BooleanIndex<usize> {
-
-  //  println!("Preparing Index with {} documents and {} terms per document", documents, document_size);
+pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usize> {
     let mut tmp_dir = env::temp_dir();
     tmp_dir.push(&format!("bench_index_{}_{}.bin", documents, document_size));
 
@@ -19,11 +16,15 @@ pub fn prepare_index(documents: usize,
         result
     } else {
         let rng = ZipfGenerator::new(voc_size(20, 0.5, documents * document_size));
-        let mut index = BooleanIndex::new(Box::new(FsPostingProvider::new(Path::new(&format!("/tmp/fs_{}{}.bin", documents, document_size)))));
+        assert!(create_dir_all(Path::new(&format!("/tmp/fs_{}{}", documents, document_size)))
+            .is_ok());
+        let mut index =
+            BooleanIndex::new(Box::new(FsStorage::new(Path::new(&format!("/tmp/fs_{}{}",
+                                                                          documents,
+                                                                          document_size)))));
         let mut docs = Vec::with_capacity(documents);
         for i in 0..documents {
-            if i % 1000 == 0
-            {                
+            if i % 1000 == 0 {
                 println!("{}/{} documents", i, documents);
             }
             docs.push(rng.take(document_size));
