@@ -3,10 +3,11 @@
 //! The API-Entrypoints are defined in the trait `index::PersistentIndex`
 
 
-use index::PersistentIndex;
+use index::TransferableIndex;
 use index::storage::ram_storage::RamStorage;
 use index::boolean_index::BooleanIndex;
-use index::boolean_index::posting::Posting;
+use index::boolean_index::posting::{Posting, Listing};
+use index::storage::Storage;
 use utils::compression::{vbyte_encode, VByteDecoder};
 use utils::byte_code::{ByteEncodable, ByteDecodable};
 
@@ -25,7 +26,7 @@ impl ByteEncodable for String {
 }
 
 impl ByteDecodable for String {
-    fn decode<TIterator: Iterator<Item=u8>>(bytes: TIterator) -> Result<Self, String> {
+    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
         String::from_utf8(bytes.collect()).map_err(|e| format!("{:?}", e))
     }
 }
@@ -37,18 +38,19 @@ impl ByteEncodable for usize {
 }
 
 impl ByteDecodable for usize {
-    fn decode<TIterator: Iterator<Item=u8>>(bytes: TIterator) -> Result<Self, String> {
+    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
         let mut decoder = VByteDecoder::new(bytes.into_iter());
         if let Some(res) = decoder.next() {
             Ok(res)
         } else {
-            Err("Tried to decode bytevector with variable byte code. Failed".to_string())
+            Err("Tried to decode bytevector /
+                 with variable byte code. Failed"
+                .to_string())
         }
     }
 }
 
-
-impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
+impl<TTerm: Ord + ByteDecodable + ByteEncodable, TStorage: Storage<Listing>> BooleanIndex<TTerm, TStorage>{
     /// Writes all the terms with postings of the index to specified target
     /// Layout:
     /// [u8; 4] -> Number of bytes term + postings need encoded
@@ -92,9 +94,8 @@ impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm> {
     }
 }
 
-fn decode_term<TTerm: ByteDecodable>
-    (decoder: &mut VByteDecoder)
-     -> Result<Option<(TTerm, Vec<Posting>)>, String> {
+fn decode_term<TTerm: ByteDecodable>(decoder: &mut VByteDecoder)
+                                     -> Result<Option<(TTerm, Vec<Posting>)>, String> {
     if let Some(term_len) = decoder.next() {
         match TTerm::decode(decoder.underlying_iterator().take(term_len as usize)) {
             Ok(term) => {
@@ -148,14 +149,14 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
 }
 
 
-impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanIndex<TTerm> {
+impl<TTerm: ByteDecodable + ByteEncodable + Ord> TransferableIndex for BooleanIndex<TTerm, RamStorage<Listing>> {
     fn write_to<TTarget: Write>(&mut self, target: &mut TTarget) -> std::io::Result<usize> {
         self.write_terms(target)
     }
 
     fn read_from<TSource: Read>(source: &mut TSource) -> Result<Self, String> {
         let inv_index = Self::read_terms(source).unwrap();
-        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
+        let mut index = BooleanIndex::new(RamStorage::new());
         for (term, listing) in inv_index {
             let term_id = index.term_ids.len() as u64;
             index.term_ids.insert(term, term_id);
@@ -169,21 +170,23 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> PersistentIndex for BooleanInde
 mod tests {
     use index::storage::ram_storage::RamStorage;
     use index::boolean_index::BooleanIndex;
+    use index::boolean_index::posting::Listing;
     use index::boolean_index::tests::prepare_index;
-    use index::{Index, PersistentIndex};
+    use index::{Index, TransferableIndex};
     use std::io::Cursor;
 
     #[test]
     fn simple() {
-        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
+        let mut index = BooleanIndex::new(RamStorage::new());
         index.index_documents(vec![0..2]);
         let mut bytes: Vec<u8> = vec![];
         index.write_to(&mut bytes).unwrap();
         assert_eq!(bytes,
                    vec![129 /* #TermBytes */, 128 /* Term: 0 */, 129 /* #docs */,
-                        128 /* doc_id */, 129 /* #positions */, 128 /* position: 0 */,
-                        129 /* #TermBytes */, 129 /* Term: 1 */, 129 /* #docs */,
-                        128 /* doc_id */, 129 /* #positions */, 129 /* position */]);
+                        128 /* doc_id */, 129 /* #positions */,
+                        128 /* position: 0 */, 129 /* #TermBytes */,
+                        129 /* Term: 1 */, 129 /* #docs */, 128 /* doc_id */,
+                        129 /* #positions */, 129 /* position */]);
     }
 
     #[test]
@@ -193,7 +196,7 @@ mod tests {
         index.write_to(&mut bytes).unwrap();
         let mut buff = Cursor::new(bytes.clone());
         let mut bytes_2: Vec<u8> = vec![];
-        BooleanIndex::<usize>::read_from(&mut buff).unwrap().write_to(&mut bytes_2).unwrap();
+        BooleanIndex::<usize, RamStorage<Listing>>::read_from(&mut buff).unwrap().write_to(&mut bytes_2).unwrap();
         assert_eq!(bytes, bytes_2);
     }
 }

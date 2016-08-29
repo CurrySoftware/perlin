@@ -27,7 +27,7 @@
 
 //! //Create a new index and tell it where to store its data.
 //! //In this case we will tell it to store its data in memory
-//! let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
+//! let mut index = BooleanIndex::new(RamStorage::new());
 //! index.index_documents(vec![(0..10), (0..15), (10..34)]);
 //! ```
 //!

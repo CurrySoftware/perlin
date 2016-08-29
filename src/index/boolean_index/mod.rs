@@ -10,7 +10,7 @@ use index::boolean_index::posting::Posting;
 use utils::owning_iterator::{OwningIterator, ArcIter};
 
 mod query_result_iterator;
-mod persistence;
+mod transfer;
 
 
 // not intended for public use. Thus this wrapper module
@@ -101,6 +101,7 @@ impl<TTerm> QueryAtom<TTerm> {
 
 pub enum BooleanQuery<TTerm> {
     Atom(QueryAtom<TTerm>),
+
     // Different from NAry because positional queries can currently only run on query-atoms.
     // To ensure correct usage, this rather inelegant abstraction was implemented
     // Nevertheless, internally both are handled by the same code
@@ -114,13 +115,13 @@ pub enum BooleanQuery<TTerm> {
            Box<BooleanQuery<TTerm>>),
 }
 
-pub struct BooleanIndex<TTerm: Ord> {
+pub struct BooleanIndex<TTerm: Ord, TStorage: Storage<Vec<Posting>>> {
     document_count: usize,
     term_ids: BTreeMap<TTerm, u64>,
-    postings: Box<Storage<Vec<Posting>>>,
+    postings: TStorage,
 }
 
-impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
+impl<'a, TTerm: Ord, TStorage: Storage<Vec<Posting>>> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage> {
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64> + 'a>;
 
@@ -211,16 +212,22 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     }
 }
 
-
-impl<TTerm: Ord> BooleanIndex<TTerm> {
-    pub fn new(provider: Box<Storage<Vec<Posting>>>) -> BooleanIndex<TTerm> {
+impl<TTerm: Ord, TStorage: Storage<posting::Listing>> BooleanIndex<TTerm, TStorage> {
+    pub fn new(storage: TStorage) -> Self {
         BooleanIndex {
             document_count: 0,
             term_ids: BTreeMap::new(),
-            postings: provider,
+            postings: storage,
         }
     }
 
+    pub fn from_parts(inverted_index: TStorage, vocabulary: BTreeMap<TTerm, u64>, document_count: usize) -> Self {
+        BooleanIndex{
+            document_count: document_count,
+            term_ids: vocabulary,
+            postings: inverted_index
+        }
+    }
 
     fn run_query(&self, query: &BooleanQuery<TTerm>) -> QueryResultIterator {
         match *query {
@@ -290,11 +297,13 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 mod tests {
     use super::*;
     use index::Index;
+    use index::boolean_index::posting::Listing;
     use index::storage::ram_storage::RamStorage;
+    use index::storage::Storage;
 
 
-    pub fn prepare_index() -> BooleanIndex<usize> {
-        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
+    pub fn prepare_index() -> BooleanIndex<usize, RamStorage<Listing>> {
+        let mut index = BooleanIndex::new(RamStorage::new());
         index.index_documents(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                    (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
                                    vec![5, 4, 3, 2, 1, 0].into_iter()]);

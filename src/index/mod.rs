@@ -10,16 +10,16 @@ pub trait Index<'a, TTerm> {
     type Query;
     type QueryResult;
 
-
-    
     fn index_documents<TDocIterator: Iterator<Item=TTerm>>(&mut self, documents: Vec<TDocIterator>) -> Vec<u64>;
 
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult;
 }
 
-/// Defines API calls for writing and reading an index from/to binary.
+/// Defines API calls for reading/writing an index from/to binary.
 /// Can be used for example to persist an Index as a file or send it as `TcpStream`.
-pub trait PersistentIndex where Self : Sized {
+//Unhappy with the name...
+//TODO: Find a better one
+pub trait TransferableIndex where Self : Sized {
     
     /// Writes the index as byte to the specified target.
     /// Returns Error or the number of bytes written
