@@ -46,7 +46,6 @@ impl<TItem> FsStorage<TItem> {
     }
 
     /// Reads a FsStorage from an previously populated folder.
-    // TODO: Return result
     pub fn from_folder(path: &Path) -> Self {
         // Read from entry file to BTreeMap.
         let mut entries = BTreeMap::new();

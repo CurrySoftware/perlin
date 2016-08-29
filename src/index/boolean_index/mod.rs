@@ -13,10 +13,8 @@ mod query_result_iterator;
 mod persistence;
 
 
-// not intended for public use. Thus the wrapper module
-// TODO: REMOVE PUB. WRONG!.
-// Remove as soon as Posting is abstraced from fs_storage
-pub mod posting {
+// not intended for public use. Thus this wrapper module
+mod posting {
     use utils::byte_code::{ByteDecodable, ByteEncodable};
     use utils::compression::*;
     
