@@ -17,6 +17,7 @@ pub struct FsStorage<TItem> {
     persistent_entries: File,
     data: File,
     current_offset: u64,
+    current_id: u64,
     _item_type: PhantomData<TItem>
 }
 
@@ -27,6 +28,7 @@ impl<TItem> FsStorage<TItem> {
                 "FsStorage::new expects a directory not a file!");
         FsStorage {
             current_offset: 0,
+            current_id: 0,
             entries: BTreeMap::new(),
             persistent_entries: OpenOptions::new()
                 .write(true)
@@ -57,19 +59,17 @@ impl<TItem> FsStorage<TItem> {
         assert!(entries_file.read_to_end(&mut bytes).is_ok());
         let mut decoder = VByteDecoder::new(bytes.into_iter());
         // 3. Decode entries and write them to BTreeMap
+        let mut current_id: u64 = 0;
+        let mut current_offset: u64 = 0;
         while let Some(entry) = decode_entry(&mut decoder) {
-            entries.insert(entry.0, (entry.1, entry.2));
+            current_id += entry.0 as u64;
+            entries.insert(current_id, (current_offset, entry.1));
+            current_offset += entry.1 as u64;
         }
 
-        // Get data file length for offset
-        let offset = File::open(path.join("data.bin"))
-            .unwrap()
-            .metadata()
-            .unwrap()
-            .len();
-
         FsStorage {
-            current_offset: offset,
+            current_id: current_id,
+            current_offset: current_offset,
             entries: entries,
             persistent_entries: OpenOptions::new()
                 .append(true)
@@ -105,6 +105,7 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync> Storage<TItem> for FsStorage<T
     }
 
     fn store(&mut self, id: u64, data: TItem) -> Result<()> {
+        
         // Encode the data
         let bytes = data.encode();
         // Append it to the file
@@ -114,30 +115,30 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync> Storage<TItem> for FsStorage<T
         // And save the offset and the number of bytes written for later recovery
         self.entries.insert(id, (self.current_offset, bytes.len() as u32));
         // Also write the id, offset and number of bytes written to file for persistence
-        let entry_bytes = encode_entry(id, self.current_offset, bytes.len() as u32);
+        let entry_bytes = encode_entry(self.current_id, id, bytes.len() as u32);
         if let Err(e) = self.persistent_entries.write_all(&entry_bytes) {
             return Err(StorageError::WriteError(Some(e)));
         }
-
-        // Update offset
+        
+        // Update id and offset
+        self.current_id = id;
         self.current_offset += bytes.len() as u64;
         Ok(())
     }
 }
 
-fn encode_entry(id: u64, offset: u64, length: u32) -> Vec<u8> {
+fn encode_entry(current_id: u64, id: u64, length: u32) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
-    bytes.append(&mut vbyte_encode(id as usize));
-    bytes.append(&mut vbyte_encode(offset as usize));
+    bytes.append(&mut vbyte_encode((id - current_id) as usize));
     bytes.append(&mut vbyte_encode(length as usize));
     bytes
 }
 
-fn decode_entry(decoder: &mut VByteDecoder) -> Option<(u64, u64, u32)> {
-    let id = try_option!(decoder.next()) as u64;
-    let offset = try_option!(decoder.next()) as u64;
+fn decode_entry(decoder: &mut VByteDecoder) -> Option<(u32, u32)> {
+    let delta_id = try_option!(decoder.next()) as u32;
     let length = try_option!(decoder.next()) as u32;
-    Some((id, offset, length))
+    
+    Some((delta_id, length))
 }
 
 
