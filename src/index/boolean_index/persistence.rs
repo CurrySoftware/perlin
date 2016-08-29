@@ -2,11 +2,13 @@
 //! e.g. writing the index to a bytestream; reading the index from a bytestream.
 //! The API-Entrypoints are defined in the trait `index::PersistentIndex`
 
-use index::{PersistentIndex, ByteEncodable, ByteDecodable};
+
+use index::PersistentIndex;
 use index::storage::ram_storage::RamStorage;
 use index::boolean_index::BooleanIndex;
 use index::boolean_index::posting::Posting;
 use utils::compression::{vbyte_encode, VByteDecoder};
+use utils::byte_code::{ByteEncodable, ByteDecodable};
 
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
@@ -23,8 +25,8 @@ impl ByteEncodable for String {
 }
 
 impl ByteDecodable for String {
-    fn decode(bytes: Vec<u8>) -> Result<Self, String> {
-        String::from_utf8(bytes).map_err(|e| format!("{:?}", e))
+    fn decode<TIterator: Iterator<Item=u8>>(bytes: TIterator) -> Result<Self, String> {
+        String::from_utf8(bytes.collect()).map_err(|e| format!("{:?}", e))
     }
 }
 
@@ -35,7 +37,7 @@ impl ByteEncodable for usize {
 }
 
 impl ByteDecodable for usize {
-    fn decode(bytes: Vec<u8>) -> Result<Self, String> {
+    fn decode<TIterator: Iterator<Item=u8>>(bytes: TIterator) -> Result<Self, String> {
         let mut decoder = VByteDecoder::new(bytes.into_iter());
         if let Some(res) = decoder.next() {
             Ok(res)
@@ -94,9 +96,7 @@ fn decode_term<TTerm: ByteDecodable>
     (decoder: &mut VByteDecoder)
      -> Result<Option<(TTerm, Vec<Posting>)>, String> {
     if let Some(term_len) = decoder.next() {
-        let term_bytes_vec =
-            decoder.underlying_iterator().take(term_len as usize).collect::<Vec<_>>();
-        match TTerm::decode(term_bytes_vec) {
+        match TTerm::decode(decoder.underlying_iterator().take(term_len as usize)) {
             Ok(term) => {
                 let postings_len = decoder.next().unwrap();
                 let mut postings = Vec::with_capacity(postings_len);

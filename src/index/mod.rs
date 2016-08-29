@@ -30,11 +30,4 @@ pub trait PersistentIndex where Self : Sized {
 }
 
 
-pub trait ByteEncodable {
-    fn encode(&self) -> Vec<u8>;
-}
-
-pub trait ByteDecodable where Self: Sized {
-    fn decode(Vec<u8>) -> std::result::Result<Self, String>;
-}
 

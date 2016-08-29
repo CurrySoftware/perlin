@@ -3,28 +3,29 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Arc;
+use std::marker::PhantomData;
 
 
 
 use index::storage::{Result, Storage, StorageError};
-// TODO: WRONG! FIX
-use index::boolean_index::posting::Posting;
 use utils::compression::{vbyte_encode, VByteDecoder};
+use utils::byte_code::{ByteDecodable, ByteEncodable};
 
-pub struct FsPostingStorage {
+pub struct FsStorage<TItem> {
     // Stores for every id the offset in the file and the length
     entries: BTreeMap<u64, (u64 /* offset */, u32 /* length */)>,
     persistent_entries: File,
     data: File,
     current_offset: u64,
+    _item_type: PhantomData<TItem>
 }
 
-impl FsPostingStorage {
-    /// Creates a new and empty instance of FsPostingStorage
+impl<TItem> FsStorage<TItem> {
+    /// Creates a new and empty instance of FsStorage
     pub fn new(path: &Path) -> Self {
         assert!(path.is_dir(),
                 "FsStorage::new expects a directory not a file!");
-        FsPostingStorage {
+        FsStorage {
             current_offset: 0,
             entries: BTreeMap::new(),
             persistent_entries: OpenOptions::new()
@@ -40,6 +41,7 @@ impl FsPostingStorage {
                 .truncate(true)
                 .open(path.join("data.bin"))
                 .unwrap(),
+            _item_type: PhantomData
         }
     }
 
@@ -67,7 +69,7 @@ impl FsPostingStorage {
             .unwrap()
             .len();
 
-        FsPostingStorage {
+        FsStorage {
             current_offset: offset,
             entries: entries,
             persistent_entries: OpenOptions::new()
@@ -79,31 +81,33 @@ impl FsPostingStorage {
                 .append(true)
                 .open(path.join("data.bin"))
                 .unwrap(),
+            _item_type: PhantomData
         }
     }
 }
 
 
-impl Storage<Vec<Posting>> for FsPostingStorage {
-    fn get(&self, id: u64) -> Result<Arc<Vec<Posting>>> {
-        if let Some(posting_offset) = self.entries.get(&id) {
+impl<TItem: ByteDecodable + ByteEncodable + Sync> Storage<TItem> for FsStorage<TItem> {
+    fn get(&self, id: u64) -> Result<Arc<TItem>> {
+        if let Some(item_position) = self.entries.get(&id) {
+            // Get filehandle
             let mut f = self.data.try_clone().unwrap();
-            f.seek(SeekFrom::Start(posting_offset.0)).unwrap();
-            let mut bytes = vec![0; posting_offset.1 as usize];
+            // Seek to position of item
+            f.seek(SeekFrom::Start(item_position.0)).unwrap();
+            let mut bytes = vec![0; item_position.1 as usize];
+            // Read all bytes
             f.read_exact(&mut bytes).unwrap();
-            let mut decoder = VByteDecoder::new(bytes.into_iter());
-            let dec_id = decoder.next().unwrap() as u64;
-            assert_eq!(id, dec_id);
-            let postings = decode_listing(decoder);
-            Ok(Arc::new(postings))
+            // Decode item
+            let item = TItem::decode(bytes.into_iter()).unwrap();
+            Ok(Arc::new(item))
         } else {
             Err(StorageError::KeyNotFound)
         }
     }
 
-    fn store(&mut self, id: u64, data: Vec<Posting>) -> Result<()> {
+    fn store(&mut self, id: u64, data: TItem) -> Result<()> {
         // Encode the data
-        let bytes = encode_listing(id, &data);
+        let bytes = data.encode();
         // Append it to the file
         if let Err(e) = self.data.write_all(&bytes) {
             return Err(StorageError::WriteError(Some(e)));
@@ -122,25 +126,6 @@ impl Storage<Vec<Posting>> for FsPostingStorage {
     }
 }
 
-// TODO: Remove theses methods from here. They do not belog here.
-// Probably belong in index::boolean_index::posting or similar
-fn decode_listing(mut decoder: VByteDecoder) -> Vec<Posting> {
-    let postings_len = decoder.next().unwrap();
-    let mut postings = Vec::with_capacity(postings_len);
-    for _ in 0..postings_len {
-        let doc_id = decoder.next().unwrap();
-        let positions_len = decoder.next().unwrap();
-        let mut positions = Vec::with_capacity(positions_len as usize);
-        let mut last_position = 0;
-        for _ in 0..positions_len {
-            last_position += decoder.next().unwrap();
-            positions.push(last_position as u32);
-        }
-        postings.push((doc_id as u64, positions));
-    }
-    postings
-}
-
 fn encode_entry(id: u64, offset: u64, length: u32) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::new();
     bytes.append(&mut vbyte_encode(id as usize));
@@ -156,21 +141,6 @@ fn decode_entry(decoder: &mut VByteDecoder) -> Option<(u64, u64, u32)> {
     Some((id, offset, length))
 }
 
-fn encode_listing(term_id: u64, listing: &[Posting]) -> Vec<u8> {
-    let mut bytes: Vec<u8> = Vec::new();
-    bytes.append(&mut vbyte_encode(term_id as usize));
-    bytes.append(&mut vbyte_encode(listing.len()));
-    for posting in listing {
-        bytes.append(&mut vbyte_encode(posting.0 as usize));
-        bytes.append(&mut vbyte_encode(posting.1.len() as usize));
-        let mut last_position = 0;
-        for position in &posting.1 {
-            bytes.append(&mut vbyte_encode((*position - last_position) as usize));
-            last_position = *position;
-        }
-    }
-    bytes
-}
 
 
 
@@ -182,19 +152,18 @@ mod tests {
     use super::*;
     use index::storage::{Storage, StorageError};
 
-
     #[test]
     pub fn basic() {
-        let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
-        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
+        let item1 = 15;
+        let item2 = 32;
         assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
-        let mut prov = FsPostingStorage::new(Path::new("/tmp/test_index"));
-        assert!(prov.store(0, posting1.clone()).is_ok());
-        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
-        assert!(prov.store(1, posting2.clone()).is_ok());
-        assert_eq!(prov.get(1).unwrap().as_ref(), &posting2);
-        assert!(prov.get(0).unwrap().as_ref() != &posting2);
-        assert_eq!(prov.get(0).unwrap().as_ref(), &posting1);
+        let mut prov = FsStorage::new(Path::new("/tmp/test_index"));
+        assert!(prov.store(0, item1.clone()).is_ok());
+        assert_eq!(prov.get(0).unwrap().as_ref(), &item1);
+        assert!(prov.store(1, item2.clone()).is_ok());
+        assert_eq!(prov.get(1).unwrap().as_ref(), &item2);
+        assert!(prov.get(0).unwrap().as_ref() != &item2);
+        assert_eq!(prov.get(0).unwrap().as_ref(), &item1);
     }
 
     #[test]
@@ -202,7 +171,7 @@ mod tests {
         let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
         let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
         assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
-        let mut prov = FsPostingStorage::new(Path::new("/tmp/test_index"));
+        let mut prov = FsStorage::new(Path::new("/tmp/test_index"));
         assert!(prov.store(0, posting1.clone()).is_ok());
         assert!(prov.store(1, posting2.clone()).is_ok());
         assert!(if let StorageError::KeyNotFound = prov.get(2).err().unwrap() {
@@ -214,30 +183,29 @@ mod tests {
 
     #[test]
     pub fn persistence() {
-        let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
-        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
-        let posting3 =
-            vec![(15, vec![24, 745, 6946]), (37, vec![234, 2356, 12345]), (98, vec![0, 1, 2, 3])];
+        let item1 = 1556;
+        let item2 = 235425354;
+        let item3 = 234543463709865987;
         assert!(create_dir_all(Path::new("/tmp/test_index2")).is_ok());
         {
-            let mut prov1 = FsPostingStorage::new(Path::new("/tmp/test_index2"));
-            assert!(prov1.store(0, posting1.clone()).is_ok());
-            assert!(prov1.store(1, posting2.clone()).is_ok());
+            let mut prov1 = FsStorage::new(Path::new("/tmp/test_index2"));
+            assert!(prov1.store(0, item1.clone()).is_ok());
+            assert!(prov1.store(1, item2.clone()).is_ok());
         }
 
         {
-            let mut prov2 = FsPostingStorage::from_folder(Path::new("/tmp/test_index2"));
-            assert_eq!(prov2.get(0).unwrap().as_ref(), &posting1);
-            assert_eq!(prov2.get(1).unwrap().as_ref(), &posting2);
-            assert!(prov2.store(2, posting3.clone()).is_ok());
-            assert_eq!(prov2.get(2).unwrap().as_ref(), &posting3);
+            let mut prov2: FsStorage<usize> = FsStorage::from_folder(Path::new("/tmp/test_index2"));
+            assert_eq!(prov2.get(0).unwrap().as_ref(), &item1);
+            assert_eq!(prov2.get(1).unwrap().as_ref(), &item2);
+            assert!(prov2.store(2, item3.clone()).is_ok());
+            assert_eq!(prov2.get(2).unwrap().as_ref(), &item3);
         }
 
         {
-            let prov3 = FsPostingStorage::from_folder(Path::new("/tmp/test_index2"));
-            assert_eq!(prov3.get(0).unwrap().as_ref(), &posting1);
-            assert_eq!(prov3.get(1).unwrap().as_ref(), &posting2);
-            assert_eq!(prov3.get(2).unwrap().as_ref(), &posting3);
+            let prov3: FsStorage<usize> = FsStorage::from_folder(Path::new("/tmp/test_index2"));
+            assert_eq!(prov3.get(0).unwrap().as_ref(), &item1);
+            assert_eq!(prov3.get(1).unwrap().as_ref(), &item2);
+            assert_eq!(prov3.get(2).unwrap().as_ref(), &item3);
         }
     }
 }
