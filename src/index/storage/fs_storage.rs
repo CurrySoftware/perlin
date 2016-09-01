@@ -5,11 +5,14 @@ use std::path::Path;
 use std::sync::Arc;
 use std::marker::PhantomData;
 
-
-
-use index::storage::{Result, Storage, StorageError};
 use utils::compression::{vbyte_encode, VByteDecoder};
 use utils::byte_code::{ByteDecodable, ByteEncodable};
+use utils::persistence::Persistence;
+
+use index::storage::*;
+
+const ENTRIES_FILENAME: &'static str = "entries.bin";
+const DATA_FILENAME: &'static str = "data.bin";
 
 pub struct FsStorage<TItem> {
     // Stores for every id the offset in the file and the length
@@ -18,12 +21,12 @@ pub struct FsStorage<TItem> {
     data: File,
     current_offset: u64,
     current_id: u64,
-    _item_type: PhantomData<TItem>
+    _item_type: PhantomData<TItem>,
 }
 
-impl<TItem> FsStorage<TItem> {
+impl<TItem> Persistence for FsStorage<TItem> {
     /// Creates a new and empty instance of FsStorage
-    pub fn new(path: &Path) -> Self {
+    fn new(path: &Path) -> Self {
         assert!(path.is_dir(),
                 "FsStorage::new expects a directory not a file!");
         FsStorage {
@@ -34,26 +37,26 @@ impl<TItem> FsStorage<TItem> {
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .open(path.join("entries.bin"))
+                .open(path.join(ENTRIES_FILENAME))
                 .unwrap(),
             data: OpenOptions::new()
                 .read(true)
                 .write(true)
                 .create(true)
                 .truncate(true)
-                .open(path.join("data.bin"))
+                .open(path.join(DATA_FILENAME))
                 .unwrap(),
-            _item_type: PhantomData
+            _item_type: PhantomData,
         }
     }
 
     /// Reads a FsStorage from an previously populated folder.
-    pub fn from_folder(path: &Path) -> Self {
+    fn load(path: &Path) -> Self {
         // Read from entry file to BTreeMap.
         let mut entries = BTreeMap::new();
         // 1. Open file
         let mut entries_file =
-            OpenOptions::new().read(true).open(path.join("entries.bin")).unwrap();
+            OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME)).unwrap();
         let mut bytes = Vec::with_capacity(entries_file.metadata().unwrap().len() as usize);
         // 2. Read file
         assert!(entries_file.read_to_end(&mut bytes).is_ok());
@@ -73,14 +76,14 @@ impl<TItem> FsStorage<TItem> {
             entries: entries,
             persistent_entries: OpenOptions::new()
                 .append(true)
-                .open(path.join("entries.bin"))
+                .open(path.join(ENTRIES_FILENAME))
                 .unwrap(),
             data: OpenOptions::new()
                 .read(true)
                 .append(true)
-                .open(path.join("data.bin"))
+                .open(path.join(DATA_FILENAME))
                 .unwrap(),
-            _item_type: PhantomData
+            _item_type: PhantomData,
         }
     }
 }
@@ -105,7 +108,7 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync> Storage<TItem> for FsStorage<T
     }
 
     fn store(&mut self, id: u64, data: TItem) -> Result<()> {
-        
+
         // Encode the data
         let bytes = data.encode();
         // Append it to the file
@@ -119,7 +122,7 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync> Storage<TItem> for FsStorage<T
         if let Err(e) = self.persistent_entries.write_all(&entry_bytes) {
             return Err(StorageError::WriteError(Some(e)));
         }
-        
+
         // Update id and offset
         self.current_id = id;
         self.current_offset += bytes.len() as u64;
@@ -137,7 +140,7 @@ fn encode_entry(current_id: u64, id: u64, length: u32) -> Vec<u8> {
 fn decode_entry(decoder: &mut VByteDecoder) -> Option<(u32, u32)> {
     let delta_id = try_option!(decoder.next()) as u32;
     let length = try_option!(decoder.next()) as u32;
-    
+
     Some((delta_id, length))
 }
 
@@ -150,6 +153,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
+    use utils::persistence::Persistence;
     use index::storage::{Storage, StorageError};
 
     #[test]
@@ -194,7 +198,7 @@ mod tests {
         }
 
         {
-            let mut prov2: FsStorage<usize> = FsStorage::from_folder(Path::new("/tmp/test_index2"));
+            let mut prov2: FsStorage<usize> = FsStorage::load(Path::new("/tmp/test_index2"));
             assert_eq!(prov2.get(0).unwrap().as_ref(), &item1);
             assert_eq!(prov2.get(1).unwrap().as_ref(), &item2);
             assert!(prov2.store(2, item3.clone()).is_ok());
@@ -202,7 +206,7 @@ mod tests {
         }
 
         {
-            let prov3: FsStorage<usize> = FsStorage::from_folder(Path::new("/tmp/test_index2"));
+            let prov3: FsStorage<usize> = FsStorage::load(Path::new("/tmp/test_index2"));
             assert_eq!(prov3.get(0).unwrap().as_ref(), &item1);
             assert_eq!(prov3.get(1).unwrap().as_ref(), &item2);
             assert_eq!(prov3.get(2).unwrap().as_ref(), &item3);

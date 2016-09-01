@@ -6,12 +6,12 @@ use std::iter::Iterator;
 use index::storage::Storage;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::posting::Posting;
+use index::boolean_index::posting::{Listing, Posting};
 use utils::owning_iterator::{OwningIterator, ArcIter};
 
 mod query_result_iterator;
 mod transfer;
-
+mod persistence;
 
 // not intended for public use. Thus this wrapper module
 mod posting {
@@ -121,7 +121,7 @@ pub struct BooleanIndex<TTerm: Ord, TStorage: Storage<Vec<Posting>>> {
     postings: TStorage,
 }
 
-impl<'a, TTerm: Ord, TStorage: Storage<Vec<Posting>>> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage> {
+impl<'a, TTerm: Ord, TStorage: Storage<Listing>> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage> {
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64> + 'a>;
 
@@ -173,7 +173,7 @@ impl<'a, TTerm: Ord, TStorage: Storage<Vec<Posting>>> Index<'a, TTerm> for Boole
             result.push(new_doc_id);
         }
 
-        // everything is now indexed. Hand it to our provider.
+        // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index {
             self.postings.store(term_id, listing).unwrap();
