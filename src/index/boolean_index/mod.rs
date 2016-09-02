@@ -11,13 +11,14 @@ use utils::owning_iterator::{OwningIterator, ArcIter};
 
 mod query_result_iterator;
 mod transfer;
-mod persistence;
 
+pub mod persistence;
 // not intended for public use. Thus this wrapper module
-mod posting {
+// TODO: FIX
+pub mod posting {
     use utils::byte_code::{ByteDecodable, ByteEncodable};
     use utils::compression::*;
-    
+
     // For each term-document pair the doc_id and the
     // positions of the term inside the document are stored
     pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);
@@ -25,7 +26,7 @@ mod posting {
 
     impl ByteEncodable for Listing {
         fn encode(&self) -> Vec<u8> {
-            let mut bytes: Vec<u8> = Vec::new();    
+            let mut bytes: Vec<u8> = Vec::new();
             bytes.append(&mut vbyte_encode(self.len()));
             for posting in self {
                 bytes.append(&mut vbyte_encode(posting.0 as usize));
@@ -40,10 +41,10 @@ mod posting {
         }
     }
 
-    //TODO: Errorhandling
+    // TODO: Errorhandling
     impl ByteDecodable for Vec<Posting> {
-        fn decode<TIterator: Iterator<Item=u8>>(bytes: TIterator) -> Result<Self, String>{
-            let mut decoder = VByteDecoder::new(bytes);            
+        fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
+            let mut decoder = VByteDecoder::new(bytes);
             let postings_len = decoder.next().unwrap();
             let mut postings = Vec::with_capacity(postings_len);
             for _ in 0..postings_len {
@@ -115,13 +116,35 @@ pub enum BooleanQuery<TTerm> {
            Box<BooleanQuery<TTerm>>),
 }
 
-pub struct BooleanIndex<TTerm: Ord, TStorage: Storage<Vec<Posting>>> {
+pub fn build_positional_query<TIterator, TTerm>(operator: PositionalOperator,
+                                                terms: TIterator)
+                                                -> BooleanQuery<TTerm>
+    where TIterator: Iterator<Item = TTerm>
+{
+    BooleanQuery::Positional(operator,
+                             terms.enumerate()
+                                 .map(|(i, t)| QueryAtom::new(i, t))
+                                 .collect::<Vec<_>>())
+}
+
+pub fn build_nary_query<TIterator: Iterator<Item = TTerm>, TTerm>(operator: BooleanOperator,
+                                                                  terms: TIterator)
+                                                                  -> BooleanQuery<TTerm> {
+    BooleanQuery::NAry(operator,
+                       terms.map(|t| BooleanQuery::Atom(QueryAtom::new(0, t)))
+                           .collect::<Vec<_>>())
+}
+
+pub struct BooleanIndex<TTerm: Ord, TStorage: Storage<Listing>> {
     document_count: usize,
     term_ids: BTreeMap<TTerm, u64>,
     postings: TStorage,
 }
 
-impl<'a, TTerm: Ord, TStorage: Storage<Listing>> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage> {
+impl<'a, TTerm, TStorage> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage>
+    where TTerm: Ord,
+          TStorage: Storage<Listing>
+{
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64> + 'a>;
 
@@ -221,11 +244,14 @@ impl<TTerm: Ord, TStorage: Storage<posting::Listing>> BooleanIndex<TTerm, TStora
         }
     }
 
-    pub fn from_parts(inverted_index: TStorage, vocabulary: BTreeMap<TTerm, u64>, document_count: usize) -> Self {
-        BooleanIndex{
+    pub fn from_parts(inverted_index: TStorage,
+                      vocabulary: BTreeMap<TTerm, u64>,
+                      document_count: usize)
+                      -> Self {
+        BooleanIndex {
             document_count: document_count,
             term_ids: vocabulary,
-            postings: inverted_index
+            postings: inverted_index,
         }
     }
 
@@ -310,6 +336,31 @@ mod tests {
         index
     }
 
+    #[test]
+    fn positional_query_builder() {
+        let index = prepare_index();
+        assert_eq!(index.execute_query(&build_positional_query(PositionalOperator::InOrder,
+                                                              vec![0, 2, 4, 6, 8].into_iter()))
+                       .collect::<Vec<_>>(),
+                   vec![1]);
+        assert_eq!(index.execute_query(&build_positional_query(PositionalOperator::InOrder,
+                                                              vec![0, 1, 2, 4, 6, 8].into_iter()))
+                       .collect::<Vec<_>>(),
+                   vec![]);
+    }
+
+    #[test]
+    fn nary_query_builder() {
+        let index = prepare_index();
+        assert_eq!(index.execute_query(&build_nary_query(BooleanOperator::And,
+                                                        vec![6, 4, 3].into_iter()))
+                       .collect::<Vec<_>>(),
+                   vec![0]);
+        assert_eq!(index.execute_query(&build_nary_query(BooleanOperator::Or,
+                                                        vec![16, 9].into_iter()))
+                       .collect::<Vec<_>>(),
+                   vec![0, 1]);        
+    }
 
     #[test]
     fn empty_query() {
