@@ -6,8 +6,7 @@
 use index::TransferableIndex;
 use index::storage::ram_storage::RamStorage;
 use index::boolean_index::BooleanIndex;
-use index::boolean_index::posting::{Posting, Listing};
-use index::storage::Storage;
+use index::boolean_index::posting::{Posting};
 use utils::compression::{vbyte_encode, VByteDecoder};
 use utils::byte_code::{ByteEncodable, ByteDecodable};
 
@@ -50,7 +49,7 @@ impl ByteDecodable for usize {
     }
 }
 
-impl<TTerm: Ord + ByteDecodable + ByteEncodable, TStorage: Storage<Listing>> BooleanIndex<TTerm, TStorage>{
+impl<TTerm: Ord + ByteDecodable + ByteEncodable> BooleanIndex<TTerm>{
     /// Writes all the terms with postings of the index to specified target
     /// Layout:
     /// [u8; 4] -> Number of bytes term + postings need encoded
@@ -149,14 +148,14 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
 }
 
 
-impl<TTerm: ByteDecodable + ByteEncodable + Ord> TransferableIndex for BooleanIndex<TTerm, RamStorage<Listing>> {
+impl<TTerm: ByteDecodable + ByteEncodable + Ord> TransferableIndex for BooleanIndex<TTerm> {
     fn write_to<TTarget: Write>(&mut self, target: &mut TTarget) -> std::io::Result<usize> {
         self.write_terms(target)
     }
 
     fn read_from<TSource: Read>(source: &mut TSource) -> Result<Self, String> {
         let inv_index = Self::read_terms(source).unwrap();
-        let mut index = BooleanIndex::new(RamStorage::new());
+        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
         for (term, listing) in inv_index {
             let term_id = index.term_ids.len() as u64;
             index.term_ids.insert(term, term_id);
@@ -170,15 +169,14 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> TransferableIndex for BooleanIn
 mod tests {
     use index::storage::ram_storage::RamStorage;
     use index::boolean_index::BooleanIndex;
-    use index::boolean_index::posting::Listing;
     use index::boolean_index::tests::prepare_index;
     use index::{Index, TransferableIndex};
     use std::io::Cursor;
 
     #[test]
     fn simple() {
-        let mut index = BooleanIndex::new(RamStorage::new());
-        index.index_documents(vec![0..2]);
+        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
+        index.index_documents(vec![vec![0, 1]].into_iter());
         let mut bytes: Vec<u8> = vec![];
         index.write_to(&mut bytes).unwrap();
         assert_eq!(bytes,
@@ -196,7 +194,7 @@ mod tests {
         index.write_to(&mut bytes).unwrap();
         let mut buff = Cursor::new(bytes.clone());
         let mut bytes_2: Vec<u8> = vec![];
-        BooleanIndex::<usize, RamStorage<Listing>>::read_from(&mut buff).unwrap().write_to(&mut bytes_2).unwrap();
+        BooleanIndex::<usize>::read_from(&mut buff).unwrap().write_to(&mut bytes_2).unwrap();
         assert_eq!(bytes, bytes_2);
     }
 }

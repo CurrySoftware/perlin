@@ -41,7 +41,7 @@ impl Error for StorageError {
 /// Defines a common interface between multiple storage types
 /// The index uses them to store data like the posting lists
 // TODO: Needs methods to delete and/or update items
-pub trait Storage<T>: Sync {
+pub trait Storage<T> where Self: Sync + Send {
     /// Tries to get a value for a given Id.
     /// Returns an Error if read fails or if id is unknown.
     fn get(&self, id: u64) -> Result<Arc<T>>;

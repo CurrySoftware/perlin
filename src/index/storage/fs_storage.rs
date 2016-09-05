@@ -89,7 +89,7 @@ impl<TItem> Persistence for FsStorage<TItem> {
 }
 
 
-impl<TItem: ByteDecodable + ByteEncodable + Sync> Storage<TItem> for FsStorage<TItem> {
+impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsStorage<TItem> {
     fn get(&self, id: u64) -> Result<Arc<TItem>> {
         if let Some(item_position) = self.entries.get(&id) {
             // Get filehandle
@@ -157,7 +157,7 @@ mod tests {
     use index::storage::{Storage, StorageError};
 
     #[test]
-    pub fn basic() {
+    fn basic() {
         let item1 = 15;
         let item2 = 32;
         assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
@@ -171,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    pub fn not_found() {
+    fn not_found() {
         let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
         let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
         assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
@@ -186,7 +186,7 @@ mod tests {
     }
 
     #[test]
-    pub fn persistence() {
+    fn persistence() {
         let item1 = 1556;
         let item2 = 235425354;
         let item3 = 234543463709865987;
@@ -211,5 +211,5 @@ mod tests {
             assert_eq!(prov3.get(1).unwrap().as_ref(), &item2);
             assert_eq!(prov3.get(2).unwrap().as_ref(), &item3);
         }
-    }
+    }    
 }

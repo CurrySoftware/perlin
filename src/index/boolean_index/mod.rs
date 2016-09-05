@@ -135,15 +135,14 @@ pub fn build_nary_query<TIterator: Iterator<Item = TTerm>, TTerm>(operator: Bool
                            .collect::<Vec<_>>())
 }
 
-pub struct BooleanIndex<TTerm: Ord, TStorage: Storage<Listing>> {
+pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     term_ids: BTreeMap<TTerm, u64>,
-    postings: TStorage,
+    postings: Box<Storage<Listing>>,
 }
 
-impl<'a, TTerm, TStorage> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage>
-    where TTerm: Ord,
-          TStorage: Storage<Listing>
+impl<'a, TTerm> Index<'a, TTerm> for BooleanIndex<TTerm>
+    where TTerm: Ord
 {
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64> + 'a>;
@@ -151,17 +150,17 @@ impl<'a, TTerm, TStorage> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage>
     /// Indexes a document collection for later retrieval
     /// Returns the document_ids used by the index
     // First Shot. TODO: Needs improvement!
-    fn index_documents<TDocIterator: Iterator<Item = TTerm>>(&mut self,
-                                                             documents: Vec<TDocIterator>)
+    fn index_documents<TDocsIterator: Iterator<Item = Vec<TTerm>>>(&mut self,
+                                                             documents: TDocsIterator)
                                                              -> Vec<u64> {
         let mut inv_index: BTreeMap<u64, Vec<Posting>> = BTreeMap::new();
-        let mut result = Vec::with_capacity(documents.len());
+        let mut result = Vec::with_capacity(10);
         // For every document in the collection
         for document in documents {
             // Determine its id. consecutively numbered
             let new_doc_id = self.document_count as u64;
             // Enumerate over its terms
-            for (term_position, term) in document.enumerate() {
+            for (term_position, term) in document.into_iter().enumerate() {
                 // Has term already been seen? Is it already in the vocabulary?
                 if let Some(term_id) = self.term_ids.get(&term) {
                     // Get its listing from the temporary. And add doc_id and/or position to it
@@ -235,8 +234,8 @@ impl<'a, TTerm, TStorage> Index<'a, TTerm> for BooleanIndex<TTerm, TStorage>
     }
 }
 
-impl<TTerm: Ord, TStorage: Storage<posting::Listing>> BooleanIndex<TTerm, TStorage> {
-    pub fn new(storage: TStorage) -> Self {
+impl<TTerm: Ord> BooleanIndex<TTerm> {
+    pub fn new(storage: Box<Storage<Listing>>) -> Self {
         BooleanIndex {
             document_count: 0,
             term_ids: BTreeMap::new(),
@@ -244,7 +243,7 @@ impl<TTerm: Ord, TStorage: Storage<posting::Listing>> BooleanIndex<TTerm, TStora
         }
     }
 
-    pub fn from_parts(inverted_index: TStorage,
+    pub fn from_parts(inverted_index: Box<Storage<Listing>>,
                       vocabulary: BTreeMap<TTerm, u64>,
                       document_count: usize)
                       -> Self {
@@ -323,16 +322,14 @@ impl<TTerm: Ord, TStorage: Storage<posting::Listing>> BooleanIndex<TTerm, TStora
 mod tests {
     use super::*;
     use index::Index;
-    use index::boolean_index::posting::Listing;
     use index::storage::ram_storage::RamStorage;
-    use index::storage::Storage;
 
 
-    pub fn prepare_index() -> BooleanIndex<usize, RamStorage<Listing>> {
-        let mut index = BooleanIndex::new(RamStorage::new());
-        index.index_documents(vec![(0..10).collect::<Vec<_>>().into_iter(),
-                                   (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
-                                   vec![5, 4, 3, 2, 1, 0].into_iter()]);
+    pub fn prepare_index() -> BooleanIndex<usize> {
+        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
+        index.index_documents(vec![(0..10).collect::<Vec<_>>(),
+                                   (0..10).map(|i| i * 2).collect::<Vec<_>>(),
+                                   vec![5, 4, 3, 2, 1, 0]].into_iter());
         index
     }
 

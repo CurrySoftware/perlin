@@ -24,18 +24,15 @@ const CHUNKSIZE: usize = 1_000_000;
 /// Use `PersistentBooleanIndex::new` to create a new instance
 /// and reload it with `PersistentBooleanIndex::load`
 // I am not quite happy with this solution.
-// But alas, without the ability to do design by introspection,
-// I am not able see a better solution
-pub struct PersistentBooleanIndex<TTerm: Ord + ByteEncodable + ByteDecodable,
-                                  TStorage: Storage<Listing> + Persistence>
+// But alas, rust does not offer design by introspection
+pub struct PersistentBooleanIndex<TTerm: Ord + ByteEncodable + ByteDecodable>
 {
     path: PathBuf,
-    index: BooleanIndex<TTerm, TStorage>,
+    index: BooleanIndex<TTerm>,
 }
 
-impl<TTerm, TStorage> PersistentBooleanIndex<TTerm, TStorage>
-    where TTerm: Ord + ByteEncodable + ByteDecodable,
-          TStorage: Storage<Listing> + Persistence
+impl<TTerm> PersistentBooleanIndex<TTerm>
+    where TTerm: Ord + ByteEncodable + ByteDecodable,          
 {
     fn save_vocabulary(&self) {
         // Open file
@@ -101,41 +98,34 @@ impl<TTerm, TStorage> PersistentBooleanIndex<TTerm, TStorage>
         statistics_file.read_to_end(&mut bytes);
         VByteDecoder::new(bytes.into_iter()).next().unwrap()
     }
-}
 
-impl<TTerm, TStorage> Persistence for PersistentBooleanIndex<TTerm, TStorage>
-    where TTerm: Ord + ByteEncodable + ByteDecodable,
-          TStorage: Storage<Listing> + Persistence
-{
-    fn new(path: &Path) -> Self {
+    pub fn new<TStorage: Storage<Listing> + Persistence + 'static>(path: &Path) -> Self {
         PersistentBooleanIndex {
             path: path.to_owned(),
-            index: BooleanIndex::new(TStorage::new(path)),
+            index: BooleanIndex::new(Box::new(TStorage::new(path))),
         }
     }
 
-    fn load(path: &Path) -> Self {
+    pub fn load<TStorage: Storage<Listing> + Persistence + 'static>(path: &Path) -> Self {
         let storage = TStorage::load(path);
         let vocab = Self::load_vocabulary(path);
         let doc_count = Self::load_statistics(path);
         PersistentBooleanIndex {
             path: path.to_owned(),
-            index: BooleanIndex::from_parts(storage, vocab, doc_count),
+            index: BooleanIndex::from_parts(Box::new(storage), vocab, doc_count),
         }
-
     }
 }
 
-impl<'a, TTerm, TStorage> Index<'a, TTerm> for PersistentBooleanIndex<TTerm, TStorage>
-    where TTerm: Ord + ByteEncodable + ByteDecodable,
-          TStorage: Storage<Listing> + Persistence
+impl<'a, TTerm> Index<'a, TTerm> for PersistentBooleanIndex<TTerm>
+    where TTerm: Ord + ByteEncodable + ByteDecodable
 {
     // How utterly ugly
-    type Query = <BooleanIndex<TTerm, TStorage> as Index<'a, TTerm>>::Query;
-    type QueryResult = <BooleanIndex<TTerm, TStorage> as Index<'a, TTerm>>::QueryResult;
+    type Query = <BooleanIndex<TTerm> as Index<'a, TTerm>>::Query;
+    type QueryResult = <BooleanIndex<TTerm> as Index<'a, TTerm>>::QueryResult;
 
-    fn index_documents<TDocIterator: Iterator<Item = TTerm>>(&mut self,
-                                                             documents: Vec<TDocIterator>)
+    fn index_documents<TDocsIterator: Iterator<Item = Vec<TTerm>>>(&mut self,
+                                                             documents: TDocsIterator)
                                                              -> Vec<u64> {
         let result = self.index.index_documents(documents);
         self.save_vocabulary();
@@ -156,9 +146,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use utils::persistence::Persistence;
     use index::Index;
-    use index::boolean_index::posting::Listing;
     use index::boolean_index::*;
     use index::storage::fs_storage::FsStorage;
 
@@ -166,11 +154,11 @@ mod tests {
     fn simple() {
         create_dir_all(Path::new("/tmp/persistent_index_test"));
         {
-            let mut index: PersistentBooleanIndex<usize, FsStorage<Listing>> =
-                PersistentBooleanIndex::new(Path::new("/tmp/persistent_index_test"));
-            index.index_documents(vec![(0..10).collect::<Vec<_>>().into_iter(),
-                                       (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
-                                       vec![5, 4, 3, 2, 1, 0].into_iter()]);
+            let mut index: PersistentBooleanIndex<usize> =
+                PersistentBooleanIndex::new::<FsStorage<_>>(Path::new("/tmp/persistent_index_test"));
+            index.index_documents(vec![(0..10).collect::<Vec<_>>(),
+                                       (0..10).map(|i| i * 2).collect::<Vec<_>>(),
+                                       vec![5, 4, 3, 2, 1, 0]].into_iter());
 
             // Test QueryAtoms
             assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7)))
@@ -194,8 +182,8 @@ mod tests {
         }
         // Old Index out of scope
         // Load new Index from Folder
-        let index2: PersistentBooleanIndex<usize, FsStorage<Listing>> =
-            PersistentBooleanIndex::load(Path::new("/tmp/persistent_index_test"));
+        let index2: PersistentBooleanIndex<usize> =
+            PersistentBooleanIndex::load::<FsStorage<_>>(Path::new("/tmp/persistent_index_test"));
 
         // Test QueryAtoms
         assert!(index2.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7)))
@@ -223,28 +211,24 @@ mod tests {
     fn string_index() {
         create_dir_all(Path::new("/tmp/persistent_index_test2"));
         {
-            let mut index: PersistentBooleanIndex<String, FsStorage<Listing>> =
-                PersistentBooleanIndex::new(Path::new("/tmp/persistent_index_test2"));
+            let mut index: PersistentBooleanIndex<String> =
+                PersistentBooleanIndex::new::<FsStorage<_>>(Path::new("/tmp/persistent_index_test2"));
             index.index_documents(vec!["a b c d e f g"
                                            .split_whitespace()
                                            .map(|p| p.to_string())
-                                           .collect::<Vec<_>>()
-                                           .into_iter(),
+                                           .collect::<Vec<_>>(),
                                        "red blue green yellow pink white black yellow"
                                            .split_whitespace()
                                            .map(|p| p.to_string())
-                                           .collect::<Vec<_>>()
-                                           .into_iter(),
+                                           .collect::<Vec<_>>(),
                                        "a c d c"
                                            .split_whitespace()
                                            .map(|p| p.to_string())
-                                           .collect::<Vec<_>>()
-                                           .into_iter(),
+                                           .collect::<Vec<_>>(),
                                        "i hate software lets do some carpentry"
                                            .split_whitespace()
                                            .map(|p| p.to_string())
-                                           .collect::<Vec<_>>()
-                                           .into_iter()]);
+                                           .collect::<Vec<_>>()].into_iter());
 
             assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, "a".to_string())))
                 .collect::<Vec<_>>() == vec![0, 2]);
@@ -256,7 +240,7 @@ mod tests {
                     .collect::<Vec<_>>() == vec![3]);
 
         }
-        let index2: PersistentBooleanIndex<String, FsStorage<Listing>> = PersistentBooleanIndex::load(Path::new("/tmp/persistent_index_test2"));
+        let index2: PersistentBooleanIndex<String> = PersistentBooleanIndex::load::<FsStorage<_>>(Path::new("/tmp/persistent_index_test2"));
             assert!(index2.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, "a".to_string())))
                 .collect::<Vec<_>>() == vec![0, 2]);
             assert!(index2.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, "b".to_string())))
