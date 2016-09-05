@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use utils::persistence::Volatile;
 use index::storage::{StorageError, Result, Storage};
 
 /// Stores anything in a `BTreeMap`
@@ -8,8 +9,8 @@ pub struct RamStorage<T> {
     data: BTreeMap<u64, Arc<T>>,
 }
 
-impl<T> RamStorage<T> {
-    pub fn new() -> Self {
+impl<T> Volatile for RamStorage<T> {
+    fn new() -> Self {
         RamStorage { data: BTreeMap::new() }
     }
 }
@@ -26,9 +27,12 @@ impl<T: Sync + Send> Storage<T> for RamStorage<T> {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use utils::persistence::Volatile;
     use index::storage::Storage;
     
     #[test]

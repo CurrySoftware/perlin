@@ -4,11 +4,13 @@
 
 
 use index::TransferableIndex;
+use index::storage::Storage;
 use index::storage::ram_storage::RamStorage;
 use index::boolean_index::BooleanIndex;
 use index::boolean_index::posting::{Posting};
 use utils::compression::{vbyte_encode, VByteDecoder};
 use utils::byte_code::{ByteEncodable, ByteDecodable};
+use utils::persistence::Volatile;
 
 use std::io::{Read, Write};
 use std::collections::BTreeMap;
@@ -148,19 +150,24 @@ fn encode_term<TTerm: ByteEncodable>(term: &(&TTerm, &Vec<Posting>)) -> Vec<u8> 
 }
 
 
+//This implementation is all in all pretty hacky and unusable...
+//Maybe throw it away all together
 impl<TTerm: ByteDecodable + ByteEncodable + Ord> TransferableIndex for BooleanIndex<TTerm> {
     fn write_to<TTarget: Write>(&mut self, target: &mut TTarget) -> std::io::Result<usize> {
         self.write_terms(target)
     }
 
+    //Hackyyyy
     fn read_from<TSource: Read>(source: &mut TSource) -> Result<Self, String> {
         let inv_index = Self::read_terms(source).unwrap();
-        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
-        for (term, listing) in inv_index {
-            let term_id = index.term_ids.len() as u64;
-            index.term_ids.insert(term, term_id);
-            index.postings.store(term_id, listing).unwrap();
+        let mut postings = RamStorage::new();
+        let mut term_ids = BTreeMap::new();
+        for (term, listing) in inv_index {            
+            let term_id = term_ids.len() as u64;
+            term_ids.insert(term, term_id);
+            postings.store(term_id, listing).unwrap();
         }
+        let index = BooleanIndex::from_parts(Box::new(postings), term_ids, 0);
         Ok(index)
     }
 }
@@ -168,6 +175,7 @@ impl<TTerm: ByteDecodable + ByteEncodable + Ord> TransferableIndex for BooleanIn
 #[cfg(test)]
 mod tests {
     use index::storage::ram_storage::RamStorage;
+    use index::boolean_index::IndexBuilder;
     use index::boolean_index::BooleanIndex;
     use index::boolean_index::tests::prepare_index;
     use index::{Index, TransferableIndex};
@@ -175,8 +183,7 @@ mod tests {
 
     #[test]
     fn simple() {
-        let mut index = BooleanIndex::new(Box::new(RamStorage::new()));
-        index.index_documents(vec![vec![0, 1]].into_iter());
+        let mut index = IndexBuilder::<_, RamStorage<_>>::new().create(vec![vec![0, 1].into_iter()].into_iter()).unwrap();
         let mut bytes: Vec<u8> = vec![];
         index.write_to(&mut bytes).unwrap();
         assert_eq!(bytes,

@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 
 use utils::compression::{vbyte_encode, VByteDecoder};
 use utils::byte_code::{ByteDecodable, ByteEncodable};
-use utils::persistence::Persistence;
+use utils::persistence::Persistent;
 
 use index::storage::*;
 
@@ -24,9 +24,9 @@ pub struct FsStorage<TItem> {
     _item_type: PhantomData<TItem>,
 }
 
-impl<TItem> Persistence for FsStorage<TItem> {
+impl<TItem> Persistent for FsStorage<TItem> {
     /// Creates a new and empty instance of FsStorage
-    fn new(path: &Path) -> Self {
+    fn create(path: &Path) -> Self {
         assert!(path.is_dir(),
                 "FsStorage::new expects a directory not a file!");
         FsStorage {
@@ -153,7 +153,7 @@ mod tests {
     use std::path::Path;
 
     use super::*;
-    use utils::persistence::Persistence;
+    use utils::persistence::Persistent;
     use index::storage::{Storage, StorageError};
 
     #[test]
@@ -161,7 +161,7 @@ mod tests {
         let item1 = 15;
         let item2 = 32;
         assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
-        let mut prov = FsStorage::new(Path::new("/tmp/test_index"));
+        let mut prov = FsStorage::create(Path::new("/tmp/test_index"));
         assert!(prov.store(0, item1.clone()).is_ok());
         assert_eq!(prov.get(0).unwrap().as_ref(), &item1);
         assert!(prov.store(1, item2.clone()).is_ok());
@@ -175,7 +175,7 @@ mod tests {
         let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
         let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
         assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
-        let mut prov = FsStorage::new(Path::new("/tmp/test_index"));
+        let mut prov = FsStorage::create(Path::new("/tmp/test_index"));
         assert!(prov.store(0, posting1.clone()).is_ok());
         assert!(prov.store(1, posting2.clone()).is_ok());
         assert!(if let StorageError::KeyNotFound = prov.get(2).err().unwrap() {
@@ -192,7 +192,7 @@ mod tests {
         let item3 = 234543463709865987;
         assert!(create_dir_all(Path::new("/tmp/test_index2")).is_ok());
         {
-            let mut prov1 = FsStorage::new(Path::new("/tmp/test_index2"));
+            let mut prov1 = FsStorage::create(Path::new("/tmp/test_index2"));
             assert!(prov1.store(0, item1.clone()).is_ok());
             assert!(prov1.store(1, item2.clone()).is_ok());
         }
