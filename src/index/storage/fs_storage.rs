@@ -24,8 +24,8 @@ pub struct FsStorage<TItem> {
     _item_type: PhantomData<TItem>,
 }
 
-impl<TItem> Persistent for FsStorage<TItem> {
-    /// Creates a new and empty instance of FsStorage
+impl<TItem> Persistent for FsStorage<TItem>{
+    /// Creates a new and empty instance of FsStorage which can be loaded afterwards
     fn create(path: &Path) -> Self {
         assert!(path.is_dir(),
                 "FsStorage::new expects a directory not a file!");
@@ -87,6 +87,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
         }
     }
 }
+
 
 
 

@@ -18,17 +18,14 @@
 //! ```
 //!
 //!
-//! ## Indexing documents and run queries
+//! ## Build index and run queries
 //! ```rust
-//! use std::path::Path;
-//! use perlin::index::Index;
 //! use perlin::index::storage::ram_storage::RamStorage;
-//! use perlin::index::boolean_index::{BooleanIndex};
-
-//! //Create a new index and tell it where to store its data.
-//! //In this case we will tell it to store its data in memory
-//! let mut index = BooleanIndex::new(RamStorage::new());
-//! index.index_documents(vec![(0..10), (0..15), (10..34)]);
+//! use perlin::index::boolean_index::IndexBuilder;
+//!
+//! //Use `IndexBuilder` to construct a new Index and add documents to it.
+//! let index = IndexBuilder::<_, RamStorage<_>>::new().create(vec![(0..10), (0..15), (10..34)].into_iter());
+//! 
 //! ```
 //!
 

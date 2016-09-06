@@ -6,7 +6,7 @@ use utils::persistence::{Volatile, Persistent};
 
 use index::storage::Storage;
 
-use index::boolean_index::{BuilderError, IndexBuilder, BooleanIndex};
+use index::boolean_index::{Result, Error, IndexBuilder, BooleanIndex};
 use index::boolean_index::posting::Listing;
 
 
@@ -33,11 +33,11 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     ///So all index which should be indexed need to be passed to this method
     pub fn create<TCollection, TDoc>(&self,
                                      documents: TCollection)
-                                     -> Result<BooleanIndex<TTerm>, BuilderError>
+                                     -> Result<BooleanIndex<TTerm>>
         where TCollection: Iterator<Item = TDoc>,
               TDoc: Iterator<Item = TTerm>
     {
-        Ok(BooleanIndex::new(TStorage::new(), documents))
+        BooleanIndex::new(TStorage::new(), documents)
     }
 }
 
@@ -58,24 +58,24 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     pub fn create_persistent<TDocsIterator, TDocIterator>
         (&self,
          documents: TDocsIterator)
-         -> Result<BooleanIndex<TTerm>, BuilderError>
+         -> Result<BooleanIndex<TTerm>>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
         if let Some(ref path) = self.persistence {
-            Ok(BooleanIndex::new_persistent(TStorage::create(path), documents, path))
+            BooleanIndex::new_persistent(TStorage::create(path), documents, path)
         } else {
-            Err(BuilderError::PersistPathNotSpecified)
+            Err(Error::PersistPathNotSpecified)
         }
     }
 
     ///Loads an index from a previously filled directory.
     ///Returns a `BuilderError` if directory is empty or does not contain valid data 
-    pub fn load(&self) -> Result<BooleanIndex<TTerm>, BuilderError> {
+    pub fn load(&self) -> Result<BooleanIndex<TTerm>> {
         if let Some(ref path) = self.persistence {
-            Ok(BooleanIndex::load::<TStorage>(path))
+            BooleanIndex::load::<TStorage>(path)
         } else {
-            Err(BuilderError::PersistPathNotSpecified)
+            Err(Error::PersistPathNotSpecified)
         }
     }
 }

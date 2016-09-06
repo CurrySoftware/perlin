@@ -1,13 +1,15 @@
-use index::Index;
 
+use std;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
 use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::marker::PhantomData;
-use std::io::{Error, Read, Write};
+use std::io::{Read, Write};
 
-use index::storage::Storage;
+use index::Index;
+use index::storage::{Storage, StorageError};
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::{Listing, Posting};
@@ -18,7 +20,6 @@ use utils::byte_code::{ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
 mod query_result_iterator;
-mod transfer;
 mod index_builder;
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
@@ -28,11 +29,27 @@ const CHUNKSIZE: usize = 1_000_000;
 type DocumentIterator<TTerm> = Iterator<Item = TTerm>;
 type CollectionIterator<TTerm> = Iterator<Item = DocumentIterator<TTerm>>;
 
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Debug)]
-pub enum BuilderError {
+pub enum Error {
     PersistPathNotSpecified,
     EmptyPersistPath,
-    IOError(Error)
+    InvalidFileContent,
+    IO(io::Error),
+    Storage(StorageError)
+}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
+        Error::IO(err)
+    }
+}
+
+impl From<StorageError> for Error {
+    fn from(err: StorageError) -> Self {
+        Error::Storage(err)
+    }
 }
 
 /// Builds a `BooleanIndex`
@@ -44,7 +61,8 @@ pub struct IndexBuilder<TTerm, TStorage> {
 
 
 // not intended for public use. Thus this wrapper module
-mod posting {
+// TODO: Remove pub
+pub mod posting {
     use utils::byte_code::{ByteDecodable, ByteEncodable};
     use utils::compression::*;
 
@@ -158,7 +176,7 @@ pub fn build_positional_query<TIterator, TTerm>(operator: PositionalOperator,
                                  .collect::<Vec<_>>())
 }
 
-/// Builds an NAry-Query from a term-iterator and a `BooleanOperator`
+/// Builds an `NAry`-Query from a term-iterator and a `BooleanOperator`
 pub fn build_nary_query<TIterator: Iterator<Item = TTerm>, TTerm>(operator: BooleanOperator,
                                                                   terms: TIterator)
                                                                   -> BooleanQuery<TTerm> {
@@ -177,34 +195,34 @@ pub struct BooleanIndex<TTerm: Ord> {
 // Index implementation
 impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
-    type QueryResult = Box<Iterator<Item = u64> + 'a>;
+    type QueryResult = Vec<u64>;
 
     /// Executes a `BooleanQuery` and returns a boxed iterator over the results
     /// The query execution is eager and returns the ids of the documents
     /// TODO: Can we find a lazy solution for that?
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
-            QueryResultIterator::Empty => Box::new(Vec::<u64>::new().into_iter()),
+            QueryResultIterator::Empty => Vec::<u64>::new(),
             QueryResultIterator::Atom(_, iter) => {
                 let mut res = Vec::with_capacity(iter.len());
                 for _ in 0..iter.len() {
                     res.push(iter.next().unwrap().0)
                 }
-                Box::new(res.into_iter())
+                res
             }
             QueryResultIterator::NAry(iter) => {
                 let mut res = Vec::new();
                 while let Some(posting) = iter.next() {
                     res.push(posting.0)
                 }
-                Box::new(res.into_iter())
+                res
             }
             QueryResultIterator::Filter(iter) => {
                 let mut res = Vec::new();
                 while let Some(posting) = iter.next() {
                     res.push(posting.0)
                 }
-                Box::new(res.into_iter())
+                res
             }
         }
     }
@@ -215,12 +233,12 @@ impl<TTerm> BooleanIndex<TTerm>
 {
     /// Load a `BooleanIndex` from a previously populated folder
     /// Not intended for public use. Please use the `IndexBuilder` instead
-    fn load<TStorage>(path: &Path) -> Self
+    fn load<TStorage>(path: &Path) -> Result<Self>
         where TStorage: Storage<Listing> + Persistent + 'static
     {
         let storage = TStorage::load(path);
-        let vocab = Self::load_vocabulary(path);
-        let doc_count = Self::load_statistics(path);
+        let vocab = try!(Self::load_vocabulary(path));
+        let doc_count = try!(Self::load_statistics(path));
         BooleanIndex::from_parts(Box::new(storage), vocab, doc_count)
     }
 
@@ -229,7 +247,7 @@ impl<TTerm> BooleanIndex<TTerm>
     fn new_persistent<TDocsIterator, TDocIterator, TStorage>(storage: TStorage,
                                                              documents: TDocsIterator,
                                                              path: &Path)
-                                                             -> Self
+                                                             -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<Listing> + Persistent + 'static
@@ -240,75 +258,98 @@ impl<TTerm> BooleanIndex<TTerm>
             postings: Box::new(storage),
             persist_path: Some(path.to_path_buf()),
         };
-        index.index_documents(documents);
-        index.save_vocabulary();
-        index.save_statistics();
-        index
+        try!(index.index_documents(documents));
+        try!(index.save_vocabulary());
+        try!(index.save_statistics());
+        Ok(index)
     }
 
-    fn save_vocabulary(&self) {
-        // Open file
-        let mut vocab_file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(self.persist_path.as_ref().unwrap().join(VOCAB_FILENAME))
-            .unwrap();
-        // Iterate over vocabulary and encode data
-        let mut byte_buffer = Vec::with_capacity(2 * CHUNKSIZE);
-        for vocab_entry in &self.term_ids {
-            // Encode term and number of its bytes
-            let term_bytes = vocab_entry.0.encode();
-            let term_length_bytes = vbyte_encode(term_bytes.len());
-            // Encode id
-            let id_bytes = vbyte_encode(*vocab_entry.1 as usize);
+    fn save_vocabulary(&self) -> Result<()> {
+        if let Some(filename) = self.persist_path.as_ref().map(|p| p.join(VOCAB_FILENAME)) {
+            // Open file
+            let mut vocab_file = try!(OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(filename));
+            // Iterate over vocabulary and encode data
+            let mut byte_buffer = Vec::with_capacity(2 * CHUNKSIZE);
+            for vocab_entry in &self.term_ids {
+                // Encode term and number of its bytes
+                let term_bytes = vocab_entry.0.encode();
+                let term_length_bytes = vbyte_encode(term_bytes.len());
+                // Encode id
+                let id_bytes = vbyte_encode(*vocab_entry.1 as usize);
 
-            // Append id, term length and term to byte_buffer
-            byte_buffer.extend_from_slice(&id_bytes);
-            byte_buffer.extend_from_slice(&term_length_bytes);
-            byte_buffer.extend_from_slice(&term_bytes);
+                // Append id, term length and term to byte_buffer
+                byte_buffer.extend_from_slice(&id_bytes);
+                byte_buffer.extend_from_slice(&term_length_bytes);
+                byte_buffer.extend_from_slice(&term_bytes);
 
-            // Write if buffer is full
-            if byte_buffer.len() > CHUNKSIZE {
-                vocab_file.write(&byte_buffer);
-                byte_buffer.clear();
+                // Write if buffer is full
+                if byte_buffer.len() > CHUNKSIZE {
+                    try!(vocab_file.write(&byte_buffer));
+                    byte_buffer.clear();
+                }
             }
+            if !byte_buffer.is_empty() {
+                // If some rests are in the buffer write them to file
+                try!(vocab_file.write(&byte_buffer));
+            }
+            Ok(())
+        } else {
+            Err(Error::PersistPathNotSpecified)
         }
-        vocab_file.write(&byte_buffer);
     }
 
-    fn load_vocabulary(path: &Path) -> BTreeMap<TTerm, u64> {
+    fn load_vocabulary(path: &Path) -> Result<BTreeMap<TTerm, u64>> {
         // Open file
-        let mut vocab_file = OpenOptions::new().read(true).open(path.join(VOCAB_FILENAME)).unwrap();
-        let mut bytes = Vec::new();
-        vocab_file.read_to_end(&mut bytes);
+        let mut vocab_file = try!(OpenOptions::new().read(true).open(path.join(VOCAB_FILENAME)));
+        let metadata = try!(vocab_file.metadata());
+        // Read bytes into Vector
+        let mut bytes = Vec::with_capacity(metadata.len() as usize);
+        try!(vocab_file.read_to_end(&mut bytes));
+        // Create a decoder from that vector
         let mut decoder = VByteDecoder::new(bytes.into_iter());
         let mut result = BTreeMap::new();
         while let Some(id) = decoder.next() {
-            let term_len = decoder.next().unwrap();
-            let term = TTerm::decode(decoder.underlying_iterator().take(term_len)).unwrap();
-            result.insert(term, id as u64);
+            if let Some(term_len) = decoder.next() {
+                if let Ok(term) = TTerm::decode(decoder.underlying_iterator().take(term_len)) {
+                    result.insert(term, id as u64);
+                } else {
+                    // Error while decoding a term. TODO: Propagate Error
+                }
+            } else {
+                // Term len could not be decoded. TODO: Error Handling
+            }
         }
-        result
+        Ok(result)
     }
 
-    fn save_statistics(&self) {
+    fn save_statistics(&self) -> Result<()> {
         // Open file
-        let mut statistics_file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(self.persist_path.as_ref().unwrap().join(STATISTICS_FILENAME))
-            .unwrap();
-        statistics_file.write(&vbyte_encode(self.document_count));
+        if let Some(filename) = self.persist_path.as_ref().map(|p| p.join(STATISTICS_FILENAME)) {
+            let mut statistics_file = try!(OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(filename));
+            try!(statistics_file.write(&vbyte_encode(self.document_count)));
+            Ok(())
+        } else {
+            Err(Error::PersistPathNotSpecified)
+        }
     }
 
-    fn load_statistics(path: &Path) -> usize {
-        let mut statistics_file =
-            OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)).unwrap();
+    fn load_statistics(path: &Path) -> Result<usize> {
+        let mut statistics_file = try!(OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)));
         let mut bytes = Vec::new();
-        statistics_file.read_to_end(&mut bytes);
-        VByteDecoder::new(bytes.into_iter()).next().unwrap()
+        try!(statistics_file.read_to_end(&mut bytes));
+        if let Some(doc_count) = VByteDecoder::new(bytes.into_iter()).next() {
+            Ok(doc_count)
+        } else {
+            Err(Error::InvalidFileContent)
+        }
     }
 }
 
@@ -317,7 +358,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     /// Please use `IndexBuilder` instead
     fn new<TDocsIterator, TDocIterator, TStorage>(storage: TStorage,
                                                   documents: TDocsIterator)
-                                                  -> Self
+                                                  -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<Listing> + 'static
@@ -328,27 +369,27 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
             postings: Box::new(storage),
             persist_path: None,
         };
-        index.index_documents(documents);
-        index
+        try!(index.index_documents(documents));
+        Ok(index)
     }
 
 
     fn from_parts(inverted_index: Box<Storage<Listing>>,
                   vocabulary: BTreeMap<TTerm, u64>,
                   document_count: usize)
-                  -> Self {
-        BooleanIndex {
+                  -> Result<Self> {
+        Ok(BooleanIndex {
             document_count: document_count,
             term_ids: vocabulary,
             postings: inverted_index,
             persist_path: None,
-        }
+        })
     }
 
     /// Indexes a document collection for later retrieval
-    /// Returns the document_ids used by the index
+    /// Returns the number of documents indexed
     // First Shot. TODO: Needs improvement!
-    fn index_documents<TDocsIterator, TDocIterator>(&mut self, documents: TDocsIterator) -> Vec<u64>
+    fn index_documents<TDocsIterator, TDocIterator>(&mut self, documents: TDocsIterator) -> Result<(usize)>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
@@ -397,10 +438,10 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index {
-            self.postings.store(term_id, listing).unwrap();
+            try!(self.postings.store(term_id, listing));
         }
 
-        result
+        Ok(self.document_count)
     }
 
 
