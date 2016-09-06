@@ -65,7 +65,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
         if let Some(ref path) = self.persistence {
             Ok(BooleanIndex::new_persistent(TStorage::create(path), documents, path))
         } else {
-            Err(BuilderError::IndexFolderEmpty)
+            Err(BuilderError::PersistPathNotSpecified)
         }
     }
 
@@ -75,7 +75,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
         if let Some(ref path) = self.persistence {
             Ok(BooleanIndex::load::<TStorage>(path))
         } else {
-            Err(BuilderError::IndexFolderDoesNotExist)
+            Err(BuilderError::PersistPathNotSpecified)
         }
     }
 }

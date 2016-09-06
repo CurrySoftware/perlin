@@ -18,6 +18,7 @@ pub trait Index<'a, TTerm> {
 /// Can be used for example to persist an Index as a file or send it as `TcpStream`.
 // Unhappy with the name...
 // TODO: Find a better one
+// TODO: Is this necessary? Or just throw it away?
 pub trait TransferableIndex
     where Self: Sized
 {

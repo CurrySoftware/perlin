@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::marker::PhantomData;
-use std::io::{Read, Write};
+use std::io::{Error, Read, Write};
 
 use index::storage::Storage;
 use index::boolean_index::query_result_iterator::*;
@@ -15,7 +15,7 @@ use index::boolean_index::posting::{Listing, Posting};
 use utils::compression::{vbyte_encode, VByteDecoder};
 use utils::owning_iterator::{OwningIterator, ArcIter};
 use utils::byte_code::{ByteEncodable, ByteDecodable};
-use utils::persistence::{Volatile, Persistent};
+use utils::persistence::Persistent;
 
 mod query_result_iterator;
 mod transfer;
@@ -30,15 +30,12 @@ type CollectionIterator<TTerm> = Iterator<Item = DocumentIterator<TTerm>>;
 
 #[derive(Debug)]
 pub enum BuilderError {
-    IndexTypeNotSpecified,
-    StorageTypeNotSpecified,
-    NoDataSpecified,
-    IndexFolderEmpty,
-    IndexFolderDoesNotExist, 
-    StorageTypeIncompatible,
-    IndexTypeIncompatible,
+    PersistPathNotSpecified,
+    EmptyPersistPath,
+    IOError(Error)
 }
 
+/// Builds a `BooleanIndex`
 pub struct IndexBuilder<TTerm, TStorage> {
     persistence: Option<PathBuf>,
     _storage: PhantomData<TStorage>,
@@ -47,8 +44,7 @@ pub struct IndexBuilder<TTerm, TStorage> {
 
 
 // not intended for public use. Thus this wrapper module
-// TODO: FIX
-pub mod posting {
+mod posting {
     use utils::byte_code::{ByteDecodable, ByteEncodable};
     use utils::compression::*;
 
@@ -149,6 +145,8 @@ pub enum BooleanQuery<TTerm> {
            Box<BooleanQuery<TTerm>>),
 }
 
+/// Utility function that builds a positional query from a term iterator
+/// Assumes that the terms in the stream are in order
 pub fn build_positional_query<TIterator, TTerm>(operator: PositionalOperator,
                                                 terms: TIterator)
                                                 -> BooleanQuery<TTerm>
@@ -160,6 +158,7 @@ pub fn build_positional_query<TIterator, TTerm>(operator: PositionalOperator,
                                  .collect::<Vec<_>>())
 }
 
+/// Builds an NAry-Query from a term-iterator and a `BooleanOperator`
 pub fn build_nary_query<TIterator: Iterator<Item = TTerm>, TTerm>(operator: BooleanOperator,
                                                                   terms: TIterator)
                                                                   -> BooleanQuery<TTerm> {
@@ -175,12 +174,14 @@ pub struct BooleanIndex<TTerm: Ord> {
     persist_path: Option<PathBuf>,
 }
 
-impl<'a, TTerm> Index<'a, TTerm> for BooleanIndex<TTerm>
-    where TTerm: Ord
-{
+// Index implementation
+impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64> + 'a>;
 
+    /// Executes a `BooleanQuery` and returns a boxed iterator over the results
+    /// The query execution is eager and returns the ids of the documents
+    /// TODO: Can we find a lazy solution for that?
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         match self.run_query(query) {
             QueryResultIterator::Empty => Box::new(Vec::<u64>::new().into_iter()),
@@ -212,7 +213,8 @@ impl<'a, TTerm> Index<'a, TTerm> for BooleanIndex<TTerm>
 impl<TTerm> BooleanIndex<TTerm>
     where TTerm: Ord + ByteDecodable + ByteEncodable
 {
-
+    /// Load a `BooleanIndex` from a previously populated folder
+    /// Not intended for public use. Please use the `IndexBuilder` instead
     fn load<TStorage>(path: &Path) -> Self
         where TStorage: Storage<Listing> + Persistent + 'static
     {
@@ -221,7 +223,9 @@ impl<TTerm> BooleanIndex<TTerm>
         let doc_count = Self::load_statistics(path);
         BooleanIndex::from_parts(Box::new(storage), vocab, doc_count)
     }
-    
+
+    /// Creates a new `BooleanIndex` instance which is written to the passed path
+    /// Not intended for public use. Please use the `IndexBuilder` instead
     fn new_persistent<TDocsIterator, TDocIterator, TStorage>(storage: TStorage,
                                                              documents: TDocsIterator,
                                                              path: &Path)
@@ -309,6 +313,8 @@ impl<TTerm> BooleanIndex<TTerm>
 }
 
 impl<TTerm: Ord> BooleanIndex<TTerm> {
+    /// Creates a new volatile `BooleanIndex`. Not intended for public use.
+    /// Please use `IndexBuilder` instead
     fn new<TDocsIterator, TDocIterator, TStorage>(storage: TStorage,
                                                   documents: TDocsIterator)
                                                   -> Self
@@ -466,7 +472,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 mod tests {
 
     use std::fs::create_dir_all;
-    use std::path::{Path};
+    use std::path::Path;
 
     use super::*;
     use index::Index;
@@ -666,8 +672,8 @@ mod tests {
             let index = IndexBuilder::<_, FsStorage<_>>::new()
                 .persist(Path::new("/tmp/persistent_index_test"))
                 .create_persistent(vec![(0..10).collect::<Vec<_>>().into_iter(),
-                             (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
-                             vec![5, 4, 3, 2, 1, 0].into_iter()]
+                                        (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
+                                        vec![5, 4, 3, 2, 1, 0].into_iter()]
                     .into_iter())
                 .unwrap();
 

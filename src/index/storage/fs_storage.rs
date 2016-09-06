@@ -89,6 +89,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
 }
 
 
+
 impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsStorage<TItem> {
     fn get(&self, id: u64) -> Result<Arc<TItem>> {
         if let Some(item_position) = self.entries.get(&id) {
