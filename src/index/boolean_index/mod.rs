@@ -19,6 +19,7 @@ use utils::persistence::{Volatile, Persistent};
 
 mod query_result_iterator;
 mod transfer;
+mod index_builder;
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
 const STATISTICS_FILENAME: &'static str = "statistics.bin";
@@ -38,80 +39,12 @@ pub enum BuilderError {
     IndexTypeIncompatible,
 }
 
-pub enum Persist {
-    At(PathBuf),
-}
-
 pub struct IndexBuilder<TTerm, TStorage> {
-    persistence: Option<Persist>,
+    persistence: Option<PathBuf>,
     _storage: PhantomData<TStorage>,
     _term: PhantomData<TTerm>,
 }
 
-
-impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
-    where TTerm: Ord,
-          TStorage: Storage<Listing>
-{
-    pub fn new() -> Self {
-        IndexBuilder {
-            persistence: None,
-            _storage: PhantomData,
-            _term: PhantomData,
-        }
-    }
-
-    fn validate<'a>(&self) -> Result<(), BuilderError> {
-        Ok(())
-    }
-}
-
-impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
-    where TTerm: Ord,
-          TStorage: Storage<Listing> + Volatile + 'static
-{
-    pub fn create<TCollection, TDoc>(&self,
-                                     documents: TCollection)
-                                     -> Result<BooleanIndex<TTerm>, BuilderError>
-        where TCollection: Iterator<Item = TDoc>,
-              TDoc: Iterator<Item = TTerm>
-    {
-        let mut index = BooleanIndex::new(TStorage::new(), documents);
-        Ok(index)
-    }
-}
-
-impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
-    where TTerm: Ord + ByteDecodable + ByteEncodable,
-          TStorage: Storage<Listing> + Persistent + 'static
-{
-    pub fn persist(mut self, setting: Persist) -> Self {
-        self.persistence = Some(setting);
-        self
-    }
-
-    pub fn create_persistent<TDocsIterator, TDocIterator>(&self,
-                                               documents: TDocsIterator)
-                                               -> Result<BooleanIndex<TTerm>, BuilderError>
-        where TDocsIterator: Iterator<Item = TDocIterator>,
-              TDocIterator: Iterator<Item = TTerm>
-    {
-        if let Some(Persist::At(ref path)) = self.persistence {
-            let mut index = BooleanIndex::new(TStorage::create(path), documents);
-            Ok(index)
-        } else {
-            Err(BuilderError::IndexFolderEmpty)
-        }
-    }
-
-    pub fn load(&self) -> Result<BooleanIndex<TTerm>, BuilderError> {
-        if let Some(Persist::At(ref path)) = self.persistence {
-            Ok(BooleanIndex::load::<TStorage>(path))
-        } else {
-            Err(BuilderError::IndexFolderDoesNotExist)
-        }
-    }
-}
 
 // not intended for public use. Thus this wrapper module
 // TODO: FIX
@@ -533,7 +466,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 mod tests {
 
     use std::fs::create_dir_all;
-    use std::path::{Path, PathBuf};
+    use std::path::{Path};
 
     use super::*;
     use index::Index;
@@ -728,11 +661,10 @@ mod tests {
 
     #[test]
     fn persistence() {
-        create_dir_all(Path::new("/tmp/persistent_index_test"));
-
+        assert!(create_dir_all(Path::new("/tmp/persistent_index_test")).is_ok());
         {
             let index = IndexBuilder::<_, FsStorage<_>>::new()
-                .persist(Persist::At(Path::new("/tmp/persistent_index_test").to_path_buf()))
+                .persist(Path::new("/tmp/persistent_index_test"))
                 .create_persistent(vec![(0..10).collect::<Vec<_>>().into_iter(),
                              (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
                              vec![5, 4, 3, 2, 1, 0].into_iter()]
@@ -751,7 +683,7 @@ mod tests {
 
         {
             let index = IndexBuilder::<usize, FsStorage<_>>::new()
-                .persist(Persist::At(Path::new("/tmp/persistent_index_test").to_path_buf()))
+                .persist(Path::new("/tmp/persistent_index_test"))
                 .load()
                 .unwrap();
             assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7)))

@@ -178,7 +178,7 @@ mod tests {
     use index::boolean_index::IndexBuilder;
     use index::boolean_index::BooleanIndex;
     use index::boolean_index::tests::prepare_index;
-    use index::{Index, TransferableIndex};
+    use index::{TransferableIndex};
     use std::io::Cursor;
 
     #[test]
