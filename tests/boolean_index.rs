@@ -32,10 +32,29 @@ fn build_and_query_persistent_index() {
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![1]);
 
     let and_query = build_nary_query(BooleanOperator::And, vec![0, 6, 12].into_iter());
-    assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(), vec![2, 3]);
+    assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(),
+               vec![2, 3]);
 
     let or_query = build_nary_query(BooleanOperator::Or, vec![0, 6, 12].into_iter());
-    assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(), vec![0, 1, 2, 3]);
+    assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
+               vec![0, 1, 2, 3]);
+
+    let index =
+        IndexBuilder::<usize, FsStorage<_>>::new().persist(folder.as_path()).load().unwrap();
+
+    let pos_query = build_positional_query(PositionalOperator::InOrder, vec![10, 20].into_iter());
+    assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![]);
+
+    let pos_query = build_positional_query(PositionalOperator::InOrder, vec![0, 7, 14].into_iter());
+    assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![1]);
+
+    let and_query = build_nary_query(BooleanOperator::And, vec![0, 6, 12].into_iter());
+    assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(),
+               vec![2, 3]);
+
+    let or_query = build_nary_query(BooleanOperator::Or, vec![0, 6, 12].into_iter());
+    assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
+               vec![0, 1, 2, 3]);
 }
 
 #[derive(PartialOrd, Ord, PartialEq, Eq)]
@@ -65,12 +84,11 @@ fn build_and_query_volatile_index() {
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![0]);
 
     let and_query = build_nary_query(BooleanOperator::And,
-                                      vec![Color::Green, Color::Blue].into_iter());
-    assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(),
-               vec![1]);
+                                     vec![Color::Green, Color::Blue].into_iter());
+    assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(), vec![1]);
 
     let or_query = build_nary_query(BooleanOperator::Or,
-                                      vec![Color::Green, Color::Blue].into_iter());
+                                    vec![Color::Green, Color::Blue].into_iter());
     assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
                vec![0, 1, 2]);
 }
