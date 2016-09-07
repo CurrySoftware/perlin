@@ -176,8 +176,8 @@ mod tests {
     fn not_found() {
         let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
         let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
-        assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
-        let mut prov = FsStorage::create(Path::new("/tmp/test_index"));
+        assert!(create_dir_all(Path::new("/tmp/test_index2")).is_ok());
+        let mut prov = FsStorage::create(Path::new("/tmp/test_index2"));
         assert!(prov.store(0, posting1.clone()).is_ok());
         assert!(prov.store(1, posting2.clone()).is_ok());
         assert!(if let StorageError::KeyNotFound = prov.get(2).err().unwrap() {
@@ -192,15 +192,15 @@ mod tests {
         let item1 = 1556;
         let item2 = 235425354;
         let item3 = 234543463709865987;
-        assert!(create_dir_all(Path::new("/tmp/test_index2")).is_ok());
+        assert!(create_dir_all(Path::new("/tmp/test_index3")).is_ok());
         {
-            let mut prov1 = FsStorage::create(Path::new("/tmp/test_index2"));
+            let mut prov1 = FsStorage::create(Path::new("/tmp/test_index3"));
             assert!(prov1.store(0, item1.clone()).is_ok());
             assert!(prov1.store(1, item2.clone()).is_ok());
         }
 
         {
-            let mut prov2: FsStorage<usize> = FsStorage::load(Path::new("/tmp/test_index2"));
+            let mut prov2: FsStorage<usize> = FsStorage::load(Path::new("/tmp/test_index3"));
             assert_eq!(prov2.get(0).unwrap().as_ref(), &item1);
             assert_eq!(prov2.get(1).unwrap().as_ref(), &item2);
             assert!(prov2.store(2, item3.clone()).is_ok());
@@ -208,7 +208,7 @@ mod tests {
         }
 
         {
-            let prov3: FsStorage<usize> = FsStorage::load(Path::new("/tmp/test_index2"));
+            let prov3: FsStorage<usize> = FsStorage::load(Path::new("/tmp/test_index3"));
             assert_eq!(prov3.get(0).unwrap().as_ref(), &item1);
             assert_eq!(prov3.get(1).unwrap().as_ref(), &item2);
             assert_eq!(prov3.get(2).unwrap().as_ref(), &item3);
