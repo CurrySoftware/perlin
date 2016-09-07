@@ -65,7 +65,7 @@ impl<'a> OwningIterator<'a> for QueryResultIterator {
 
 impl QueryResultIterator {
     pub fn next_id(&self) -> Option<u64> {
-        self.next().map(|p| p.0.clone())
+        self.next().map(|p| p.0)
     }
 
     /// Used to be able to sort queries according to their estimated number of results

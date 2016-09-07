@@ -7,7 +7,6 @@ use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::marker::PhantomData;
 use std::io::{Read, Write};
-use std::vec::IntoIter;
 
 use index::Index;
 use index::storage::{Storage, StorageError};
@@ -16,7 +15,7 @@ use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::{Listing, Posting};
 
 use utils::compression::{vbyte_encode, VByteDecoder};
-use utils::owning_iterator::{OwningIterator, ArcIter};
+use utils::owning_iterator::{ArcIter};
 use utils::byte_code::{ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
