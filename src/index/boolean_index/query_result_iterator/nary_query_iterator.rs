@@ -1,23 +1,27 @@
 use std::cell::RefCell;
 
+use utils::owning_iterator::OwningIterator;
+
 use index::boolean_index::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::*;
 
-pub struct NAryQueryIterator<'a> {
+pub struct NAryQueryIterator {
     pos_operator: Option<PositionalOperator>,
     bool_operator: Option<BooleanOperator>,
-    operands: Vec<QueryResultIterator<'a>>,
-    peeked_value: RefCell<Option<Option<&'a Posting>>>,
+    operands: Vec<QueryResultIterator>,
+    peeked_value: RefCell<Option<Option<*const Posting>>>,
 }
 
 
-impl<'a> NAryQueryIterator<'a> {
+impl<'a> OwningIterator<'a> for NAryQueryIterator {
+    type Item = &'a Posting;
 
-    pub fn next(&'a self) -> Option<&'a Posting> {
+    
+    fn next(&'a self) -> Option<Self::Item> {
         let mut peeked_value = self.peeked_value.borrow_mut();
         if peeked_value.is_some() {
-            return peeked_value.take().unwrap()
+            return unsafe { peeked_value.take().unwrap().map(|p| & *p) }
         }
         match self.bool_operator {
             Some(BooleanOperator::And) => self.next_and(),
@@ -33,10 +37,40 @@ impl<'a> NAryQueryIterator<'a> {
         }
     }
 
+    fn peek(&'a self) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_none() {
+            *peeked_value = Some((match self.bool_operator {
+                Some(BooleanOperator::And) => self.next_and(),
+                Some(BooleanOperator::Or) => self.next_or(),
+                None => {
+                    match self.pos_operator {
+                        Some(PositionalOperator::InOrder) => self.next_inorder(),
+                        None => {
+                            unreachable!(false);
+                        }
+                    }
+                }
+            }).map(|p| p as *const Posting))
+        }
+        unsafe { peeked_value.unwrap().map(|p| & *p) }
+    }
+
+    fn len(&self) -> usize {
+        self.estimate_length()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl NAryQueryIterator {
+
     
     pub fn new_positional(operator: PositionalOperator,
-                          operands: Vec<QueryResultIterator<'a>>)
-                          -> NAryQueryIterator<'a> {
+                          operands: Vec<QueryResultIterator>)
+                          -> NAryQueryIterator {
         let mut result = NAryQueryIterator {
             pos_operator: Some(operator),
             bool_operator: None,
@@ -49,8 +83,8 @@ impl<'a> NAryQueryIterator<'a> {
 
 
     pub fn new(operator: BooleanOperator,
-               operands: Vec<QueryResultIterator<'a>>)
-               -> NAryQueryIterator<'a> {
+               operands: Vec<QueryResultIterator>)
+               -> NAryQueryIterator {
         let mut result = NAryQueryIterator {
             pos_operator: None,
             bool_operator: Some(operator),
@@ -76,26 +110,7 @@ impl<'a> NAryQueryIterator<'a> {
         }
     }
 
-    pub fn peek(&'a self) -> Option<&'a Posting> {
-        let mut peeked_value = self.peeked_value.borrow_mut();
-        if peeked_value.is_none() {
-            *peeked_value = Some(match self.bool_operator {
-                Some(BooleanOperator::And) => self.next_and(),
-                Some(BooleanOperator::Or) => self.next_or(),
-                None => {
-                    match self.pos_operator {
-                        Some(PositionalOperator::InOrder) => self.next_inorder(),
-                        None => {
-                            unreachable!(false);
-                        }
-                    }
-                }
-            })
-        }
-        peeked_value.unwrap()
-    }
-
-    fn next_inorder(&'a self) -> Option<&'a Posting> {
+    fn next_inorder(&self) -> Option<&Posting> {
         let mut focus = None; //Acts as temporary to be compared against
         let mut focus_positions = vec![];
         // The iterator index that last set 'focus'
@@ -158,7 +173,7 @@ impl<'a> NAryQueryIterator<'a> {
         }
     }
 
-    fn next_or(&'a self) -> Option<&'a Posting> {
+    fn next_or(&self) -> Option<&Posting> {
         // Find the smallest current value of all operands
 
         let min_value = self.operands
@@ -187,7 +202,7 @@ impl<'a> NAryQueryIterator<'a> {
         }
     }
 
-    fn next_and(&'a self) -> Option<&'a Posting> {
+    fn next_and(&self) -> Option<&Posting> {
         let mut focus = None; //Acts as temporary to be compared against
         let mut last_iter = self.operands.len() + 1; //The iterator that last set 'focus'
         'possible_documents: loop {

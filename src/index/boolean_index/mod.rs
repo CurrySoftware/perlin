@@ -58,6 +58,7 @@ pub struct IndexBuilder<TTerm, TStorage> {
 }
 
 
+
 // not intended for public use. Thus this wrapper module
 // TODO: Remove pub
 pub mod posting {
@@ -193,36 +194,13 @@ pub struct BooleanIndex<TTerm: Ord> {
 // Index implementation
 impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
-    type QueryResult = IntoIter<u64>;
+    type QueryResult = Box<Iterator<Item=u64>>;
 
     /// Executes a `BooleanQuery` and returns a boxed iterator over the results
     /// The query execution is eager and returns the ids of the documents
     /// TODO: Can we find a lazy solution for that?
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
-        match self.run_query(query) {
-            QueryResultIterator::Empty => Vec::<u64>::new().into_iter(),
-            QueryResultIterator::Atom(_, iter) => {
-                let mut res = Vec::with_capacity(iter.len());
-                for _ in 0..iter.len() {
-                    res.push(iter.next().unwrap().0)
-                }
-                res.into_iter()
-            }
-            QueryResultIterator::NAry(iter) => {
-                let mut res = Vec::new();
-                while let Some(posting) = iter.next() {
-                    res.push(posting.0)
-                }
-                res.into_iter()
-            }
-            QueryResultIterator::Filter(iter) => {
-                let mut res = Vec::new();
-                while let Some(posting) = iter.next() {
-                    res.push(posting.0)
-                }
-                res.into_iter()
-            }
-        }
+        Box::new(self.run_query(query))
     }
 }
 

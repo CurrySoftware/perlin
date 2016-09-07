@@ -12,22 +12,60 @@ pub mod nary_query_iterator;
 // 2. It is lazy
 /// Wrapper around different query iterator types
 /// Used to be able to simply and elegantly use nested queries of different types
-pub enum QueryResultIterator<'a> {
+pub enum QueryResultIterator {
     Empty,
     Atom(usize, ArcIter<Posting>),
-    NAry(NAryQueryIterator<'a>),
-    Filter(FilterIterator<'a>),
+    NAry(NAryQueryIterator),
+    Filter(FilterIterator),
 }
 
-impl<'a> QueryResultIterator<'a> {
-    
+
+impl Iterator for QueryResultIterator {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_id()
+    }
+}
+
+impl<'a> OwningIterator<'a> for QueryResultIterator {
+    type Item = &'a Posting;
+
+
     fn next(&'a self) -> Option<&'a Posting> {
         match *self {
-            QueryResultIterator::Empty => None, 
+            QueryResultIterator::Empty => None,
             QueryResultIterator::Atom(_, ref iter) => iter.next(),
             QueryResultIterator::NAry(ref iter) => iter.next(),
             QueryResultIterator::Filter(ref iter) => iter.next(),
         }
+    }
+
+
+    /// Allows peeking. Used for union queries,
+    /// which need to advance operands in some cases and peek in others
+    fn peek(&'a self) -> Option<&'a Posting> {
+        match *self {
+            QueryResultIterator::Empty => None,
+            QueryResultIterator::Atom(_, ref iter) => iter.peek(),
+            QueryResultIterator::NAry(ref iter) => iter.peek(),
+            QueryResultIterator::Filter(ref iter) => iter.peek(),
+        }
+    }
+
+
+    fn len(&self) -> usize {
+        self.estimate_length()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl QueryResultIterator {
+    pub fn next_id(&self) -> Option<u64> {
+        self.next().map(|p| p.0.clone())
     }
 
     /// Used to be able to sort queries according to their estimated number of results
@@ -50,42 +88,51 @@ impl<'a> QueryResultIterator<'a> {
         }
 
     }
-
-    /// Allows peeking. Used for union queries,
-    /// which need to advance operands in some cases and peek in others
-    fn peek(&'a self) -> Option<&'a Posting> {
-        match *self {
-            QueryResultIterator::Empty => None,
-            QueryResultIterator::Atom(_, ref iter) => iter.peek(),
-            QueryResultIterator::NAry(ref iter) => iter.peek(),
-            QueryResultIterator::Filter(ref iter) => iter.peek(),
-        }
-    }
 }
 
-pub struct FilterIterator<'a> {
+pub struct FilterIterator {
     operator: FilterOperator,
-    sand: Box<QueryResultIterator<'a>>,
-    sieve: Box<QueryResultIterator<'a>>,
-    peeked_value: RefCell<Option<Option<&'a Posting>>>,
+    sand: Box<QueryResultIterator>,
+    sieve: Box<QueryResultIterator>,
+    peeked_value: RefCell<Option<Option<*const Posting>>>,
 }
 
-impl<'a> FilterIterator<'a> {
+impl<'a> OwningIterator<'a> for FilterIterator {
+    type Item = &'a Posting;
 
-    pub fn next(&'a self) -> Option<&'a Posting> {
+    fn next(&'a self) -> Option<&'a Posting> {
         let mut peeked_value = self.peeked_value.borrow_mut();
         if peeked_value.is_none() {
             match self.operator {
                 FilterOperator::Not => self.next_not(),
             }
         } else {
-            peeked_value.take().unwrap()
+            unsafe { peeked_value.take().unwrap().map(|p| &*p) }
         }
     }
-    
+
+    fn peek(&'a self) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_none() {
+            *peeked_value = Some(self.next().map(|p| p as *const Posting));
+        }
+        unsafe { peeked_value.unwrap().map(|p| &*p) }
+    }
+
+
+    fn len(&self) -> usize {
+        self.estimate_length()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl FilterIterator {
     pub fn new(operator: FilterOperator,
-               sand: Box<QueryResultIterator<'a>>,
-               sieve: Box<QueryResultIterator<'a>>)
+               sand: Box<QueryResultIterator>,
+               sieve: Box<QueryResultIterator>)
                -> Self {
         FilterIterator {
             operator: operator,
@@ -95,13 +142,6 @@ impl<'a> FilterIterator<'a> {
         }
     }
 
-    fn peek(&'a self) -> Option<&'a Posting> {
-        let mut peeked_value = self.peeked_value.borrow_mut();
-        if peeked_value.is_none() {
-            *peeked_value = Some(self.next())
-        }
-        peeked_value.unwrap()
-    }
 
     fn estimate_length(&self) -> usize {
         let sand_len = self.sand.estimate_length();
@@ -114,15 +154,15 @@ impl<'a> FilterIterator<'a> {
     }
 
 
-    fn next_not(&'a self) -> Option<&'a Posting> {
+    fn next_not(&self) -> Option<&Posting> {
         'sand: loop {
-            if let Some(sand) = self.sand.next() {
+            if let Some(sand) = OwningIterator::next(self.sand.as_ref()) {
                 'sieve: loop {
                     if let Some(sieve) = self.sieve.peek() {
                         if sand.0 < sieve.0 {
                             return Some(sand);
                         } else if sand.0 > sieve.0 {
-                            self.sieve.next();
+                            OwningIterator::next(self.sieve.as_ref());
                             continue 'sieve;
                         } else {
                             continue 'sand;
@@ -141,6 +181,8 @@ impl<'a> FilterIterator<'a> {
 
 #[cfg(test)]
 mod tests {
+    use utils::owning_iterator::OwningIterator;
+
     use index::boolean_index::*;
     use index::boolean_index::tests::prepare_index;
 
@@ -151,8 +193,8 @@ mod tests {
         let qri = index.run_atom(0, &0);
         assert!(qri.peek() == qri.peek());
         let qri2 = index.run_nary_query(&BooleanOperator::And,
-                                   &vec![BooleanQuery::Atom(QueryAtom::new(0, 0)),
-                                         BooleanQuery::Atom(QueryAtom::new(0, 0))]);
+                                        &vec![BooleanQuery::Atom(QueryAtom::new(0, 0)),
+                                              BooleanQuery::Atom(QueryAtom::new(0, 0))]);
         assert!(qri2.peek() == qri2.peek());
 
     }
