@@ -1,0 +1,15 @@
+* TODO
+** [0/3] pre 0.1
+*** TODO Complete and usable QueryBuilder
+*** TODO Refactoring and Documentation
+**** TODO utils
+**** TODO index
+*** TODO Minimal Example
+
+** [0/3] post 0.1
+*** TODO improve entries.bin compression
+*** TODO improve vocab.bin compression
+*** TODO implement build compressed ram storage
+*** TODO allow non persistent use of fsstorage
+
+* ISSUES
