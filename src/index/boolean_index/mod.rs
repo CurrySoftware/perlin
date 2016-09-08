@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::collections::BTreeMap;
 use std::iter::Iterator;
 use std::fs::OpenOptions;
-use std::marker::PhantomData;
 use std::io::{Read, Write};
 
 use index::Index;
@@ -21,6 +20,7 @@ use utils::byte_code::{ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
 pub use index::boolean_index::query_builder::QueryBuilder;
+pub use index::boolean_index::index_builder::IndexBuilder;
 
 mod query_result_iterator;
 mod index_builder;
@@ -57,13 +57,7 @@ impl From<StorageError> for Error {
     }
 }
 
-/// Builds a `BooleanIndex`
-pub struct IndexBuilder<TTerm, TStorage> {
-    persistence: Option<PathBuf>,
-    _storage: PhantomData<TStorage>,
-    _term: PhantomData<TTerm>,
-}
-
+/// Implements the `Index` trait. Limited to boolean retrieval.
 pub struct BooleanIndex<TTerm: Ord> {
     document_count: usize,
     term_ids: BTreeMap<TTerm, u64>,

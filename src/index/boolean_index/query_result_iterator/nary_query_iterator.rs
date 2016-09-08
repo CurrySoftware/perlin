@@ -2,7 +2,6 @@ use std::cell::RefCell;
 
 use utils::owning_iterator::OwningIterator;
 
-use index::boolean_index::*;
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::*;

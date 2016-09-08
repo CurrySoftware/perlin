@@ -1,14 +1,20 @@
 use std::marker::PhantomData;
-use std::path::Path;
+use std::path::{PathBuf, Path};
 
 use utils::byte_code::{ByteEncodable, ByteDecodable};
 use utils::persistence::{Volatile, Persistent};
 
 use index::storage::Storage;
 
-use index::boolean_index::{Result, Error, IndexBuilder, BooleanIndex};
+use index::boolean_index::{Result, Error, BooleanIndex};
 use index::boolean_index::posting::Listing;
 
+/// Used to build `BooleanIndex`
+pub struct IndexBuilder<TTerm, TStorage> {
+    persistence: Option<PathBuf>,
+    _storage: PhantomData<TStorage>,
+    _term: PhantomData<TTerm>,
+}
 
 impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     where TTerm: Ord,
