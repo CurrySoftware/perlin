@@ -1,8 +1,10 @@
 * TODO
-** [0/3] pre 0.1
-*** TODO Complete and usable QueryBuilder
+** [1/5] pre 0.1
+*** DONE Complete and usable QueryBuilder
+    CLOSED: [2016-09-08 Thu 18:29]
 *** TODO Refactoring and Documentation
-**** TODO utils
+**** DONE utils
+     CLOSED: [2016-09-08 Thu 14:53]
 ***** DONE try_option
       CLOSED: [2016-09-08 Thu 13:35]
 ***** DONE compression
@@ -17,6 +19,8 @@
       CLOSED: [2016-09-08 Thu 13:59]
 **** TODO index
 *** TODO Minimal Example
+*** TODO Host Documentation
+*** TODO setup ci tool
 
 ** [0/3] post 0.1
 *** TODO improve entries.bin compression

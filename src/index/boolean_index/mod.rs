@@ -19,8 +19,13 @@ use utils::owning_iterator::ArcIter;
 use utils::byte_code::{ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
+pub use index::boolean_index::query_builder::QueryBuilder;
+
 mod query_result_iterator;
 mod index_builder;
+mod query_builder;
+
+
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
 const STATISTICS_FILENAME: &'static str = "statistics.bin";
