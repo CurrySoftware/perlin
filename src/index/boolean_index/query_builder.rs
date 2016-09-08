@@ -1,4 +1,4 @@
-use index::boolean_index::{QueryAtom, BooleanOperator, PositionalOperator, FilterOperator,
+use index::boolean_index::boolean_query::{QueryAtom, BooleanOperator, PositionalOperator, FilterOperator,
                            BooleanQuery};
 
 pub struct QueryBuilder<TTerm> {

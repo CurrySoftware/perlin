@@ -25,34 +25,34 @@ fn build_and_query_persistent_index() {
             .into_iter())
         .unwrap();
 
-    let pos_query = build_positional_query(PositionalOperator::InOrder, vec![10, 20].into_iter());
+    let pos_query = QueryBuilder::in_order(vec![Some(10), Some(20)]).build();
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![]);
 
-    let pos_query = build_positional_query(PositionalOperator::InOrder, vec![0, 7, 14].into_iter());
+    let pos_query = QueryBuilder::in_order(vec![Some(0), Some(7), Some(14)]).build();
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![1]);
 
-    let and_query = build_nary_query(BooleanOperator::And, vec![0, 6, 12].into_iter());
+    let and_query = QueryBuilder::and(QueryBuilder::atoms(vec![0, 6, 12])).build();
     assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(),
                vec![2, 3]);
 
-    let or_query = build_nary_query(BooleanOperator::Or, vec![0, 6, 12].into_iter());
+    let or_query = QueryBuilder::or(QueryBuilder::atoms(vec![0, 6, 12])).build();
     assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
                vec![0, 1, 2, 3]);
 
     let index =
         IndexBuilder::<usize, FsStorage<_>>::new().persist(folder.as_path()).load().unwrap();
 
-    let pos_query = build_positional_query(PositionalOperator::InOrder, vec![10, 20].into_iter());
+    let pos_query = QueryBuilder::in_order(vec![Some(10), Some(20)]).build();
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![]);
 
-    let pos_query = build_positional_query(PositionalOperator::InOrder, vec![0, 7, 14].into_iter());
+    let pos_query = QueryBuilder::in_order(vec![Some(0), Some(7), Some(14)]).build();
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![1]);
 
-    let and_query = build_nary_query(BooleanOperator::And, vec![0, 6, 12].into_iter());
+    let and_query = QueryBuilder::and(QueryBuilder::atoms(vec![0, 6, 12])).build();
     assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(),
                vec![2, 3]);
 
-    let or_query = build_nary_query(BooleanOperator::Or, vec![0, 6, 12].into_iter());
+    let or_query = QueryBuilder::or(QueryBuilder::atoms(vec![0, 6, 12])).build();
     assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
                vec![0, 1, 2, 3]);
 }
@@ -74,21 +74,17 @@ fn build_and_query_volatile_index() {
         .create(vec![doc1.into_iter(), doc2.into_iter(), doc3.into_iter()].into_iter())
         .unwrap();
 
-    let pos_query = build_positional_query(PositionalOperator::InOrder,
-                                           vec![Color::Red, Color::Blue].into_iter());
+    let pos_query = QueryBuilder::in_order(vec![Some(Color::Red), Some(Color::Blue)]).build();
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(),
                vec![0, 1]);
 
-    let pos_query = build_positional_query(PositionalOperator::InOrder,
-                                           vec![Color::Red, Color::Red, Color::Blue].into_iter());
+    let pos_query = QueryBuilder::in_order(vec![Some(Color::Red), Some(Color::Red), Some(Color::Blue)]).build();
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![0]);
 
-    let and_query = build_nary_query(BooleanOperator::And,
-                                     vec![Color::Green, Color::Blue].into_iter());
+    let and_query = QueryBuilder::and(QueryBuilder::atoms(vec![Color::Green, Color::Blue])).build();
     assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(), vec![1]);
 
-    let or_query = build_nary_query(BooleanOperator::Or,
-                                    vec![Color::Green, Color::Blue].into_iter());
+    let or_query = QueryBuilder::or(QueryBuilder::atoms(vec![Color::Green, Color::Blue])).build();
     assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
                vec![0, 1, 2]);
 }
