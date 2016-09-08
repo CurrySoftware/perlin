@@ -64,8 +64,7 @@ pub struct IndexBuilder<TTerm, TStorage> {
 
 
 // not intended for public use. Thus this wrapper module
-// TODO: Remove pub
-pub mod posting {
+mod posting {
     use utils::byte_code::{ByteDecodable, ByteEncodable};
     use utils::compression::*;
 
