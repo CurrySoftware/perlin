@@ -22,7 +22,7 @@ impl<TTerm> QueryBuilder<TTerm> {
 
 
     pub fn atoms(terms: Vec<TTerm>) -> Vec<Self> {
-        terms.into_iter().map(|t| QueryBuilder::atom(t)).collect::<Vec<_>>()
+        terms.into_iter().map(QueryBuilder::atom).collect::<Vec<_>>()
     }
 
 
@@ -30,7 +30,7 @@ impl<TTerm> QueryBuilder<TTerm> {
         QueryBuilder { query: BooleanQuery::Atom(QueryAtom::new(0, term)) }
     }
 
-    
+
     pub fn in_order(operands: Vec<Option<TTerm>>) -> Self {
         QueryBuilder {
             query: BooleanQuery::Positional(PositionalOperator::InOrder,
@@ -84,7 +84,8 @@ mod tests {
     #[test]
     fn not() {
         let index = prepare_index();
-        let query = QueryBuilder::and(QueryBuilder::atoms(vec![0, 5])).not(QueryBuilder::atom(9)).build();
+        let query =
+            QueryBuilder::and(QueryBuilder::atoms(vec![0, 5])).not(QueryBuilder::atom(9)).build();
         assert_eq!(index.execute_query(&query).collect::<Vec<_>>(), vec![2]);
     }
 
