@@ -1,12 +1,14 @@
-//! This module provides utility methods and structs for variable byte encoding
+//! This module currently provides utility methods and structs for variable byte codes as described in 
+//! http://nlp.stanford.edu/IR-book/html/htmledition/variable-byte-codes-1.html.
 //!
-//! Encode unsigned integers by using the `vbyte_encode` method
-//! Decode a bytestream by instatiating a `VByteDecoder` and using its iterator implementation
+//! Encode unsigned integers by using the `vbyte_encode` method.
+//!
+//! Decode a bytestream by instatiating a `VByteDecoder` and using its iterator implementation.
 //!
 //! #Example
 //!
 //! ```
-//! use perlin::utils::compression::*;
+//! use perlin::utils::compression::{vbyte_encode, VByteDecoder};
 //!
 //! let bytes = vbyte_encode(3);
 //! let three = VByteDecoder::new(bytes.into_iter()).next().unwrap();
@@ -14,7 +16,6 @@
 //! ```
 
 ///Encode an usigned integer as a variable number of bytes 
-///as described in the [IR-Book|http://nlp.stanford.edu/IR-book/html/htmledition/variable-byte-codes-1.html] 
 pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     let mut result = Vec::new();
     loop {

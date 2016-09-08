@@ -1,7 +1,14 @@
-/// Analyzes a string and returns a vector of terms
-/// Tokenizes at non-alphanumerical characters and turns
-/// the tokens to lowercase.
-/// Example: "hans. .PETER!" will be transformed into ["hans", "peter"]
+//! This module will provide the necessary utilities to handle language well in regard of Information Retrieval.
+//!
+//! It will contain methods for tokenization, stemming, normalization and so on.
+//!
+//! At the moment though, it only provides a very basic analyzer method.
+
+/// Analyzes a string and returns a vector of terms.
+/// Tokenizes at non-alphanumerical characters and turns the tokens to lowercase.
+///
+/// # Example
+/// "hans. .PETER!" will be transformed into ["hans", "peter"]
 pub fn basic_analyzer(input: &str) -> Vec<String> {
     input.split(|c: char| !c.is_alphanumeric())
         .filter(|token| !token.is_empty())

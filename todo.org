@@ -3,6 +3,18 @@
 *** TODO Complete and usable QueryBuilder
 *** TODO Refactoring and Documentation
 **** TODO utils
+***** DONE try_option
+      CLOSED: [2016-09-08 Thu 13:35]
+***** DONE compression
+      CLOSED: [2016-09-08 Thu 13:39]
+***** DONE owning_iterator
+      CLOSED: [2016-09-08 Thu 13:47]
+***** DONE byte_code
+      CLOSED: [2016-09-08 Thu 13:55]
+***** DONE persistence
+      CLOSED: [2016-09-08 Thu 13:57]
+***** DONE language
+      CLOSED: [2016-09-08 Thu 13:59]
 **** TODO index
 *** TODO Minimal Example
 
@@ -11,5 +23,5 @@
 *** TODO improve vocab.bin compression
 *** TODO implement build compressed ram storage
 *** TODO allow non persistent use of fsstorage
+*** TODO Custom Errors for utils::byte_code
 
-* ISSUES
