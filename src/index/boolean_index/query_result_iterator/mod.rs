@@ -11,7 +11,8 @@ pub mod nary_query_iterator;
 // 1. It is faster (no stack or heap allocation)
 // 2. It is lazy
 /// Wrapper around different query iterator types
-/// Used to be able to simply and elegantly use nested queries of different types
+/// Used to be able to simply and elegantly use nested queries of different
+/// types
 pub enum QueryResultIterator {
     Empty,
     Atom(usize, ArcIter<Posting>),
@@ -68,7 +69,8 @@ impl QueryResultIterator {
         self.next().map(|p| p.0)
     }
 
-    /// Used to be able to sort queries according to their estimated number of results
+    /// Used to be able to sort queries according to their estimated number of
+    /// results
     /// This can be used to optimize efficiency on intersecting queries
     fn estimate_length(&self) -> usize {
         match *self {

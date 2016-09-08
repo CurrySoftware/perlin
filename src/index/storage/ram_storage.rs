@@ -16,12 +16,11 @@ impl<T> Volatile for RamStorage<T> {
 }
 
 impl<T: Sync + Send> Storage<T> for RamStorage<T> {
-
     fn get(&self, id: u64) -> Result<Arc<T>> {
         self.data.get(&id).cloned().ok_or(StorageError::KeyNotFound)
     }
 
-    fn store(&mut self, id: u64, data: T) -> Result<()>{
+    fn store(&mut self, id: u64, data: T) -> Result<()> {
         self.data.insert(id, Arc::new(data));
         Ok(())
     }
@@ -34,7 +33,7 @@ mod tests {
 
     use utils::persistence::Volatile;
     use index::storage::Storage;
-    
+
     #[test]
     pub fn basic() {
         let posting1 = vec![(0, vec![0, 1, 2, 3, 4]), (1, vec![5])];
@@ -52,5 +51,5 @@ mod tests {
         let prov: RamStorage<usize> = RamStorage::new();
         assert!(prov.get(0).is_err());
     }
-    
+
 }

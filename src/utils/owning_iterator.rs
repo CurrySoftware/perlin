@@ -1,12 +1,17 @@
 //! This module provides the trait `OwningIterator`.
 //!
-//! An `OwningIterator`, as the name suggests, can both iterate over and own a collection.
+//! An `OwningIterator`, as the name suggests, can both iterate over and own a
+//! collection.
 //!
-//! The difference to for example `std::vec::IntoIter` is, that it returns references rather than values.
-//! This is achieved by changing the interface of the `next` function to include the lifetime of the `OwningIterator` and making it non mutable.
-//! Implementors of this trait need to either use interior mutability (e.g. `Cell` or `RefCell`) or rely themselves on `OwningIterator`s.
+//! The difference to for example `std::vec::IntoIter` is, that it returns
+//! references rather than values.
+//! This is achieved by changing the interface of the `next` function to
+//! include the lifetime of the `OwningIterator` and making it non mutable.
+//! Implementors of this trait need to either use interior mutability (e.g.
+//! `Cell` or `RefCell`) or rely themselves on `OwningIterator`s.
 //!
-//! `OwningIterator`s are used for example in `perlin::index::boolean_index::query_result_iterator::QueryResultIterator` .
+//! `OwningIterator`s are used for example in
+//! `perlin::index::boolean_index::query_result_iterator::QueryResultIterator` .
 
 use std::sync::Arc;
 use std::cell::Cell;
@@ -15,9 +20,10 @@ use std::cell::Cell;
 ///
 /// 1. Own a collection
 ///
-/// 2. Hand out references to it that have the same lifetime as the iterator itself
+/// 2. Hand out references to it that have the same lifetime as the iterator
+/// itself
 ///
-/// 3. And peek 
+/// 3. And peek
 pub trait OwningIterator<'a> {
     type Item;
     fn next(&'a self) -> Option<Self::Item>;
@@ -61,11 +67,11 @@ impl<'a, T: 'a> OwningIterator<'a> for ArcIter<T> {
 }
 
 
-impl<T> ArcIter<T>{
+impl<T> ArcIter<T> {
     pub fn new(data: Arc<Vec<T>>) -> Self {
         ArcIter {
             data: data,
-            pos: Cell::new(0)
+            pos: Cell::new(0),
         }
     }
 }

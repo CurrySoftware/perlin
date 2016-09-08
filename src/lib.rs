@@ -24,8 +24,9 @@
 //! use perlin::index::boolean_index::IndexBuilder;
 //!
 //! //Use `IndexBuilder` to construct a new Index and add documents to it.
-//! let index = IndexBuilder::<_, RamStorage<_>>::new().create(vec![(0..10), (0..15), (10..34)].into_iter());
-//! 
+//! let index = IndexBuilder::<_, RamStorage<_>>::new().create(vec![(0..10),
+//! (0..15), (10..34)].into_iter());
+//!
 //! ```
 //!
 

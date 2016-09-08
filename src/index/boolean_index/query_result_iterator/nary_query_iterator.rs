@@ -17,11 +17,11 @@ pub struct NAryQueryIterator {
 impl<'a> OwningIterator<'a> for NAryQueryIterator {
     type Item = &'a Posting;
 
-    
+
     fn next(&'a self) -> Option<Self::Item> {
         let mut peeked_value = self.peeked_value.borrow_mut();
         if peeked_value.is_some() {
-            return unsafe { peeked_value.take().unwrap().map(|p| & *p) }
+            return unsafe { peeked_value.take().unwrap().map(|p| &*p) };
         }
         match self.bool_operator {
             Some(BooleanOperator::And) => self.next_and(),
@@ -41,19 +41,20 @@ impl<'a> OwningIterator<'a> for NAryQueryIterator {
         let mut peeked_value = self.peeked_value.borrow_mut();
         if peeked_value.is_none() {
             *peeked_value = Some((match self.bool_operator {
-                Some(BooleanOperator::And) => self.next_and(),
-                Some(BooleanOperator::Or) => self.next_or(),
-                None => {
-                    match self.pos_operator {
-                        Some(PositionalOperator::InOrder) => self.next_inorder(),
-                        None => {
-                            unreachable!(false);
+                    Some(BooleanOperator::And) => self.next_and(),
+                    Some(BooleanOperator::Or) => self.next_or(),
+                    None => {
+                        match self.pos_operator {
+                            Some(PositionalOperator::InOrder) => self.next_inorder(),
+                            None => {
+                                unreachable!(false);
+                            }
                         }
                     }
-                }
-            }).map(|p| p as *const Posting))
+                })
+                .map(|p| p as *const Posting))
         }
-        unsafe { peeked_value.unwrap().map(|p| & *p) }
+        unsafe { peeked_value.unwrap().map(|p| &*p) }
     }
 
     fn len(&self) -> usize {
@@ -66,8 +67,6 @@ impl<'a> OwningIterator<'a> for NAryQueryIterator {
 }
 
 impl NAryQueryIterator {
-
-    
     pub fn new_positional(operator: PositionalOperator,
                           operands: Vec<QueryResultIterator>)
                           -> NAryQueryIterator {
@@ -82,9 +81,7 @@ impl NAryQueryIterator {
     }
 
 
-    pub fn new(operator: BooleanOperator,
-               operands: Vec<QueryResultIterator>)
-               -> NAryQueryIterator {
+    pub fn new(operator: BooleanOperator, operands: Vec<QueryResultIterator>) -> NAryQueryIterator {
         let mut result = NAryQueryIterator {
             pos_operator: None,
             bool_operator: Some(operator),
@@ -186,8 +183,10 @@ impl NAryQueryIterator {
         if let Some(min) = min_value {
             let mut tmp = None;
             let mut i = 0;
-            // Loop over all operands. Advance the ones which currently yield that minimal value
-            // Throw the ones out which are empty. Then return the minimal value as reference
+            // Loop over all operands. Advance the ones which currently yield that minimal
+            // value
+            // Throw the ones out which are empty. Then return the minimal value as
+            // reference
             while i < self.operands.len() {
                 if let Some(val) = self.operands[i].peek() {
                     if val.0 == min {
@@ -239,7 +238,6 @@ impl NAryQueryIterator {
             return focus;
         }
     }
-
 }
 
 
@@ -261,7 +259,8 @@ pub fn positional_intersect(lhs: &[u32], rhs: &[u32], bounds: (i64, i64)) -> Vec
     // 1. if we "go down" the result of the substraction is going to grow
     // 2. if we "go right" the result of the substraction is going to shrink
 
-    // This algorithm walks through this table. If a difference is to great it will "go right"
+    // This algorithm walks through this table. If a difference is to great it will
+    // "go right"
     // Otherwise it will go down.
     // If a difference is inside the bounds it will check
     // to the left and to the right for adjacent matches

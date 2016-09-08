@@ -15,7 +15,7 @@ use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::{Listing, Posting};
 
 use utils::compression::{vbyte_encode, VByteDecoder};
-use utils::owning_iterator::{ArcIter};
+use utils::owning_iterator::ArcIter;
 use utils::byte_code::{ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
@@ -34,7 +34,7 @@ pub enum Error {
     EmptyPersistPath,
     InvalidFileContent,
     IO(io::Error),
-    Storage(StorageError)
+    Storage(StorageError),
 }
 
 impl From<io::Error> for Error {
@@ -193,7 +193,7 @@ pub struct BooleanIndex<TTerm: Ord> {
 // Index implementation
 impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
-    type QueryResult = Box<Iterator<Item=u64>>;
+    type QueryResult = Box<Iterator<Item = u64>>;
 
     /// Executes a `BooleanQuery` and returns a boxed iterator over the results
     /// The query execution is eager and returns the ids of the documents
@@ -217,7 +217,8 @@ impl<TTerm> BooleanIndex<TTerm>
         BooleanIndex::from_parts(Box::new(storage), vocab, doc_count)
     }
 
-    /// Creates a new `BooleanIndex` instance which is written to the passed path
+    /// Creates a new `BooleanIndex` instance which is written to the passed
+    /// path
     /// Not intended for public use. Please use the `IndexBuilder` instead
     fn new_persistent<TDocsIterator, TDocIterator, TStorage>(storage: TStorage,
                                                              documents: TDocsIterator,
@@ -317,7 +318,8 @@ impl<TTerm> BooleanIndex<TTerm>
     }
 
     fn load_statistics(path: &Path) -> Result<usize> {
-        let mut statistics_file = try!(OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)));
+        let mut statistics_file =
+            try!(OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)));
         let mut bytes = Vec::new();
         try!(statistics_file.read_to_end(&mut bytes));
         if let Some(doc_count) = VByteDecoder::new(bytes.into_iter()).next() {
@@ -364,7 +366,9 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     /// Indexes a document collection for later retrieval
     /// Returns the number of documents indexed
     // First Shot. TODO: Needs improvement!
-    fn index_documents<TDocsIterator, TDocIterator>(&mut self, documents: TDocsIterator) -> Result<(usize)>
+    fn index_documents<TDocsIterator, TDocIterator>(&mut self,
+                                                    documents: TDocsIterator)
+                                                    -> Result<(usize)>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {

@@ -1,9 +1,11 @@
-//! This module currently provides utility methods and structs for variable byte codes as described in 
+//! This module currently provides utility methods and structs for variable
+//! byte codes as described in
 //! http://nlp.stanford.edu/IR-book/html/htmledition/variable-byte-codes-1.html.
 //!
 //! Encode unsigned integers by using the `vbyte_encode` method.
 //!
-//! Decode a bytestream by instatiating a `VByteDecoder` and using its iterator implementation.
+//! Decode a bytestream by instatiating a `VByteDecoder` and using its iterator
+//! implementation.
 //!
 //! #Example
 //!
@@ -15,7 +17,7 @@
 //! assert_eq!(3, three);
 //! ```
 
-///Encode an usigned integer as a variable number of bytes 
+/// Encode an usigned integer as a variable number of bytes
 pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     let mut result = Vec::new();
     loop {
@@ -31,33 +33,34 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     result
 }
 
-//TODO: VByteDecoder to take a Iterator<Item=&u8> not Iterator<Item=u8>
-///Iterator that decodes a bytestream to unsigned integers
+// TODO: VByteDecoder to take a Iterator<Item=&u8> not Iterator<Item=u8>
+/// Iterator that decodes a bytestream to unsigned integers
 pub struct VByteDecoder<'a> {
-    bytes: Box<Iterator<Item=u8> + 'a>
+    bytes: Box<Iterator<Item = u8> + 'a>,
 }
 
 impl<'a> VByteDecoder<'a> {
-
-    ///Create a new VByteDecoder by passing a bytestream
-    pub fn new<T: Iterator<Item=u8> + 'a>(bytes: T) -> Self {
+    /// Create a new VByteDecoder by passing a bytestream
+    pub fn new<T: Iterator<Item = u8> + 'a>(bytes: T) -> Self {
         VByteDecoder { bytes: Box::new(bytes) }
     }
 
-    ///Sometimes it is convenient to look at the original bytestream itself 
-    ///(e.g. when not only vbyte encoded integers are in the bytestream)
-    ///This method provides access to the underlying bytestream in form of a mutable borrow 
-    pub fn underlying_iterator(&mut self) -> &mut Iterator<Item=u8> {
-       &mut self.bytes
+    /// Sometimes it is convenient to look at the original bytestream itself
+    /// (e.g. when not only vbyte encoded integers are in the bytestream)
+    /// This method provides access to the underlying bytestream in form of a
+    /// mutable borrow
+    pub fn underlying_iterator(&mut self) -> &mut Iterator<Item = u8> {
+        &mut self.bytes
     }
 }
 
 impl<'a> Iterator for VByteDecoder<'a> {
     type Item = usize;
 
-    ///Returns the next unsigned integer which is encoded in the underlying bytestream
-    ///May iterate the underlying bytestream an arbitrary number of times
-    ///Returns None when the underlying bytream returns None
+    /// Returns the next unsigned integer which is encoded in the underlying
+    /// bytestream
+    /// May iterate the underlying bytestream an arbitrary number of times
+    /// Returns None when the underlying bytream returns None
     fn next(&mut self) -> Option<Self::Item> {
 
         let mut result: usize = 0;

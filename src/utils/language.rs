@@ -1,11 +1,13 @@
-//! This module will provide the necessary utilities to handle language well in regard of Information Retrieval.
+//! This module will provide the necessary utilities to handle language well in
+//! regard of Information Retrieval.
 //!
 //! It will contain methods for tokenization, stemming, normalization and so on.
 //!
 //! At the moment though, it only provides a very basic analyzer method.
 
 /// Analyzes a string and returns a vector of terms.
-/// Tokenizes at non-alphanumerical characters and turns the tokens to lowercase.
+/// Tokenizes at non-alphanumerical characters and turns the tokens to
+/// lowercase.
 ///
 /// # Example
 /// "hans. .PETER!" will be transformed into ["hans", "peter"]
@@ -36,5 +38,5 @@ mod tests {
         assert_eq!(basic_analyzer("!I!wouldn't: mind :SOme? ?BoiLed%Eggs<()>pLEAse"),
                    vec!["i", "wouldn", "t", "mind", "some", "boiled", "eggs", "please"]);
     }
-    
+
 }

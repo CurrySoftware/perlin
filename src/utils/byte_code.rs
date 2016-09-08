@@ -1,18 +1,25 @@
-//! This module provides trait definitions for encoding as bytes and decoding from bytes.
-//! These traits are necessary to be able to fully persist an index on a filesystem.
-//! The module also provides implementations for commonly used types (for now only String and usize).
+//! This module provides trait definitions for encoding as bytes and decoding
+//! from bytes.
+//! These traits are necessary to be able to fully persist an index on a
+//! filesystem.
+//! The module also provides implementations for commonly used types (for now
+//! only String and usize).
 
 use std::result::Result;
 use utils::compression::{vbyte_encode, VByteDecoder};
 
-/// Defines a method that allows an object to be encoded as a variable number of bytes
+/// Defines a method that allows an object to be encoded as a variable number
+/// of bytes
 pub trait ByteEncodable {
     fn encode(&self) -> Vec<u8>;
 }
 
-/// Defines a method that allows an object to be decoded from a variable number of bytes
-pub trait ByteDecodable where Self: Sized {
-    fn decode<TIterator: Iterator<Item=u8>>(bytes: TIterator) -> Result<Self, String>;
+/// Defines a method that allows an object to be decoded from a variable number
+/// of bytes
+pub trait ByteDecodable
+    where Self: Sized
+{
+    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String>;
 }
 
 
@@ -49,4 +56,4 @@ impl ByteDecodable for usize {
     }
 }
 
-//TODO: Custom Decode, Encode Errors
+// TODO: Custom Decode, Encode Errors

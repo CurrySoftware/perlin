@@ -14,7 +14,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     where TTerm: Ord,
           TStorage: Storage<Listing>
 {
-    ///Creates a new instance of `IndexBuilder`
+    /// Creates a new instance of `IndexBuilder`
     pub fn new() -> Self {
         IndexBuilder {
             persistence: None,
@@ -28,12 +28,11 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     where TTerm: Ord,
           TStorage: Storage<Listing> + Volatile + 'static
 {
-    ///Creates a volatile instance of `BooleanIndex`
-    ///At the moment `BooleanIndex` does not support adding or removing documents from the index.
-    ///So all index which should be indexed need to be passed to this method
-    pub fn create<TCollection, TDoc>(&self,
-                                     documents: TCollection)
-                                     -> Result<BooleanIndex<TTerm>>
+    /// Creates a volatile instance of `BooleanIndex`
+    /// At the moment `BooleanIndex` does not support adding or removing
+    /// documents from the index.
+    /// So all index which should be indexed need to be passed to this method
+    pub fn create<TCollection, TDoc>(&self, documents: TCollection) -> Result<BooleanIndex<TTerm>>
         where TCollection: Iterator<Item = TDoc>,
               TDoc: Iterator<Item = TTerm>
     {
@@ -45,20 +44,23 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     where TTerm: Ord + ByteDecodable + ByteEncodable,
           TStorage: Storage<Listing> + Persistent + 'static
 {
-    ///Enables a persistent index at the passed path.
-    ///`at` must be either a prefilled directory if the `load` method is to be called
-    ///or an empty directory if a new index is created with `create_persistence`    
+    /// Enables a persistent index at the passed path.
+    /// `at` must be either a prefilled directory if the `load` method is to be
+    /// called
+    /// or an empty directory if a new index is created with
+    /// `create_persistence`
     pub fn persist(mut self, at: &Path) -> Self {
         self.persistence = Some(at.to_path_buf());
         self
     }
 
-    ///A new index is created and saved in the directory passed to the `persist` method
-    ///Returns a `BuilderError` if `persist` was not called or if directory is not empty
-    pub fn create_persistent<TDocsIterator, TDocIterator>
-        (&self,
-         documents: TDocsIterator)
-         -> Result<BooleanIndex<TTerm>>
+    /// A new index is created and saved in the directory passed to the
+    /// `persist` method
+    /// Returns a `BuilderError` if `persist` was not called or if directory is
+    /// not empty
+    pub fn create_persistent<TDocsIterator, TDocIterator>(&self,
+                                                          documents: TDocsIterator)
+                                                          -> Result<BooleanIndex<TTerm>>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
@@ -69,8 +71,9 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
         }
     }
 
-    ///Loads an index from a previously filled directory.
-    ///Returns a `BuilderError` if directory is empty or does not contain valid data 
+    /// Loads an index from a previously filled directory.
+    /// Returns a `BuilderError` if directory is empty or does not contain
+    /// valid data
     pub fn load(&self) -> Result<BooleanIndex<TTerm>> {
         if let Some(ref path) = self.persistence {
             BooleanIndex::load::<TStorage>(path)
