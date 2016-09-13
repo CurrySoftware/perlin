@@ -14,6 +14,8 @@ use index::storage::*;
 const ENTRIES_FILENAME: &'static str = "entries.bin";
 const DATA_FILENAME: &'static str = "data.bin";
 
+
+/// Writes datastructures to a filesystem. Compressed and retrievable.
 pub struct FsStorage<TItem> {
     // Stores for every id the offset in the file and the length
     entries: BTreeMap<u64, (u64 /* offset */, u32 /* length */)>,

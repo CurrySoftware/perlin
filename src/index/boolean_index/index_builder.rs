@@ -9,7 +9,7 @@ use index::storage::Storage;
 use index::boolean_index::{Result, Error, BooleanIndex};
 use index::boolean_index::posting::Listing;
 
-/// Used to build `BooleanIndex`
+/// `IndexBuilder` is used to build `BooleanIndex` instances
 pub struct IndexBuilder<TTerm, TStorage> {
     persistence: Option<PathBuf>,
     _storage: PhantomData<TStorage>,

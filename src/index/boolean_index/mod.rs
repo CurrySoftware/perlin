@@ -1,4 +1,6 @@
-
+//! This module provides the implementation for boolean information retrieval
+//! Use `IndexBuilder` to build indices
+//! Use `QueryBuilder` to build queries that run on these indices
 use std;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -34,14 +36,22 @@ const VOCAB_FILENAME: &'static str = "vocabulary.bin";
 const STATISTICS_FILENAME: &'static str = "statistics.bin";
 const CHUNKSIZE: usize = 1_000_000;
 
+/// A specialized `Result` type for operations related to `BooleanIndex`
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
+/// Error kinds that can occur during operations related to `BooleanIndex`
 pub enum Error {
+    /// A persistent `BooleanIndex` should be build but no path where to persist it was specified
+    /// Call the `IndexBuilder::persist()`
     PersistPathNotSpecified,
+    /// A `BooleanIndex` should be loaded from a directory but the specified directory is empty
     EmptyPersistPath,
-    InvalidFileContent,
+    /// Tried to load a `BooleanIndex` from a corrupted file
+    CorruptedIndexFile,
+    /// An IO-Error occured
     IO(io::Error),
+    /// A Storage-Error occured
     Storage(StorageError),
 }
 
@@ -72,7 +82,6 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
 
     /// Executes a `BooleanQuery` and returns a boxed iterator over the results
     /// The query execution is eager and returns the ids of the documents
-    /// TODO: Can we find a lazy solution for that?
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         Box::new(self.run_query(query))
     }
@@ -200,7 +209,7 @@ impl<TTerm> BooleanIndex<TTerm>
         if let Some(doc_count) = VByteDecoder::new(bytes.into_iter()).next() {
             Ok(doc_count)
         } else {
-            Err(Error::InvalidFileContent)
+            Err(Error::CorruptedIndexFile)
         }
     }
 }
@@ -373,8 +382,8 @@ mod tests {
     use index::boolean_index::boolean_query::*;
 
     use index::Index;
-    use index::storage::ram_storage::RamStorage;
-    use index::storage::fs_storage::FsStorage;
+    use index::storage::RamStorage;
+    use index::storage::FsStorage;
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {

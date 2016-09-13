@@ -21,7 +21,7 @@
 //! ## Build index and run queries
 //! ```rust
 //! use perlin::index::Index;
-//! use perlin::index::storage::ram_storage::RamStorage;
+//! use perlin::index::storage::RamStorage;
 //! use perlin::index::boolean_index::{QueryBuilder, IndexBuilder};
 //!
 //! //Use `IndexBuilder` to construct a new Index and add documents to it.
@@ -32,17 +32,17 @@
 //! //Simple query for the number 4
 //! let simple_query = QueryBuilder::atom(4).build();
 //!
-//! //When executing queries the index does not evaluate return all results at once.
-//! //Rather it runs lazily and returns an iterator over the resulting document ids.
+//! //When executing queries the index does not evaluate return all results at
+//! //once.
+//! //Rather it runs lazily and returns an iterator over the resulting document
+//! //ids.
 //! for id in index.execute_query(&simple_query) {
 //!    println!("{}", id); //Will print 0 and 1
 //! }
-//! 
+//!
 //! ```
 //!
-
-#[deny(missing_docs, warnings)]
-
+#![deny(missing_docs, warnings)]
 
 #[macro_use]
 mod utils;

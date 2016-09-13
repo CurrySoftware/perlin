@@ -1,16 +1,36 @@
+//! This module contains the trait `Storage` and implementations of it.
+//!
+//! `Storage`s are used by implementators of the `Index` trait to store and
+//! retrieve their sometimes complex and huge datastructures
+//! For small collections, a `RamStorage` will suffice. If the collections are
+//! larger than the size of RAM though, a different solution is needed.
+//!
+//! To enable flexibility and perhaps even use case specific user
+//! implementations, this trait serves as an interface for Indices to be use.
+//! Current implementations are `RamStorage` for smaller collections that fit
+//! completely in RAM and `FsStorage` which writes and reads data from disk and
+//! thus allows the handling of much larger collections.
 use std;
 use std::error::Error;
 use std::sync::Arc;
 
-pub mod fs_storage;
-pub mod ram_storage;
+pub use index::storage::fs_storage::FsStorage;
+pub use index::storage::ram_storage::RamStorage;
 
+mod fs_storage;
+mod ram_storage;
+
+/// Aliases Result<T, StorageError> to Result<T> for readability and maintainability
 pub type Result<T> = std::result::Result<T, StorageError>;
 
 #[derive(Debug)]
+/// Errors that can occur during retrieval or storage of a value
 pub enum StorageError {
+    /// The key which should be retrieved could not be found
     KeyNotFound,
+    /// Error occured during read operation
     ReadError(Option<std::io::Error>),
+    /// Error occured during write operation
     WriteError(Option<std::io::Error>),
 }
 

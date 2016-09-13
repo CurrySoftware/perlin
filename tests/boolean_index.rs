@@ -2,8 +2,8 @@ extern crate perlin;
 
 use perlin::index::Index;
 use perlin::index::boolean_index::*;
-use perlin::index::storage::ram_storage::RamStorage;
-use perlin::index::storage::fs_storage::FsStorage;
+use perlin::index::storage::RamStorage;
+use perlin::index::storage::FsStorage;
 
 #[test]
 fn build_and_query_persistent_index() {
