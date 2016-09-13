@@ -8,9 +8,8 @@
 //! there are different implementations of storing them (e.g. on disk, in ram).
 //! These storage implementations can be found in `storage`.
 //!
-//! Please refer to [IndexBuilder] for usage details.
+//! Please refer to [`IndexBuilder`](boolean_index/struct.IndexBuilder.html) for usage details.
 //!
-//! [IndexBuilder]: boolean_index/struct.IndexBuilder.html
 
 
 pub mod storage;

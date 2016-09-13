@@ -20,7 +20,7 @@ pub use index::storage::ram_storage::RamStorage;
 mod fs_storage;
 mod ram_storage;
 
-/// Aliases Result<T, StorageError> to Result<T> for readability and maintainability
+/// Aliases Result<T, `StorageError`> to Result<T> for readability and maintainability
 pub type Result<T> = std::result::Result<T, StorageError>;
 
 #[derive(Debug)]
