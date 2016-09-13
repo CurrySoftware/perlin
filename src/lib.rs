@@ -41,9 +41,9 @@
 //! ```
 //!
 
-//#[deny(missing_docs, warnings)]
+#[deny(missing_docs, warnings)]
 
 
 #[macro_use]
-pub mod utils;
+mod utils;
 pub mod index;
