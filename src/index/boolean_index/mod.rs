@@ -80,8 +80,8 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64>>;
 
-    /// Executes a `BooleanQuery` and returns a boxed iterator over the results
-    /// The query execution is eager and returns the ids of the documents
+    /// Executes a `BooleanQuery` and returns a boxed iterator over the resulting document ids.
+    /// The query execution is lazy.
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         Box::new(self.run_query(query))
     }
