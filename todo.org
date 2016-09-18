@@ -25,7 +25,6 @@
 *** TODO Host Documentation
 *** TODO setup ci tool
 
-
 ** [0/3] post 0.1
 *** TODO improve entries.bin compression
 *** TODO improve vocab.bin compression
