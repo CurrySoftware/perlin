@@ -7,13 +7,12 @@
 //! Let's get going!
 //!
 //! Setting:
-//! We have ten documents in the collection folder.
-//! Our mission is to index these ten documents and then provide simple search
+//! We have some documents in the collection folder.
+//! Our mission is to index these documents and then provide simple search
 //! interface to the user via commandline
 //!
 
 extern crate walkdir;
-extern crate time;
 extern crate perlin;
 
 use std::path::Path;
@@ -23,7 +22,6 @@ use std::fs::File;
 use std::ffi::OsString;
 
 use walkdir::WalkDir;
-use time::PreciseTime;
 
 use perlin::index::storage::RamStorage;
 use perlin::index::Index;
@@ -55,20 +53,23 @@ fn main() {
     // What we want though is a Iterator<Item=Iterator<Item=String>>
     // Lets use the basic_analyzer() Method to turn each document into a Vector of terms
     // Then lets build iterators from that
-        .create(collection.clone().into_iter().map(|doc| basic_analyzer(doc.as_str()).into_iter())).unwrap();
+        .create(collection.clone().into_iter().map(|doc| basic_analyzer(doc.as_str()).into_iter()))
+        .unwrap();
     // This approach may seem a bit verbose but it allows to sequentially index
     // documents which would enable indexing collections that dont fit into RAM
 
 
     // So now we have our index. Lets ask the user for a query
-    println!("{} documents indexed. Ready to run your query. Type '?' for help!", collection.len());
+    println!("{} documents indexed. Ready to run your query. Type '?' for help!",
+             collection.len());
     let mut input = String::new();
     while let Ok(_) = stdin().read_line(&mut input) {
-        {let trimmed = input.trim();
-        match trimmed {
-            "?" => print_cli_usage(),
-            _ => handle_input(&trimmed, &index, &collection)
-        }
+        {
+            let trimmed = input.trim();
+            match trimmed {
+                "?" => print_cli_usage(),
+                _ => handle_input(&trimmed, &index, &collection),
+            }
         }
         input.clear();
     }
@@ -80,16 +81,19 @@ fn handle_input(input: &str, index: &BooleanIndex<String>, docs: &Vec<String>) {
     // Run the query through the same analyzer as the documents
     // Then build an AND-Query from it
     let query = QueryBuilder::and(QueryBuilder::atoms(basic_analyzer(input))).build();
-    // Retrieve the result. The index returns an iterator over the matching document-IDs
-    // The query-execution process is lazy. Keep that in mind when working with huge collections.
-    // It might help
-    let start = PreciseTime::now();
+    // The exercise for the reader is now to build a fully featured query parser
+    // that supports phrase queries and filters :)
+
+    // Retrieve the result. The index returns an iterator over the matching
+    // document-IDs
+    // The query-execution process is lazy. Keep that in mind when working with
+    // huge collections. For our small collection it is neglectable though. So lets
+    // just collect into Vec
     let query_result = index.execute_query(&query).collect::<Vec<_>>();
-    let end = PreciseTime::now();
-    println!("{} documents found in {}µs:", query_result.len(), start.to(end).num_microseconds().unwrap_or(0));
+    println!("{} documents found:", query_result.len());
     for i in query_result {
         print!("{}:\t{}", i, docs[i as usize]);
-    }    
+    }
 }
 
 fn print_cli_usage() {
@@ -98,7 +102,8 @@ fn print_cli_usage() {
 
 fn print_usage() {
     println!("Usage: text-retrieval path/to/collection/folder");
-    println!("When running with cargo: cargo build --example text-retrieval examples/text-retrieval/collection");
+    println!("When running with cargo: cargo build --example text-retrieval \
+              examples/text-retrieval/collection");
 }
 
 fn load_collection(path: &Path) -> Vec<String> {
