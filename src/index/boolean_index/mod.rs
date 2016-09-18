@@ -249,7 +249,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
     /// Indexes a document collection for later retrieval
     /// Returns the number of documents indexed
-    // First Shot. TODO: Needs improvement!
+    // First Shot. TODO: Needs serious improvement!
     fn index_documents<TDocsIterator, TDocIterator>(&mut self,
                                                     documents: TDocsIterator)
                                                     -> Result<(usize)>
@@ -257,7 +257,6 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
               TDocIterator: Iterator<Item = TTerm>
     {
         let mut inv_index: BTreeMap<u64, Vec<Posting>> = BTreeMap::new();
-        let mut result = Vec::with_capacity(10);
         // For every document in the collection
         for document in documents {
             // Determine its id. consecutively numbered
@@ -295,9 +294,8 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                 inv_index.insert(term_id, vec![(new_doc_id, vec![term_position as u32])]);
             }
             self.document_count += 1;
-            result.push(new_doc_id);
         }
-
+        
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index {

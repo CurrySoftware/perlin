@@ -1,5 +1,5 @@
 * TODO
-** [2/6] pre 0.1
+** [4/6] pre 0.1
 *** DONE Complete and usable QueryBuilder
     CLOSED: [2016-09-08 Thu 18:29]
 *** DONE Refactoring and Documentation
@@ -20,15 +20,18 @@
       CLOSED: [2016-09-08 Thu 13:59]
 **** DONE index
      CLOSED: [2016-09-13 Tue 12:40]
-*** TODO Minimal Example
-*** TODO Fix Benches
+*** DONE Minimal Example
+    CLOSED: [2016-09-18 Sun 11:53]
+*** DONE Fix Benches
+    CLOSED: [2016-09-18 Sun 11:54]
 *** TODO Host Documentation
 *** TODO setup ci tool
 
-** [0/3] post 0.1
+** [0/5] post 0.1
 *** TODO improve entries.bin compression
 *** TODO improve vocab.bin compression
-*** TODO implement build compressed ram storage
+*** TODO implement compressed presistent ram storage
 *** TODO allow non persistent use of fsstorage
 *** TODO Custom Errors for utils::byte_code
+*** TODO improve indexing
 

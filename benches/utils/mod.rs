@@ -1,38 +1,12 @@
-use perlin::index::{Index, PersistentIndex};
-use perlin::index::boolean_index::BooleanIndex;
-use perlin::index::storage::fs_storage::FsStorage;
-use std::fmt::Debug;
-use std::env;
-use std::path::Path;
-use std::fs::{create_dir_all, File};
+use perlin::index::boolean_index::{IndexBuilder, BooleanIndex};
+use perlin::index::storage::RamStorage;
 use rand;
 
 pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usize> {
-    let mut tmp_dir = env::temp_dir();
-    tmp_dir.push(&format!("bench_index_{}_{}.bin", documents, document_size));
-
-    if tmp_dir.exists() {
-        let result = BooleanIndex::read_from(&mut File::open(tmp_dir.as_path()).unwrap()).unwrap();
-        result
-    } else {
-        let rng = ZipfGenerator::new(voc_size(20, 0.5, documents * document_size));
-        assert!(create_dir_all(Path::new(&format!("/tmp/fs_{}{}", documents, document_size)))
-            .is_ok());
-        let mut index =
-            BooleanIndex::new(Box::new(FsStorage::new(Path::new(&format!("/tmp/fs_{}{}",
-                                                                          documents,
-                                                                          document_size)))));
-        let mut docs = Vec::with_capacity(documents);
-        for i in 0..documents {
-            if i % 1000 == 0 {
-                println!("{}/{} documents", i, documents);
-            }
-            docs.push(rng.take(document_size));
-        }
-        index.index_documents(docs);
-        index.write_to(&mut File::create(tmp_dir.as_path()).unwrap()).unwrap();
-        index
-    }
+    let rng = ZipfGenerator::new(voc_size(45, 0.5, documents*document_size));
+    let index = IndexBuilder::<_, RamStorage<_>>::new()
+        .create((0..documents).map(|_| rng.take(document_size)));
+    index.unwrap()
 }
 
 // Implementation of Heaps' Law

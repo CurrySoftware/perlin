@@ -1,3 +1,5 @@
+//These benchmarks should currently not be considered complete, extensive or significant.
+//Also indexing is currently too slow. So using them is not really fun.
 #![feature(test)]
 extern crate rand;
 extern crate test;
@@ -9,69 +11,59 @@ mod utils;
 
 use utils::*;
 
-use perlin::index::boolean_index::*;
+use perlin::index::boolean_index::BooleanIndex;
 
 lazy_static!{
-    pub static ref INDICES: [BooleanIndex<usize>; 7] = [
-        prepare_index(10, 10),      //100
-        prepare_index(100, 100),    //10.000
-        prepare_index(1000, 100),   //100.000
-        prepare_index(10000, 100),  //1.000.000
-        prepare_index(100000, 100), //10.000.000
-        prepare_index(10000, 1000), //10.000.000
-        prepare_index(10000, 10000),//100.000.000
+    pub static ref INDICES: [BooleanIndex<usize>; 3] = [
+        prepare_index(1_000, 500), //1.000 documents with 500 terms a 8bytes = 4MB
+        prepare_index(10_000, 500), //10.000 documents with 500 terms a 8bytes = 40MB
+        prepare_index(1_000, 5000), //1.000 documents with 5000 terms a 8bytes = 40MB
     ];
 }
 
 macro_rules! bench {
     ($query:expr) =>
     {
+
         #[bench]
-        fn i_10_10(b: &mut Bencher) {
+        fn typical_first_ten(b: &mut Bencher) {
             b.iter(||
-                INDICES[0].execute_query($query).count()
+                black_box(INDICES[0].execute_query($query).take(10).count())
             );
         }
 
         #[bench]
-        fn i_100_100(b: &mut Bencher) {
+        fn large_collection_first_ten(b: &mut Bencher) {
             b.iter(||
-                INDICES[1].execute_query($query).count()
+                black_box(INDICES[1].execute_query($query).take(10).count())
             );
         }
 
         #[bench]
-        fn i_1000_100(b: &mut Bencher) {
+        fn large_docs_first_ten(b: &mut Bencher) {
             b.iter(||
-                INDICES[2].execute_query($query).count()
+                black_box(INDICES[2].execute_query($query).take(10).count())
             );
         }
 
         #[bench]
-        fn i_10000_100(b: &mut Bencher) {
+        fn typical(b: &mut Bencher) {
             b.iter(||
-                INDICES[3].execute_query($query).count()
+                black_box(INDICES[0].execute_query($query).count())
             );
         }
 
         #[bench]
-        fn i_100000_100(b: &mut Bencher) {
+        fn large_collection(b: &mut Bencher) {
             b.iter(||
-                INDICES[4].execute_query($query).count()
+                black_box(INDICES[1].execute_query($query).count())
             );
         }
 
         #[bench]
-        fn i_10000_1000(b: &mut Bencher) {
+        fn large_docs(b: &mut Bencher) {
             b.iter(||
-                INDICES[5].execute_query($query).count()
-            );
-        }
-
-        #[bench]
-        fn i_10000_10000(b: &mut Bencher) {
-            b.iter(||
-                INDICES[6].execute_query($query).count()
+                black_box(INDICES[2].execute_query($query).count())
             );
         }
     }
@@ -84,26 +76,13 @@ macro_rules! build_bench {
             use test::Bencher;
             use perlin::index::boolean_index::*;
             use perlin::index::Index;
+            use test::black_box;
             bench!{$query}
-            
         }
 
     )
 
 }
 
-build_bench!(atom_frequent, &BooleanQuery::Atom(QueryAtom::new(0, 4)));
-build_bench!(atom_seldom, &BooleanQuery::Atom(QueryAtom::new(0, 10000)));
-build_bench!(and_freq_freq, &BooleanQuery::NAry(BooleanOperator::And,
-                                                vec![BooleanQuery::Atom(QueryAtom::new(0, 10)),
-                                                     BooleanQuery::Atom(QueryAtom::new(0, 15))]                                                ));
-build_bench!(nested_and, &BooleanQuery::NAry(BooleanOperator::And,
-                                             vec![BooleanQuery::NAry(BooleanOperator::And,
-                                                                     vec![BooleanQuery::Atom(QueryAtom::new(0, 100)), BooleanQuery::Atom(QueryAtom::new(0, 200)), BooleanQuery::Atom(QueryAtom::new(0, 300))]                                                                     ),
-                                                  BooleanQuery::Atom(QueryAtom::new(0, 40))]                                             ));
-                                                                         
-                                                                                             
-
-                                                     
-
-
+build_bench!(atom_frequent, &QueryBuilder::atom(4).build());
+build_bench!(atom_seldom, &QueryBuilder::atom(4000).build());
