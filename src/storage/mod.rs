@@ -14,11 +14,16 @@ use std;
 use std::error::Error;
 use std::sync::Arc;
 
-pub use index::storage::fs_storage::FsStorage;
-pub use index::storage::ram_storage::RamStorage;
+pub use storage::fs_storage::FsStorage;
+pub use storage::ram_storage::RamStorage;
+pub use storage::byte_code::{ByteDecodable, ByteEncodable};
+pub use storage::compression::{vbyte_encode, VByteDecoder};
 
 mod fs_storage;
 mod ram_storage;
+mod byte_code;
+mod compression;
+
 
 /// Aliases Result<T, `StorageError`> to Result<T> for readability and maintainability
 pub type Result<T> = std::result::Result<T, StorageError>;

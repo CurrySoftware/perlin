@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
 
-use utils::byte_code::{ByteEncodable, ByteDecodable};
+use storage::{ByteEncodable, ByteDecodable};
 use utils::persistence::{Volatile, Persistent};
 
-use index::storage::Storage;
+use storage::Storage;
 
 use index::boolean_index::{Result, Error, BooleanIndex};
 use index::boolean_index::posting::Listing;

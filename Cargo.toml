@@ -7,6 +7,10 @@ authors = ["Jakob Demler <jdemler@curry-software.com>"]
 name = "text-retrieval"
 path = "examples/text-retrieval/main.rs"
 
+[[example]]
+name = "custom-data"
+path = "examples/custom-data/main.rs"
+
 [dev-dependencies]
 rand = "0.3"
 lazy_static = "0.2.1"

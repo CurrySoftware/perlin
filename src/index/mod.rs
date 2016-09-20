@@ -11,8 +11,6 @@
 //! Please refer to [`IndexBuilder`](boolean_index/struct.IndexBuilder.html) for usage details.
 //!
 
-
-pub mod storage;
 pub mod boolean_index;
 
 /// The central trait of perlin. Indices tend to differ alot in implementation

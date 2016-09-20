@@ -5,11 +5,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::marker::PhantomData;
 
-use utils::compression::{vbyte_encode, VByteDecoder};
-use utils::byte_code::{ByteDecodable, ByteEncodable};
+use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
-use index::storage::*;
+use storage::{Result, StorageError, Storage};
 
 const ENTRIES_FILENAME: &'static str = "entries.bin";
 const DATA_FILENAME: &'static str = "data.bin";
@@ -159,12 +158,12 @@ mod tests {
 
     use super::*;
     use utils::persistence::Persistent;
-    use index::storage::{Storage, StorageError};
+    use storage::{Storage, StorageError};
 
     #[test]
     fn basic() {
-        let item1 = 15;
-        let item2 = 32;
+        let item1: u32 = 15;
+        let item2: u32 = 32;
         assert!(create_dir_all(Path::new("/tmp/test_index")).is_ok());
         let mut prov = FsStorage::create(Path::new("/tmp/test_index"));
         assert!(prov.store(0, item1.clone()).is_ok());

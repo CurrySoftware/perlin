@@ -1,6 +1,5 @@
 
-use utils::byte_code::{ByteDecodable, ByteEncodable};
-use utils::compression::*;
+use storage::{ByteDecodable, ByteEncodable, vbyte_encode, VByteDecoder};
 
 // For each term-document pair the doc_id and the
 // positions of the term inside the document are stored

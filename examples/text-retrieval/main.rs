@@ -9,8 +9,7 @@
 //! Setting:
 //! We have some documents in the collection folder.
 //! Our mission is to index these documents and then provide simple search
-//! interface to the user via commandline
-//!
+//! interface to the user via commandline.
 
 extern crate walkdir;
 extern crate perlin;
@@ -23,7 +22,7 @@ use std::ffi::OsString;
 
 use walkdir::WalkDir;
 
-use perlin::index::storage::RamStorage;
+use perlin::storage::RamStorage;
 use perlin::index::Index;
 use perlin::index::boolean_index::{BooleanIndex, IndexBuilder, QueryBuilder};
 use perlin::language::basic_analyzer;

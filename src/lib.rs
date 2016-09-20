@@ -21,7 +21,7 @@
 //! ## Build index and run queries
 //! ```rust
 //! use perlin::index::Index;
-//! use perlin::index::storage::RamStorage;
+//! use perlin::storage::RamStorage;
 //! use perlin::index::boolean_index::{QueryBuilder, IndexBuilder};
 //!
 //! //Use `IndexBuilder` to construct a new Index and add documents to it.
@@ -48,3 +48,5 @@
 mod utils;
 pub mod language;
 pub mod index;
+pub mod storage;
+

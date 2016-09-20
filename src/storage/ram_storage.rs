@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use utils::persistence::Volatile;
-use index::storage::{StorageError, Result, Storage};
+use storage::{StorageError, Result, Storage};
 
 /// Stores anything in a `BTreeMap`
 pub struct RamStorage<T> {
@@ -32,7 +32,7 @@ mod tests {
     use super::*;
 
     use utils::persistence::Volatile;
-    use index::storage::Storage;
+    use storage::Storage;
 
     #[test]
     pub fn basic() {

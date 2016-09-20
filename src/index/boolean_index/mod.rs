@@ -10,15 +10,14 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 
 use index::Index;
-use index::storage::{Storage, StorageError};
+use storage::{Storage, StorageError};
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::{Listing, Posting};
 
-use utils::compression::{vbyte_encode, VByteDecoder};
+use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable};
 use utils::owning_iterator::ArcIter;
-use utils::byte_code::{ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
 pub use index::boolean_index::query_builder::QueryBuilder;
@@ -380,8 +379,7 @@ mod tests {
     use index::boolean_index::boolean_query::*;
 
     use index::Index;
-    use index::storage::RamStorage;
-    use index::storage::FsStorage;
+    use storage::{FsStorage, RamStorage};
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {
@@ -547,7 +545,7 @@ mod tests {
     fn persistence() {
         assert!(create_dir_all(Path::new("/tmp/persistent_index_test")).is_ok());
         {
-            let index = IndexBuilder::<_, FsStorage<_>>::new()
+            let index = IndexBuilder::<u32, FsStorage<_>>::new()
                 .persist(Path::new("/tmp/persistent_index_test"))
                 .create_persistent(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                         (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),

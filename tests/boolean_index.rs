@@ -2,21 +2,21 @@ extern crate perlin;
 
 use perlin::index::Index;
 use perlin::index::boolean_index::*;
-use perlin::index::storage::RamStorage;
-use perlin::index::storage::FsStorage;
+use perlin::storage::RamStorage;
+use perlin::storage::FsStorage;
 
 #[test]
 fn build_and_query_persistent_index() {
     let doc1 = vec![0, 5, 10, 15, 20];
     let doc2 = vec![0, 7, 14, 21, 28];
     let doc3 = vec![0, 3, 6, 9, 12];
-    let doc4 = vec![0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
+    let doc4 = vec![0 as u32, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
 
     let folder = std::env::temp_dir().join("bq_persistent_test");
 
     assert!(std::fs::create_dir_all(folder.as_path()).is_ok());
 
-    let index = IndexBuilder::<_, FsStorage<_>>::new()
+    let index = IndexBuilder::<u32, FsStorage<_>>::new()
         .persist(folder.as_path())
         .create_persistent(vec![doc1.into_iter(),
                                 doc2.into_iter(),
