@@ -8,8 +8,8 @@ name = "text-retrieval"
 path = "examples/text-retrieval/main.rs"
 
 [[example]]
-name = "custom-data"
-path = "examples/custom-data/main.rs"
+name = "tictactoe"
+path = "examples/tictactoe/main.rs"
 
 [dev-dependencies]
 rand = "0.3"
