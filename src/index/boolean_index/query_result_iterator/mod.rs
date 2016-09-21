@@ -132,10 +132,7 @@ impl<'a> OwningIterator<'a> for FilterIterator {
 }
 
 impl FilterIterator {
-    pub fn new(operator: FilterOperator,
-               sand: Box<QueryResultIterator>,
-               sieve: Box<QueryResultIterator>)
-               -> Self {
+    pub fn new(operator: FilterOperator, sand: Box<QueryResultIterator>, sieve: Box<QueryResultIterator>) -> Self {
         FilterIterator {
             operator: operator,
             sand: sand,

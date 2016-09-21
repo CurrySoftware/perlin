@@ -57,8 +57,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
         // Read from entry file to BTreeMap.
         let mut entries = BTreeMap::new();
         // 1. Open file
-        let mut entries_file =
-            OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME)).unwrap();
+        let mut entries_file = OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME)).unwrap();
         let mut bytes = Vec::with_capacity(entries_file.metadata().unwrap().len() as usize);
         // 2. Read file
         assert!(entries_file.read_to_end(&mut bytes).is_ok());

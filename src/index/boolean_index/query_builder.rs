@@ -1,5 +1,4 @@
-use index::boolean_index::boolean_query::{QueryAtom, BooleanOperator, PositionalOperator,
-                                          FilterOperator, BooleanQuery};
+use index::boolean_index::boolean_query::{QueryAtom, BooleanOperator, PositionalOperator, FilterOperator, BooleanQuery};
 
 /// This struct provides a flexible and ergonomic was to build `BooleanQueries`
 ///
@@ -158,8 +157,7 @@ mod tests {
     #[test]
     fn nested_and() {
         let index = prepare_index();
-        let query = QueryBuilder::and(vec![QueryBuilder::or(QueryBuilder::atoms(vec![12, 7])),
-                                           QueryBuilder::atom(9)])
+        let query = QueryBuilder::and(vec![QueryBuilder::or(QueryBuilder::atoms(vec![12, 7])), QueryBuilder::atom(9)])
             .build();
         assert_eq!(index.execute_query(&query).collect::<Vec<_>>(), vec![0]);
     }
@@ -168,8 +166,7 @@ mod tests {
     #[test]
     fn not() {
         let index = prepare_index();
-        let query =
-            QueryBuilder::and(QueryBuilder::atoms(vec![0, 5])).not(QueryBuilder::atom(9)).build();
+        let query = QueryBuilder::and(QueryBuilder::atoms(vec![0, 5])).not(QueryBuilder::atom(9)).build();
         assert_eq!(index.execute_query(&query).collect::<Vec<_>>(), vec![2]);
     }
 

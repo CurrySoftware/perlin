@@ -108,8 +108,7 @@ mod tests {
                    vec![127]);
         assert_eq!(VByteDecoder::new(vec![0x80, 0x81].into_iter()).collect::<Vec<_>>(),
                    vec![0, 1]);
-        assert_eq!(VByteDecoder::new(vec![0x03, 0x7F, 0xFF, 0x01, 0x82, 0x85].into_iter())
-                       .collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new(vec![0x03, 0x7F, 0xFF, 0x01, 0x82, 0x85].into_iter()).collect::<Vec<_>>(),
                    vec![0xFFFF, 130, 5]);
         assert_eq!(VByteDecoder::new(vec![0x80].into_iter()).collect::<Vec<_>>(),
                    vec![0]);

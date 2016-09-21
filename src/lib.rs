@@ -2,15 +2,15 @@
 //!
 //! Version 0.0.0 (not released)
 //!
-//! # Features
-//!
 //! # Basic Usage
 //!
 //! Add Perlin to Cargo.toml
+//!
 //! ```toml
 //! [dependencies]
 //! perlin = "0.0"
 //! ```
+//!
 //! and import it in your crate root:
 //!
 //! ```rust
@@ -25,6 +25,9 @@
 //! use perlin::index::boolean_index::{QueryBuilder, IndexBuilder};
 //!
 //! //Use `IndexBuilder` to construct a new Index and add documents to it.
+//! //Perlin does not dictate what "documents" are.
+//! //Rather it expects iterators over iterators over terms.
+//! //In our case a "document" consists of a series of `usize` values:
 //! let index = IndexBuilder::<_, RamStorage<_>>::new().create(vec![(0..10),
 //! (0..15), (10..34)].into_iter()).unwrap();
 //!
@@ -32,16 +35,15 @@
 //! //Simple query for the number 4
 //! let simple_query = QueryBuilder::atom(4).build();
 //!
-//! //When executing queries the index does not evaluate return all results at
-//! //once.
-//! //Rather it runs lazily and returns an iterator over the resulting document
-//! //ids.
+//! //When executing queries the index does not evaluate return all results at once.
+//! //Rather it runs lazily and returns an iterator over the resulting document ids.
 //! for id in index.execute_query(&simple_query) {
 //!    println!("{}", id); //Will print 0 and 1
 //! }
 //!
 //! ```
 //!
+#![doc(html_root_url = "https://doc.perlin-ir.org/")]
 #![deny(missing_docs, warnings)]
 
 #[macro_use]
@@ -49,4 +51,3 @@ mod utils;
 pub mod language;
 pub mod index;
 pub mod storage;
-

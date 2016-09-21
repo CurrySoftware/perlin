@@ -67,9 +67,7 @@ impl<'a> OwningIterator<'a> for NAryQueryIterator {
 }
 
 impl NAryQueryIterator {
-    pub fn new_positional(operator: PositionalOperator,
-                          operands: Vec<QueryResultIterator>)
-                          -> NAryQueryIterator {
+    pub fn new_positional(operator: PositionalOperator, operands: Vec<QueryResultIterator>) -> NAryQueryIterator {
         let mut result = NAryQueryIterator {
             pos_operator: Some(operator),
             bool_operator: None,
@@ -135,14 +133,12 @@ impl NAryQueryIterator {
                         continue 'term_documents;
                     } else if v.0 == focus.unwrap().0 {
                         // If the doc_id is equal, check positions
-                        let position_offset = last_positions_iter as i64 -
-                                              input.relative_position() as i64;
-                        focus_positions = positional_intersect(&focus_positions,
-                                                               &v.1,
-                                                               (position_offset, position_offset))
-                            .iter()
-                            .map(|pos| pos.1)
-                            .collect::<Vec<_>>();
+                        let position_offset = last_positions_iter as i64 - input.relative_position() as i64;
+                        focus_positions =
+                            positional_intersect(&focus_positions, &v.1, (position_offset, position_offset))
+                                .iter()
+                                .map(|pos| pos.1)
+                                .collect::<Vec<_>>();
                         if focus_positions.is_empty() {
                             // No suitable positions found. Next document
                             v = try_option!(input.next());
