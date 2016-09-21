@@ -2,6 +2,13 @@
 name = "perlin"
 version = "0.0.0"
 authors = ["Jakob Demler <jdemler@curry-software.com>"]
+description = "A lazy, zero-allocation and data-agnostic Information Retrieval library"
+documentation = "https://doc.perlin-ir.org"
+homepage = "https://www.perlin-ir.org"
+repository = "https://github.com/JDemler/perlin"
+readme = "README.md"
+keywords = ["information", "retrieval", "search", "text", "engine"]
+license = "MIT"
 
 [[example]]
 name = "text-retrieval"

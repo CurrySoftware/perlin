@@ -1,5 +1,5 @@
 * TODO
-** [4/6] pre 0.1
+** [5/6] pre 0.1
 *** DONE Complete and usable QueryBuilder
     CLOSED: [2016-09-08 Thu 18:29]
 *** DONE Refactoring and Documentation
@@ -24,8 +24,8 @@
     CLOSED: [2016-09-18 Sun 11:53]
 *** DONE Fix Benches
     CLOSED: [2016-09-18 Sun 11:54]
-*** TODO Host Documentation
-*** TODO setup ci tool
+*** DONE Host Documentation
+    CLOSED: [2016-09-21 Wed 18:09]
 
 ** [0/5] post 0.1
 *** TODO improve entries.bin compression
