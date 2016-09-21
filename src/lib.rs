@@ -1,7 +1,12 @@
 //! Perlin is a free and open source information retrieval library.
 //!
-//! Version 0.0.0 (not released)
+//! Version 0.1.0
 //!
+//! # Features
+//! * boolean retrieval on arbitrary types
+//! * minimal dependencies
+//! * lazy and zero-allocation query evaluation
+//! 
 //! # Basic Usage
 //!
 //! Add Perlin to Cargo.toml
@@ -42,6 +47,10 @@
 //! }
 //!
 //! ```
+//!
+//! Have a look in the [examples folder](https://github.com/JDemler/perlin/tree/master/examples) for more
+//! elaborate examples!
+//! 
 //!
 #![deny(missing_docs, warnings)]
 
