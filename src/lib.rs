@@ -52,6 +52,7 @@
 //! elaborate examples!
 //! 
 //!
+#![doc(html_root_url = "https://doc.perlin-ir.org/")]
 #![deny(missing_docs, warnings)]
 
 #[macro_use]
