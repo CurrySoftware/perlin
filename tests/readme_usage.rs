@@ -1,20 +1,3 @@
-# perlin
-A lazy, zero-allocation and data-agnostic Information Retrieval library
-
-## Features
-
-- Boolean Retrieval supporting arbitrary types and
-  - Nested phrase queries with filters evaluating lazily and without allocations
-  - being persistent on disk
-  - being fast in RAM
-
-## Dependencies
-
-std
-
-## Usage
-
-```rust
 extern crate perlin;
 
 use perlin::language::basic_analyzer;
@@ -22,6 +5,7 @@ use perlin::storage::RamStorage;
 use perlin::index::boolean_index::{IndexBuilder, QueryBuilder};
 use perlin::index::Index;
 
+#[test]
 fn main() {
     // The keeper database.
     // Source: "Inverted Files for Text Search Engines" by Justin Zobel and Alistair Moffat, July 2006
@@ -41,24 +25,16 @@ fn main() {
     let keeper_query = QueryBuilder::atom("keeper".to_string()).build();
     assert_eq!(index.execute_query(&keeper_query).collect::<Vec<_>>(),
                vec![0, 3, 4]);
+
+    // Build phrase query for "old night keeper"
+    let keeper_phrase =
+        QueryBuilder::in_order(
+            vec![
+                Some("old".to_string()),
+                Some("night".to_string()),
+                Some("keeper".to_string())])
+            .build();
+    assert_eq!(index.execute_query(&keeper_phrase).collect::<Vec<_>>(),
+               vec![0, 3]);
+
 }
-
-
-
-```
-
-See [documentation](https://doc.perlin-ir.org) or [examples](https://github.com/JDemler/perlin/tree/master/examples) for more.
-
-
-## Current Status
-Verison 0.1 marks the first state where this library might be useful to somebody. Nevertheless, there are still some issues with the current implementation:
-
-- Indexing is incredibly slow 
-- Loading indices from corrupted data does not yield good or useful errors
-- Data in RAM is not compressed
-- Indices are non mutable. Once they are create documents can not be added or removed
-     
-## Roadmap
-In the long run this library will hopefully become a fully featured information retrieval library supporting modern ranked retrieval, natural language processing tool, facetted search and taxonomies.
-
-

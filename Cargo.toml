@@ -1,6 +1,6 @@
 [package]
 name = "perlin"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Jakob Demler <jdemler@curry-software.com>"]
 description = "A lazy, zero-allocation and data-agnostic Information Retrieval library"
 documentation = "https://doc.perlin-ir.org"
