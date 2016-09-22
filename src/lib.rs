@@ -13,7 +13,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! perlin = "0.0"
+//! perlin = "0.1"
 //! ```
 //!
 //! and import it in your crate root:
