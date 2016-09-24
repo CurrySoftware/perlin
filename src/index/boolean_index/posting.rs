@@ -1,4 +1,4 @@
-
+use std::io::{Read};
 use storage::{ByteDecodable, ByteEncodable, vbyte_encode, VByteDecoder};
 
 // For each term-document pair the doc_id and the
@@ -25,8 +25,8 @@ impl ByteEncodable for Listing {
 
 // TODO: Errorhandling
 impl ByteDecodable for Vec<Posting> {
-    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
-        let mut decoder = VByteDecoder::new(bytes);
+    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+        let mut decoder = VByteDecoder::new(read.bytes());
         let postings_len = decoder.next().unwrap();
         let mut postings = Vec::with_capacity(postings_len);
         for _ in 0..postings_len {

@@ -6,6 +6,7 @@
 //! only String and usize).
 
 use std::result::Result;
+use std::io::{Read};
 use storage::{vbyte_encode, VByteDecoder};
 
 /// Defines a method that allows an object to be encoded as a variable number
@@ -21,7 +22,7 @@ pub trait ByteDecodable
     where Self: Sized
 {
     /// Decodes an object from a byte iterator
-    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String>;
+    fn decode<R: Read>(read: &mut R) -> Result<Self, String>;
 }
 
 
@@ -34,8 +35,11 @@ impl ByteEncodable for String {
 }
 
 impl ByteDecodable for String {
-    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
-        String::from_utf8(bytes.collect()).map_err(|e| format!("{:?}", e))
+    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+        let mut bytes = vec![];
+        //TODO: Error handling
+        read.read_to_end(&mut bytes).unwrap();
+        String::from_utf8(bytes).map_err(|e| format!("{:?}", e))
     }
 }
 
@@ -46,8 +50,8 @@ impl ByteEncodable for usize {
 }
 
 impl ByteDecodable for usize {
-    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
+    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+        let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res)
         } else {
@@ -65,8 +69,8 @@ impl ByteEncodable for u64 {
 }
 
 impl ByteDecodable for u64 {
-    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
+    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+        let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res as u64)
         } else {
@@ -84,8 +88,8 @@ impl ByteEncodable for u32 {
 }
 
 impl ByteDecodable for u32 {
-    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
+    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+        let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res as u32)
         } else {
@@ -103,8 +107,8 @@ impl ByteEncodable for u16 {
 }
 
 impl ByteDecodable for u16 {
-    fn decode<TIterator: Iterator<Item = u8>>(bytes: TIterator) -> Result<Self, String> {
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
+    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+        let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res as u16)
         } else {

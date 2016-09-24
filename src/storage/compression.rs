@@ -18,6 +18,7 @@
 //! assert_eq!(3, three);
 //! ```
 
+use std::io::{Bytes, Read};
 
 /// Encode an usigned integer as a variable number of bytes
 pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
@@ -37,14 +38,14 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
 
 // TODO: VByteDecoder to take a Iterator<Item=&u8> not Iterator<Item=u8>
 /// Iterator that decodes a bytestream to unsigned integers
-pub struct VByteDecoder<'a> {
-    bytes: Box<Iterator<Item = u8> + 'a>,
+pub struct VByteDecoder<R> {
+    bytes: Bytes<R>
 }
 
-impl<'a> VByteDecoder<'a> {
+impl<R: Read> VByteDecoder<R> {
     /// Create a new VByteDecoder by passing a bytestream
-    pub fn new<T: Iterator<Item = u8> + 'a>(bytes: T) -> Self {
-        VByteDecoder { bytes: Box::new(bytes) }
+    pub fn new(read: Bytes<R>) -> Self {
+        VByteDecoder { bytes:  read }
     }
 
     /// Sometimes it is convenient to look at the original bytestream itself
@@ -52,12 +53,12 @@ impl<'a> VByteDecoder<'a> {
     /// This method provides access to the underlying bytestream in form of
     /// a
     /// mutable borrow
-    pub fn underlying_iterator(&mut self) -> &mut Iterator<Item = u8> {
-        &mut self.bytes
+    pub fn underlying_iterator(&mut self) -> &mut Bytes<R> {
+         &mut self.bytes
     }
 }
 
-impl<'a> Iterator for VByteDecoder<'a> {
+impl<R: Read> Iterator for VByteDecoder<R> {
     type Item = usize;
 
     /// Returns the next unsigned integer which is encoded in the underlying
@@ -69,7 +70,7 @@ impl<'a> Iterator for VByteDecoder<'a> {
         let mut result: usize = 0;
         loop {
             result *= 128;
-            let val = try_option!(self.bytes.next());
+            let val = try_option!(self.bytes.next()).unwrap();
             result += val as usize;
             if val >= 128 {
                 result -= 128;
@@ -85,6 +86,7 @@ impl<'a> Iterator for VByteDecoder<'a> {
 mod tests {
 
     use super::*;
+    use std::io::Read;
 
     #[test]
     fn test_vbyte_encode() {
@@ -100,17 +102,17 @@ mod tests {
 
     #[test]
     fn test_vbyte_decode() {
-        assert_eq!(VByteDecoder::new(vec![0x80].into_iter()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new([0x80].bytes()).collect::<Vec<_>>(),
                    vec![0]);
-        assert_eq!(VByteDecoder::new(vec![0x85].into_iter()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new([0x85].bytes()).collect::<Vec<_>>(),
                    vec![5]);
-        assert_eq!(VByteDecoder::new(vec![0xFF].into_iter()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new([0xFF].bytes()).collect::<Vec<_>>(),
                    vec![127]);
-        assert_eq!(VByteDecoder::new(vec![0x80, 0x81].into_iter()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new([0x80, 0x81].bytes()).collect::<Vec<_>>(),
                    vec![0, 1]);
-        assert_eq!(VByteDecoder::new(vec![0x03, 0x7F, 0xFF, 0x01, 0x82, 0x85].into_iter()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new([0x03, 0x7F, 0xFF, 0x01, 0x82, 0x85].bytes()).collect::<Vec<_>>(),
                    vec![0xFFFF, 130, 5]);
-        assert_eq!(VByteDecoder::new(vec![0x80].into_iter()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new([0x80].bytes()).collect::<Vec<_>>(),
                    vec![0]);
     }
 }

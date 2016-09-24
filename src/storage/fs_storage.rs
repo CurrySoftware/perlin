@@ -56,13 +56,10 @@ impl<TItem> Persistent for FsStorage<TItem> {
     fn load(path: &Path) -> Self {
         // Read from entry file to BTreeMap.
         let mut entries = BTreeMap::new();
-        // 1. Open file
-        let mut entries_file = OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME)).unwrap();
-        let mut bytes = Vec::with_capacity(entries_file.metadata().unwrap().len() as usize);
-        // 2. Read file
-        assert!(entries_file.read_to_end(&mut bytes).is_ok());
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
-        // 3. Decode entries and write them to BTreeMap
+        // 1. Open file and pass it to the decoder
+        let entries_file = OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME)).unwrap();
+        let mut decoder = VByteDecoder::new(entries_file.bytes());
+        // 2. Decode entries and write them to BTreeMap
         let mut current_id: u64 = 0;
         let mut current_offset: u64 = 0;
         while let Some(entry) = decode_entry(&mut decoder) {
@@ -94,6 +91,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
 
 impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsStorage<TItem> {
     fn get(&self, id: u64) -> Result<Arc<TItem>> {
+        //TODO: Think through this once more. Now with the new Read approach in ByteDecodable
         if let Some(item_position) = self.entries.get(&id) {
             // Get filehandle
             let mut f = self.data.try_clone().unwrap();
@@ -103,7 +101,7 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsSt
             // Read all bytes
             f.read_exact(&mut bytes).unwrap();
             // Decode item
-            let item = TItem::decode(bytes.into_iter()).unwrap();
+            let item = TItem::decode(&mut bytes.as_slice()).unwrap();
             Ok(Arc::new(item))
         } else {
             Err(StorageError::KeyNotFound)
@@ -140,7 +138,7 @@ fn encode_entry(current_id: u64, id: u64, length: u32) -> Vec<u8> {
     bytes
 }
 
-fn decode_entry(decoder: &mut VByteDecoder) -> Option<(u32, u32)> {
+fn decode_entry<R: Read>(decoder: &mut VByteDecoder<R>) -> Option<(u32, u32)> {
     let delta_id = try_option!(decoder.next()) as u32;
     let length = try_option!(decoder.next()) as u32;
 

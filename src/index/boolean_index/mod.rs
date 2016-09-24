@@ -163,17 +163,14 @@ impl<TTerm> BooleanIndex<TTerm>
 
     fn load_vocabulary(path: &Path) -> Result<BTreeMap<TTerm, u64>> {
         // Open file
-        let mut vocab_file = try!(OpenOptions::new().read(true).open(path.join(VOCAB_FILENAME)));
-        let metadata = try!(vocab_file.metadata());
-        // Read bytes into Vector
-        let mut bytes = Vec::with_capacity(metadata.len() as usize);
-        try!(vocab_file.read_to_end(&mut bytes));
+        let vocab_file = try!(OpenOptions::new().read(true).open(path.join(VOCAB_FILENAME)));
         // Create a decoder from that vector
-        let mut decoder = VByteDecoder::new(bytes.into_iter());
+        let mut decoder = VByteDecoder::new(vocab_file.bytes());
         let mut result = BTreeMap::new();
         while let Some(id) = decoder.next() {
             if let Some(term_len) = decoder.next() {
-                if let Ok(term) = TTerm::decode(decoder.underlying_iterator().take(term_len)) {
+                let term_bytes: Vec<u8> = decoder.underlying_iterator().take(term_len).map(|b| b.unwrap()).collect();
+                if let Ok(term) = TTerm::decode(&mut term_bytes.as_slice()) {
                     result.insert(term, id as u64);
                 } else {
                     // Error while decoding a term. TODO: Propagate Error
@@ -201,10 +198,8 @@ impl<TTerm> BooleanIndex<TTerm>
     }
 
     fn load_statistics(path: &Path) -> Result<usize> {
-        let mut statistics_file = try!(OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)));
-        let mut bytes = Vec::new();
-        try!(statistics_file.read_to_end(&mut bytes));
-        if let Some(doc_count) = VByteDecoder::new(bytes.into_iter()).next() {
+        let statistics_file = try!(OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)));
+        if let Some(doc_count) = VByteDecoder::new(statistics_file.bytes()).next() {
             Ok(doc_count)
         } else {
             Err(Error::CorruptedIndexFile)
