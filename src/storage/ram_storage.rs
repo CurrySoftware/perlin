@@ -1,27 +1,29 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use utils::persistence::Volatile;
 use storage::{StorageError, Result, Storage};
 
-/// Stores anything in a `BTreeMap`
+/// Stores anything in a `Vector`.
+/// Assumes the id is the index
 pub struct RamStorage<T> {
-    data: BTreeMap<u64, Arc<T>>,
+    data: Vec<Arc<T>>,
 }
 
 impl<T> Volatile for RamStorage<T> {
     fn new() -> Self {
-        RamStorage { data: BTreeMap::new() }
+        RamStorage { data: Vec::with_capacity(8192) }
     }
 }
 
 impl<T: Sync + Send> Storage<T> for RamStorage<T> {
     fn get(&self, id: u64) -> Result<Arc<T>> {
-        self.data.get(&id).cloned().ok_or(StorageError::KeyNotFound)
+        self.data.get(id as usize).cloned().ok_or(StorageError::KeyNotFound)
     }
 
+    
     fn store(&mut self, id: u64, data: T) -> Result<()> {
-        self.data.insert(id, Arc::new(data));
+        assert_eq!(id as usize, self.data.len());
+        self.data.push(Arc::new(data));
         Ok(())
     }
 }

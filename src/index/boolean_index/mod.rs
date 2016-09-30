@@ -245,7 +245,6 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
     /// Indexes a document collection for later retrieval
     /// Returns the number of documents indexed
-    // First Shot. TODO: Needs serious improvement!
     fn index_documents<TDocsIterator, TDocIterator>(&mut self, documents: TDocsIterator) -> Result<(usize)>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
