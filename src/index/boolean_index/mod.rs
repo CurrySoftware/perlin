@@ -14,7 +14,7 @@ use storage::{Storage, StorageError};
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::posting::{Listing};
+use index::boolean_index::posting::Listing;
 
 use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable};
 use utils::owning_iterator::ArcIter;
@@ -258,8 +258,8 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                 // Has term already been seen? Is it already in the vocabulary?
                 if let Some(term_id) = self.term_ids.get(&term) {
                     let uterm_id = *term_id as usize;
-                    //Lets resize our inv_index
-                    if uterm_id as usize > inv_index.len() {                        
+                    // Lets resize our inv_index
+                    if uterm_id >= inv_index.len() {
                         inv_index.reserve(uterm_id);
                         for _ in 0..uterm_id {
                             inv_index.push(Vec::with_capacity(512));
@@ -269,8 +269,8 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                         inv_index[uterm_id].push((doc_id as u64, vec![term_position as u32]));
                         continue;
                     }
-                    //Thanks borrow checker...
-                    //Lets hope the compiled code is more beautiful...
+                    // Thanks borrow checker...
+                    // Lets hope the compiled code is more beautiful...
                     {
                         let mut posting = inv_index[uterm_id].last_mut().unwrap();
                         if posting.0 == doc_id as u64 {
@@ -283,9 +283,15 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                     continue;
                 };
                 // Term was not yet indexed. Add it
-                let term_id = self.term_ids.len() as u64;
-                self.term_ids.insert(term, term_id);
-                inv_index[term_id as usize].push((doc_id as u64, vec![term_position as u32]));
+                let term_id = self.term_ids.len();
+                self.term_ids.insert(term, term_id as u64);
+                if term_id  >= inv_index.len() {
+                    inv_index.reserve(term_id);
+                    for _ in 0..term_id {
+                        inv_index.push(Vec::with_capacity(512));
+                    }
+                }
+                inv_index[term_id].push((doc_id as u64, vec![term_position as u32]));
             }
             self.document_count += 1;
         }
