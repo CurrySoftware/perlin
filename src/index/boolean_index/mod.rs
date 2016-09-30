@@ -14,7 +14,7 @@ use storage::{Storage, StorageError};
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::posting::{Listing, Posting};
+use index::boolean_index::posting::{Listing};
 
 use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable};
 use utils::owning_iterator::ArcIter;
@@ -250,48 +250,50 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
-        let mut inv_index: BTreeMap<u64, Vec<Posting>> = BTreeMap::new();
+        let mut inv_index: Vec<Listing> = vec![Vec::with_capacity(512); 8192];
         // For every document in the collection
-        for document in documents {
-            // Determine its id. consecutively numbered
-            let new_doc_id = self.document_count as u64;
+        for (doc_id, document) in documents.enumerate() {
             // Enumerate over its terms
             for (term_position, term) in document.into_iter().enumerate() {
                 // Has term already been seen? Is it already in the vocabulary?
                 if let Some(term_id) = self.term_ids.get(&term) {
-                    // Get its listing from the temporary. And add doc_id and/or position to it
-                    let listing = inv_index.get_mut(term_id).unwrap();
-                    match listing.binary_search_by(|&(doc_id, _)| doc_id.cmp(&new_doc_id)) {
-                        Ok(term_doc_index) => {
-                            // Document already had that term.
-                            // Look for where to put the current term in the positions list
-                            let term_doc_positions = &mut listing.get_mut(term_doc_index).unwrap().1;
-                            if let Err(index) = term_doc_positions.binary_search(&(term_position as u32)) {
-                                term_doc_positions.insert(index, term_position as u32)
-                            }
-                            // Two terms at the same position. Should at least be possible
-                            // so do nothing if term_position already exists
-                        }
-                        Err(term_doc_index) => {
-                            listing.insert(term_doc_index,
-                                           (new_doc_id as u64, vec![term_position as u32]))
+                    let uterm_id = *term_id as usize;
+                    //Lets resize our inv_index
+                    if uterm_id as usize > inv_index.len() {                        
+                        inv_index.reserve(uterm_id);
+                        for _ in 0..uterm_id {
+                            inv_index.push(Vec::with_capacity(512));
                         }
                     }
+                    if inv_index[uterm_id].is_empty() {
+                        inv_index[uterm_id].push((doc_id as u64, vec![term_position as u32]));
+                        continue;
+                    }
+                    //Thanks borrow checker...
+                    //Lets hope the compiled code is more beautiful...
+                    {
+                        let mut posting = inv_index[uterm_id].last_mut().unwrap();
+                        if posting.0 == doc_id as u64 {
+                            posting.1.push(term_position as u32);
+                            continue;
+                        }
+                    }
+                    inv_index[uterm_id].push((doc_id as u64, vec![term_position as u32]));
                     // Term is indexed. Continue with the next one
                     continue;
                 };
                 // Term was not yet indexed. Add it
                 let term_id = self.term_ids.len() as u64;
                 self.term_ids.insert(term, term_id);
-                inv_index.insert(term_id, vec![(new_doc_id, vec![term_position as u32])]);
+                inv_index[term_id as usize].push((doc_id as u64, vec![term_position as u32]));
             }
             self.document_count += 1;
         }
 
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
-        for (term_id, listing) in inv_index {
-            try!(self.postings.store(term_id, listing));
+        for (term_id, listing) in inv_index.into_iter().enumerate() {
+            try!(self.postings.store(term_id as u64, listing));
         }
 
         Ok(self.document_count)
