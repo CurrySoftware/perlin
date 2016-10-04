@@ -67,7 +67,7 @@ fn main() {
             let trimmed = input.trim();
             match trimmed {
                 "?" => print_cli_usage(),
-                _ => handle_input(&trimmed, &index, &collection),
+                _ => handle_input(trimmed, &index, &collection),
             }
         }
         input.clear();
@@ -75,7 +75,7 @@ fn main() {
 }
 
 
-fn handle_input(input: &str, index: &BooleanIndex<String>, docs: &Vec<String>) {
+fn handle_input(input: &str, index: &BooleanIndex<String>, docs: &[String]) {
     println!("Querying Index for '{}'", input);
     // Run the query through the same analyzer as the documents
     // Then build an AND-Query from it
@@ -130,5 +130,5 @@ fn load_collection(path: &Path) -> Vec<String> {
 
 /// Little utility function
 fn has_extension(path: &Path, extension: &str) -> bool {
-    path.extension().unwrap_or(&OsString::new().as_os_str()).to_str() == Some(extension)
+    path.extension().unwrap_or(OsString::new().as_os_str()).to_str() == Some(extension)
 }

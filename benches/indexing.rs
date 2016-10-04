@@ -11,7 +11,6 @@ use utils::*;
 use test::Bencher;
 use perlin::index::boolean_index::IndexBuilder;
 use perlin::storage::RamStorage;
-use rand::{XorShiftRng, Generator, Rng};
 
 lazy_static!{
     pub static ref COLLECTIONS: [Vec<Vec<usize>>; 4] = [

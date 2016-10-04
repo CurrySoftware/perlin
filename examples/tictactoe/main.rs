@@ -152,14 +152,14 @@ fn main() {
             let trimmed = input.trim();
             match trimmed {
                 "?" => print_cli_usage(),
-                _ => handle_input(&trimmed, &index, &games),
+                _ => handle_input(trimmed, &index, &games),
             }
         }
         input.clear();
     }
 }
 
-fn handle_input(input: &str, index: &BooleanIndex<BoardLayout>, games: &Vec<TicTacToeGame>) {
+fn handle_input(input: &str, index: &BooleanIndex<BoardLayout>, games: &[TicTacToeGame]) {
     // Split the input at whitespaces and try to parse them as numbers which represent layouts
     let layouts = input.split_whitespace()
         .map(|num| num.parse::<u16>())
@@ -206,6 +206,6 @@ fn load_or_create_index(games: Vec<TicTacToeGame>) -> BooleanIndex<BoardLayout> 
     // Build index
     IndexBuilder::<_, FsStorage<_>>::new()
         .persist(&*index_dir)
-        .create_persistent(games.into_iter().map(|g| TicTacToeStateIterator::new(g)))
+        .create_persistent(games.into_iter().map(TicTacToeStateIterator::new))
         .unwrap()
 }

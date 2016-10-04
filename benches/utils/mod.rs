@@ -3,8 +3,8 @@ use perlin::storage::RamStorage;
 use rand;
 use rand::{XorShiftRng, Rng};
 
-pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usize> {
-    let rng = ZipfGenerator::new(voc_size(45, 0.5, documents * document_size));
+#[allow(dead_code)]
+pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usize> {    
     let collection: Vec<Vec<usize>> = (0..documents)
         .map(|_| ZipfGenerator::new(voc_size(45, 0.5, documents * document_size)).take(document_size).collect())
         .collect();
