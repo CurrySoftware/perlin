@@ -53,7 +53,6 @@ See [documentation](https://doc.perlin-ir.org) or [examples](https://github.com/
 ## Current Status
 Verison 0.1 marks the first state where this library might be useful to somebody. Nevertheless, there are still some issues with the current implementation:
 
-- Indexing is incredibly slow 
 - Loading indices from corrupted data does not yield good or useful errors
 - Data in RAM is not compressed
 - Indices are non mutable. Once they are create documents can not be added or removed
