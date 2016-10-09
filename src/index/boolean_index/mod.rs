@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
+use std::thread;
+
+use std::sync::mpsc;
 
 use index::Index;
 use storage::{Storage, StorageError};
@@ -244,52 +247,32 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
-        let mut inv_index: Vec<Listing> = vec![Vec::with_capacity(512); 8192];
+        let (tx, rx) = mpsc::channel();
+        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::build_inv_index(rx));
+        let mut buffer = Vec::with_capacity(1024);
         // For every document in the collection
         for (doc_id, document) in documents.enumerate() {
             // Enumerate over its terms
             for (term_position, term) in document.into_iter().enumerate() {
                 // Has term already been seen? Is it already in the vocabulary?
                 if let Some(term_id) = self.term_ids.get(&term) {
-                    let uterm_id = *term_id as usize;
-                    // Lets resize our inv_index
-                    if uterm_id >= inv_index.len() {
-                        inv_index.reserve(uterm_id);
-                        for _ in 0..uterm_id {
-                            inv_index.push(Vec::with_capacity(512));
-                        }
-                    }
-                    if inv_index[uterm_id].is_empty() {
-                        inv_index[uterm_id].push((doc_id as u64, vec![term_position as u32]));
-                        continue;
-                    }
-                    // Thanks borrow checker...
-                    // Lets hope the compiled code is more beautiful...
-                    {
-                        let mut posting = inv_index[uterm_id].last_mut().unwrap();
-                        if posting.0 == doc_id as u64 {
-                            posting.1.push(term_position as u32);
-                            continue;
-                        }
-                    }
-                    inv_index[uterm_id].push((doc_id as u64, vec![term_position as u32]));
-                    // Term is indexed. Continue with the next one
+                    buffer.push((*term_id, doc_id as u64, term_position as u32));
                     continue;
-                };
-                // Term was not yet indexed. Add it
+                }
                 let term_id = self.term_ids.len();
                 self.term_ids.insert(term, term_id as u64);
-                if term_id  >= inv_index.len() {
-                    inv_index.reserve(term_id);
-                    for _ in 0..term_id {
-                        inv_index.push(Vec::with_capacity(512));
-                    }
-                }
-                inv_index[term_id].push((doc_id as u64, vec![term_position as u32]));
+                buffer.push((term_id as u64, doc_id as u64, term_position as u32));
             }
+            if buffer.len() % 1024 == 0 {
+                tx.send(buffer).unwrap();
+                buffer = Vec::with_capacity(1024);
+            }
+            // Term was not yet indexed. Add it
             self.document_count += 1;
         }
-
+        tx.send(buffer).unwrap();
+        drop(tx);
+        let inv_index = inv_index.join().unwrap();
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index.into_iter().enumerate() {
@@ -297,6 +280,46 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         }
 
         Ok(self.document_count)
+    }
+
+    fn build_inv_index(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>) -> Vec<Listing> {
+        let mut inv_index: Vec<Listing> = Vec::with_capacity(8192);
+        while let Ok(mut chunk) = ids.recv() {
+           // println!("{:?}", chunk);
+            chunk.sort_by_key(|&(a, _, _)| a);
+           // println!("Sorted: {:?}", chunk);
+            let threshold = inv_index.len();
+            let mut distinct_chunk = Vec::with_capacity(512);
+            let mut last_tid = 0;
+            let mut c = 0;
+            for i in 0..chunk.len() {
+                let (term_id, doc_id, pos) = chunk[i];
+                if last_tid < chunk[i].0 || i == 0 {
+                    c += 1;
+                    distinct_chunk.push((term_id, vec![(doc_id, vec![pos])]));
+                    last_tid = term_id;
+                    continue;
+                }
+                {
+                    let mut posting = distinct_chunk[c-1].1.last_mut().unwrap();
+                    if posting.0 == doc_id {
+                        posting.1.push(pos);
+                        continue;
+                    }
+                }
+                distinct_chunk[c - 1].1.push((doc_id, vec![pos]));
+            }
+           // println!("Folded: {:?}", distinct_chunk);
+            for (term_id, mut listing) in distinct_chunk {
+                let uterm_id = term_id as usize;
+                if uterm_id < threshold {
+                    inv_index[uterm_id].append(&mut listing);
+                } else {
+                    inv_index.push(listing);
+                }
+            }
+        }
+        inv_index
     }
 
 
