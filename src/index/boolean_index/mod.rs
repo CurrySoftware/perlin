@@ -250,9 +250,11 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
               TDocIterator: Iterator<Item = TTerm>
     {
         let start = PreciseTime::now();
-        let (tx, rx) = mpsc::channel();
-        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::build_inv_index(rx));
-        let mut buffer = Vec::with_capacity(9192);
+        let (chunk_tx, chunk_rx) = mpsc::channel();
+        let (merged_tx, merged_rx) = mpsc::channel();
+        thread::spawn(|| BooleanIndex::<TTerm>::sort_and_merge_chunk(chunk_rx, merged_tx));
+        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::inv_index(merged_rx));
+        let mut buffer = Vec::with_capacity(2048);
         let mut chunk_count = 0;
         let mut term_count = 0;
         // For every document in the collection
@@ -268,45 +270,46 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                 buffer.push((term_count as u64, doc_id as u64, term_position as u32));
                 term_count += 1;
             }
-            if buffer.len() >= 8192 {
-                chunk_count += 1;
-                tx.send(buffer).unwrap();
-                buffer = Vec::with_capacity(9192);
-            }
+            chunk_count += 1;
+            chunk_tx.send(buffer).unwrap();
+            buffer = Vec::with_capacity(2048);
             // Term was not yet indexed. Add it
             self.document_count += 1;
         }
-        tx.send(buffer).unwrap();
-        drop(tx);
-        println!("Send {} chunks totaling at {} terms", chunk_count, term_count);
-        println!("done with vocab: {}ms", start.to(PreciseTime::now()).num_milliseconds());
+        drop(chunk_tx);
+        println!("Send {} chunks totaling at {} terms",
+                 chunk_count,
+                 term_count);
+        println!("done with vocab: {}ms",
+                 start.to(PreciseTime::now()).num_milliseconds());
         let inv_index = inv_index.join().unwrap();
-        println!("done with inv_index: {}ms", start.to(PreciseTime::now()).num_milliseconds());
+        println!("done with inv_index: {}ms",
+                 start.to(PreciseTime::now()).num_milliseconds());
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index.into_iter().enumerate() {
             try!(self.postings.store(term_id as u64, listing));
         }
-        println!("done: {}ms", start.to(PreciseTime::now()).num_milliseconds());
+        println!("done: {}ms",
+                 start.to(PreciseTime::now()).num_milliseconds());
         Ok(self.document_count)
     }
 
-    fn build_inv_index(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>) -> Vec<Listing> {
+    fn sort_and_merge_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
+                            merged_chunks: mpsc::Sender<Vec<(u64, Listing)>>) {
         let start = PreciseTime::now();
-        let mut inv_index: Vec<Listing> = Vec::with_capacity(8192);
         let mut waiting_time = 0;
         let mut start_w = PreciseTime::now();
         let mut chunk_count = 0;
         while let Ok(mut chunk) = ids.recv() {
             waiting_time += start_w.to(PreciseTime::now()).num_microseconds().unwrap();
             chunk_count += 1;
-            //Sort triples
+            // Sort triples
             chunk.sort_by_key(|&(a, _, _)| a);
-            let threshold = inv_index.len();
             let mut distinct_chunk = Vec::with_capacity(512);
             let mut last_tid = 0;
             let mut c = 0;
-            //Group by term_id and doc_id
+            // Group by term_id and doc_id
             for i in 0..chunk.len() {
                 let (term_id, doc_id, pos) = chunk[i];
                 if last_tid < chunk[i].0 || i == 0 {
@@ -316,7 +319,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                     continue;
                 }
                 {
-                    let mut posting = distinct_chunk[c-1].1.last_mut().unwrap();
+                    let mut posting = distinct_chunk[c - 1].1.last_mut().unwrap();
                     if posting.0 == doc_id {
                         posting.1.push(pos);
                         continue;
@@ -324,8 +327,24 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                 }
                 distinct_chunk[c - 1].1.push((doc_id, vec![pos]));
             }
-            //Simple pushing into the vec
-            for (term_id, mut listing) in distinct_chunk {
+            // Simple pushing into the vec
+            // println!("{:?}", distinct_chunk.iter().map(|&(a, _)| a).collect::<Vec<_>>());
+            // println!("___________________________________________________________");
+            merged_chunks.send(distinct_chunk).unwrap();
+            start_w = PreciseTime::now();
+        }
+        println!("Ran for a total of {}ms",
+                 start.to(PreciseTime::now()).num_milliseconds());
+        println!("Waited for {} chunks a total of {}µs",
+                 chunk_count,
+                 waiting_time);
+    }
+
+    fn inv_index(merged_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Vec<Listing> {
+        let mut inv_index: Vec<Listing> = Vec::with_capacity(8192);
+        while let Ok(chunk) = merged_chunks.recv() {
+            let threshold = inv_index.len();
+            for (term_id, mut listing) in chunk {
                 let uterm_id = term_id as usize;
                 if uterm_id < threshold {
                     inv_index[uterm_id].append(&mut listing);
@@ -333,10 +352,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                     inv_index.push(listing);
                 }
             }
-            start_w = PreciseTime::now();
         }
-        println!("Ran for a total of {}ms", start.to(PreciseTime::now()).num_milliseconds());
-        println!("Waited for {} chunks a total of {}µs", chunk_count, waiting_time);
         inv_index
     }
 
