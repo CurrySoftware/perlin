@@ -264,12 +264,11 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                     buffer.push((*term_id, doc_id as u64, term_position as u32));
                     continue;
                 }
-                let term_id = self.term_ids.len();
-                self.term_ids.insert(term, term_id as u64);
-                buffer.push((term_id as u64, doc_id as u64, term_position as u32));
+                self.term_ids.insert(term, term_count as u64);
+                buffer.push((term_count as u64, doc_id as u64, term_position as u32));
+                term_count += 1;
             }
             if buffer.len() >= 8192 {
-                term_count += buffer.len();
                 chunk_count += 1;
                 tx.send(buffer).unwrap();
                 buffer = Vec::with_capacity(9192);
