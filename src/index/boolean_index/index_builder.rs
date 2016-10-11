@@ -75,7 +75,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
               TDocIterator: Iterator<Item = TTerm>
     {
         let path = try!(self.check_persist_path());
-        BooleanIndex::new_persistent(TStorage::create(path), documents, path)
+        BooleanIndex::new_persistent(TStorage::create(path).unwrap(), documents, path)
     }
 
     /// Loads an index from a previously filled directory.
@@ -91,8 +91,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
             if path.is_dir() {
                 let paths = try!(fs::read_dir(path));
                 // Path is a directory and seems to exist. Lets see if all the files are present
-                let mut required_files = REQUIRED_FILES.to_vec();
-                required_files.extend_from_slice(TStorage::associated_files());
+                let mut required_files = Self::required_files();
                 for path in paths.filter(|p| p.is_ok()).map(|p| p.unwrap()) {
                     if let Some(pos) = required_files.iter().position(|f| (**f) == path.file_name()) {
                         required_files.swap_remove(pos);
@@ -109,6 +108,12 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
         } else {
             Err(Error::PersistPathNotSpecified)
         }
+    }
+
+    fn required_files() -> Vec<&'static str> {
+        let mut required_files = REQUIRED_FILES.to_vec();
+        required_files.extend_from_slice(TStorage::associated_files());
+        required_files
     }
 }
 
@@ -141,6 +146,22 @@ mod tests {
 
         let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
         assert!(if let Err(Error::PersistPathIsFile) = result {
+            true
+        } else {
+            false
+        });
+    }
+
+    #[test]
+    fn corrupt_file() {
+        let path = &env::temp_dir().join("perlin_corrupted_files_test_dir");
+        fs::create_dir_all(path).unwrap();
+        for file in IndexBuilder::<usize, FsStorage<_>>::required_files() {
+            fs::File::create(path.join(file)).unwrap();
+        }
+
+        let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
+        assert!(if let Err(Error::CorruptedIndexFile(_)) = result {
             true
         } else {
             false

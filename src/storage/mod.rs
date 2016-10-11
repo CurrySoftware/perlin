@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 pub use storage::fs_storage::FsStorage;
 pub use storage::ram_storage::RamStorage;
-pub use storage::byte_code::{ByteDecodable, ByteEncodable};
+pub use storage::byte_code::{ByteDecodable, ByteEncodable, DecodeError, DecodeResult};
 pub use storage::compression::{vbyte_encode, VByteDecoder};
 
 mod fs_storage;
@@ -33,6 +33,8 @@ pub type Result<T> = std::result::Result<T, StorageError>;
 pub enum StorageError {
     /// The key which should be retrieved could not be found
     KeyNotFound,
+    /// General IO error
+    IO(std::io::Error),
     /// Error occured during read operation
     ReadError(Option<std::io::Error>),
     /// Error occured during write operation
@@ -45,10 +47,17 @@ impl std::fmt::Display for StorageError {
     }
 }
 
+impl From<std::io::Error> for StorageError {
+    fn from(err: std::io::Error) -> Self {
+        StorageError::IO(err)
+    }
+}
+
 impl Error for StorageError {
     fn description(&self) -> &str {
         match *self {
             StorageError::KeyNotFound => "Key was not found in storage!",
+            StorageError::IO(_) => "An error occured during an IO-operation!",
             StorageError::ReadError(_) => "An error occured while trying to read from storage!",
             StorageError::WriteError(_) => "An error occured while trying to write to storage!",
         }

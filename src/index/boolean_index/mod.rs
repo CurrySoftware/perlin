@@ -19,7 +19,7 @@ use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::Listing;
 
-use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable};
+use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable, DecodeError};
 use utils::owning_iterator::ArcIter;
 use utils::persistence::Persistent;
 
@@ -61,7 +61,7 @@ pub enum Error {
     /// A `BooleanIndex` attempted to beeing loaded from a file, not a directory
     PersistPathIsFile,
     /// Tried to load a `BooleanIndex` from a corrupted file
-    CorruptedIndexFile,
+    CorruptedIndexFile(Option<DecodeError>),
     /// An IO-Error occured
     IO(io::Error),
     /// A Storage-Error occured
@@ -116,7 +116,7 @@ impl<TTerm> BooleanIndex<TTerm>
     fn load<TStorage>(path: &Path) -> Result<Self>
         where TStorage: Storage<Listing> + Persistent + 'static
     {
-        let storage = TStorage::load(path);
+        let storage = try!(TStorage::load(path));
         let vocab = try!(Self::load_vocabulary(path));
         let doc_count = try!(Self::load_statistics(path));
         BooleanIndex::from_parts(Box::new(storage), vocab, doc_count)
@@ -192,11 +192,10 @@ impl<TTerm> BooleanIndex<TTerm>
         while let Some(id) = decoder.next() {
             if let Some(term_len) = decoder.next() {
                 let term_bytes: Vec<u8> = decoder.underlying_iterator().take(term_len).map(|b| b.unwrap()).collect();
-                if let Ok(term) = TTerm::decode(&mut term_bytes.as_slice()) {
-                    result.insert(term, id as u64);
-                } else {
-                    // Error while decoding a term. TODO: Propagate Error
-                }
+                match TTerm::decode(&mut term_bytes.as_slice()) {
+                    Ok(term) => result.insert(term, id as u64),
+                    Err(e) => return Err(Error::CorruptedIndexFile(Some(e)))                                  
+                };
             } else {
                 // Term len could not be decoded. TODO: Error Handling
             }
@@ -224,7 +223,7 @@ impl<TTerm> BooleanIndex<TTerm>
         if let Some(doc_count) = VByteDecoder::new(statistics_file.bytes()).next() {
             Ok(doc_count)
         } else {
-            Err(Error::CorruptedIndexFile)
+            Err(Error::CorruptedIndexFile(None))
         }
     }
 }

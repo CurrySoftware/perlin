@@ -5,9 +5,26 @@
 //! The module also provides implementations for commonly used types (for now
 //! only String and usize).
 
-use std::result::Result;
-use std::io::{Read};
+use std::error::Error;
+use std::io;
+use std::io::Read;
+use std::result;
+
 use storage::{vbyte_encode, VByteDecoder};
+
+/// Wraps the Result of a decoding operation
+pub type DecodeResult<T> = result::Result<T, DecodeError>;
+
+#[derive(Debug)]
+/// Error kinds that can occur during a decoding operation
+pub enum DecodeError{
+    /// Error occured during an IO operation
+    IO(io::Error),
+    /// Some error occured
+    Other(Box<Error + Send>),
+    /// Error occured due to malformed input
+    MalformedInput
+}
 
 /// Defines a method that allows an object to be encoded as a variable number
 /// of bytes
@@ -22,7 +39,7 @@ pub trait ByteDecodable
     where Self: Sized
 {
     /// Decodes an object from a byte iterator
-    fn decode<R: Read>(read: &mut R) -> Result<Self, String>;
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self>;
 }
 
 
@@ -35,11 +52,11 @@ impl ByteEncodable for String {
 }
 
 impl ByteDecodable for String {
-    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut bytes = vec![];
         //TODO: Error handling
         read.read_to_end(&mut bytes).unwrap();
-        String::from_utf8(bytes).map_err(|e| format!("{:?}", e))
+        String::from_utf8(bytes).map_err(|e| DecodeError::Other(Box::new(e)))
     }
 }
 
@@ -50,14 +67,12 @@ impl ByteEncodable for usize {
 }
 
 impl ByteDecodable for usize {
-    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res)
         } else {
-            Err("Tried to decode bytevector /
-                 with variable byte code. Failed"
-                .to_string())
+            Err(DecodeError::MalformedInput)
         }
     }
 }
@@ -69,14 +84,12 @@ impl ByteEncodable for u64 {
 }
 
 impl ByteDecodable for u64 {
-    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res as u64)
         } else {
-            Err("Tried to decode bytevector /
-                 with variable byte code. Failed"
-                .to_string())
+            Err(DecodeError::MalformedInput)
         }
     }
 }
@@ -88,14 +101,12 @@ impl ByteEncodable for u32 {
 }
 
 impl ByteDecodable for u32 {
-    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res as u32)
         } else {
-            Err("Tried to decode bytevector /
-                 with variable byte code. Failed"
-                .to_string())
+            Err(DecodeError::MalformedInput)
         }
     }
 }
@@ -107,16 +118,12 @@ impl ByteEncodable for u16 {
 }
 
 impl ByteDecodable for u16 {
-    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut decoder = VByteDecoder::new(read.bytes());
         if let Some(res) = decoder.next() {
             Ok(res as u16)
         } else {
-            Err("Tried to decode bytevector /
-                 with variable byte code. Failed"
-                .to_string())
+            Err(DecodeError::MalformedInput)
         }
     }
 }
-
-// TODO: Custom Decode, Encode Errors

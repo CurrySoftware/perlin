@@ -8,12 +8,14 @@
 
 use std::path::Path;
 
-// TODO: These methods need to return Results.
-// They can both fail (relatively likely actually)
-pub trait Persistent {
-    fn create(path: &Path) -> Self;
-    fn load(path: &Path) -> Self;
-    fn associated_files() -> &'static [&'static str]; 
+use storage::Result;
+
+pub trait Persistent
+    where Self: Sized
+{
+    fn create(path: &Path) -> Result<Self>;
+    fn load(path: &Path) -> Result<Self>;
+    fn associated_files() -> &'static [&'static str];
 }
 
 pub trait Volatile {

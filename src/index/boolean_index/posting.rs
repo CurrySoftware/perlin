@@ -1,5 +1,5 @@
-use std::io::{Read};
-use storage::{ByteDecodable, ByteEncodable, vbyte_encode, VByteDecoder};
+use std::io::Read;
+use storage::{ByteDecodable, ByteEncodable, vbyte_encode, VByteDecoder, DecodeResult, DecodeError};
 
 // For each term-document pair the doc_id and the
 // positions of the term inside the document are stored
@@ -25,21 +25,25 @@ impl ByteEncodable for Listing {
 
 // TODO: Errorhandling
 impl ByteDecodable for Vec<Posting> {
-    fn decode<R: Read>(read: &mut R) -> Result<Self, String> {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut decoder = VByteDecoder::new(read.bytes());
-        let postings_len = decoder.next().unwrap();
-        let mut postings = Vec::with_capacity(postings_len);
-        for _ in 0..postings_len {
-            let doc_id = decoder.next().unwrap();
-            let positions_len = decoder.next().unwrap();
-            let mut positions = Vec::with_capacity(positions_len as usize);
-            let mut last_position = 0;
-            for _ in 0..positions_len {
-                last_position += decoder.next().unwrap();
-                positions.push(last_position as u32);
+        if let Some(postings_len) = decoder.next() {
+            let mut postings = Vec::with_capacity(postings_len);
+            for _ in 0..postings_len {
+                let doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+                let positions_len = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+                let mut positions = Vec::with_capacity(positions_len as usize);
+                let mut last_position = 0;
+                for _ in 0..positions_len {
+                    last_position += try!(decoder.next().ok_or(DecodeError::MalformedInput));
+                    positions.push(last_position as u32);
+                }
+                postings.push((doc_id as u64, positions));
             }
-            postings.push((doc_id as u64, positions));
+            Ok(postings)
+
+        } else {
+            Err(DecodeError::MalformedInput)
         }
-        Ok(postings)
     }
 }
