@@ -42,23 +42,32 @@ const CHUNKSIZE: usize = 1_000_000;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
+/// Error kinds that can occure during indexing operations 
+pub enum IndexingError{
+    /// An Error related to sending via `mpsc::Channel`
+    Send,
+    /// An indexing thread panicked
+    ThreadPanic
+}
+
+#[derive(Debug)]
 /// Error kinds that can occur during operations related to `BooleanIndex`
 pub enum Error {
     /// A persistent `BooleanIndex` should be build but no path where to persist it was specified
     /// Call the `IndexBuilder::persist()`
     PersistPathNotSpecified,
     /// A `BooleanIndex` should be loaded from a directory but the specified directory is empty
-    EmptyPersistPath,
+    MissingIndexFiles(Vec<&'static str>),
+    /// A `BooleanIndex` attempted to beeing loaded from a file, not a directory
+    PersistPathIsFile,
     /// Tried to load a `BooleanIndex` from a corrupted file
     CorruptedIndexFile,
     /// An IO-Error occured
     IO(io::Error),
     /// A Storage-Error occured
     Storage(StorageError),
-    /// An Error related to sending via `mpsc::Channel`
-    Send,
-    /// An indexing thread panicked
-    IndexingThreadPanic
+    /// An error occured during indexing
+    Indexing(IndexingError)
 }
 
 impl From<io::Error> for Error {
@@ -75,7 +84,7 @@ impl From<StorageError> for Error {
 
 impl<T> From<mpsc::SendError<T>> for Error {
     fn from(_: mpsc::SendError<T>) -> Self {
-        Error::Send
+        Error::Indexing(IndexingError::Send)
     }
 }
 
@@ -283,11 +292,11 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         }
         drop(chunk_tx);
         if sort_and_group.join().is_err() {
-            return Err(Error::IndexingThreadPanic)
+            return Err(Error::Indexing(IndexingError::ThreadPanic))
         }
         let inv_index = match inv_index.join() {
             Ok(res) => try!(res),
-            Err(_) => return Err(Error::IndexingThreadPanic)
+            Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic))
         };
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.

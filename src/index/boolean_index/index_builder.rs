@@ -1,13 +1,17 @@
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
+use std::fs;
 
+use storage::Storage;
 use storage::{ByteEncodable, ByteDecodable};
 use utils::persistence::{Volatile, Persistent};
 
-use storage::Storage;
 
+use index::boolean_index;
 use index::boolean_index::{Result, Error, BooleanIndex};
 use index::boolean_index::posting::Listing;
+
+const REQUIRED_FILES: [&'static str; 2] = [boolean_index::VOCAB_FILENAME, boolean_index::STATISTICS_FILENAME];
 
 /// `IndexBuilder` is used to build `BooleanIndex` instances
 pub struct IndexBuilder<TTerm, TStorage> {
@@ -70,21 +74,76 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
-        if let Some(ref path) = self.persistence {
-            BooleanIndex::new_persistent(TStorage::create(path), documents, path)
-        } else {
-            Err(Error::PersistPathNotSpecified)
-        }
+        let path = try!(self.check_persist_path());
+        BooleanIndex::new_persistent(TStorage::create(path), documents, path)
     }
 
     /// Loads an index from a previously filled directory.
     /// Returns a `BuilderError` if directory is empty or does not contain
     /// valid data
     pub fn load(&self) -> Result<BooleanIndex<TTerm>> {
+        let path = try!(self.check_persist_path());
+        BooleanIndex::load::<TStorage>(path)
+    }
+
+    fn check_persist_path(&self) -> Result<&Path> {
         if let Some(ref path) = self.persistence {
-            BooleanIndex::load::<TStorage>(path)
+            if path.is_dir() {
+                let paths = try!(fs::read_dir(path));
+                // Path is a directory and seems to exist. Lets see if all the files are present
+                let mut required_files = REQUIRED_FILES.to_vec();
+                required_files.extend_from_slice(TStorage::associated_files());
+                for path in paths.filter(|p| p.is_ok()).map(|p| p.unwrap()) {
+                    if let Some(pos) = required_files.iter().position(|f| (**f) == path.file_name()) {
+                        required_files.swap_remove(pos);
+                    }
+                }
+                if required_files.is_empty() {
+                    Ok(path)
+                } else {
+                    Err(Error::MissingIndexFiles(required_files))
+                }
+            } else {
+                Err(Error::PersistPathIsFile)
+            }
         } else {
             Err(Error::PersistPathNotSpecified)
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use index::boolean_index::Error;
+    use storage::FsStorage;
+    use std::env;
+    use std::fs;
+
+    #[test]
+    fn empty_folder() {
+        let path = &env::temp_dir().join("perlin_test_empty_dir");
+        fs::create_dir_all(path).unwrap();
+
+        let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
+        assert!(if let Err(Error::MissingIndexFiles(_)) = result {
+            true
+        } else {
+            false
+        });
+    }
+
+    #[test]
+    fn file_not_folder() {
+        let path = &env::temp_dir().join("perlin_test_file.bin");
+        fs::File::create(path).unwrap();
+
+        let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
+        assert!(if let Err(Error::PersistPathIsFile) = result {
+            true
+        } else {
+            false
+        });
     }
 }

@@ -12,7 +12,7 @@ use storage::{Result, StorageError, Storage};
 
 const ENTRIES_FILENAME: &'static str = "entries.bin";
 const DATA_FILENAME: &'static str = "data.bin";
-
+const ASSOCIATED_FILES: &'static [&'static str; 2] = &[ENTRIES_FILENAME, DATA_FILENAME];
 
 /// Writes datastructures to a filesystem. Compressed and retrievable.
 pub struct FsStorage<TItem> {
@@ -83,6 +83,10 @@ impl<TItem> Persistent for FsStorage<TItem> {
                 .unwrap(),
             _item_type: PhantomData,
         }
+    }
+
+    fn associated_files() -> &'static [&'static str] {
+        ASSOCIATED_FILES
     }
 }
 
