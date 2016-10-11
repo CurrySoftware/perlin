@@ -55,6 +55,10 @@ pub enum Error {
     IO(io::Error),
     /// A Storage-Error occured
     Storage(StorageError),
+    /// An Error related to sending via `mpsc::Channel`
+    Send,
+    /// An indexing thread panicked
+    IndexingThreadPanic
 }
 
 impl From<io::Error> for Error {
@@ -66,6 +70,12 @@ impl From<io::Error> for Error {
 impl From<StorageError> for Error {
     fn from(err: StorageError) -> Self {
         Error::Storage(err)
+    }
+}
+
+impl<T> From<mpsc::SendError<T>> for Error {
+    fn from(_: mpsc::SendError<T>) -> Self {
+        Error::Send
     }
 }
 
@@ -249,7 +259,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     {
         let (chunk_tx, chunk_rx) = mpsc::channel();
         let (merged_tx, merged_rx) = mpsc::channel();
-        thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(chunk_rx, merged_tx));
+        let sort_and_group = thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(chunk_rx, merged_tx));
         let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
         let mut buffer = Vec::with_capacity(2048);
         let mut term_count = 0;
@@ -266,13 +276,19 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                 buffer.push((term_count as u64, doc_id as u64, term_position as u32));
                 term_count += 1;
             }
-            chunk_tx.send(buffer).unwrap();
+            try!(chunk_tx.send(buffer));
             buffer = Vec::with_capacity(2048);
             // Term was not yet indexed. Add it
             self.document_count += 1;
         }
         drop(chunk_tx);
-        let inv_index = inv_index.join().unwrap();
+        if sort_and_group.join().is_err() {
+            return Err(Error::IndexingThreadPanic)
+        }
+        let inv_index = match inv_index.join() {
+            Ok(res) => try!(res),
+            Err(_) => return Err(Error::IndexingThreadPanic)
+        };
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index.into_iter().enumerate() {
@@ -319,7 +335,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     }
 
     //receives sorted listings. merges them into the complete inverted index
-    fn invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Vec<Listing> {
+    fn invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
         let mut inv_index: Vec<Listing> = Vec::with_capacity(8192);
         while let Ok(chunk) = grouped_chunks.recv() {
             //Threshold determines at what term_id the terms are new.
@@ -335,7 +351,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                 }
             }
         }
-        inv_index
+        Ok(inv_index)
     }
 
 
