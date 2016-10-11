@@ -54,8 +54,7 @@ impl<'a> Iterator for &'a mut ZipfGenerator {
     fn next(&mut self) -> Option<Self::Item> {
         let dice = self.rng.next_f32();
         let result = match self.acc_probs.binary_search_by(|v| v.partial_cmp(&dice).unwrap()) {
-            Ok(index) => index,
-            Err(index) => index
+            Ok(index) | Err(index) => index
         };
         Some(result)
     }
