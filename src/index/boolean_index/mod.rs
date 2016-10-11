@@ -249,8 +249,8 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     {
         let (chunk_tx, chunk_rx) = mpsc::channel();
         let (merged_tx, merged_rx) = mpsc::channel();
-        thread::spawn(|| BooleanIndex::<TTerm>::sort_and_merge_chunk(chunk_rx, merged_tx));
-        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::inv_index(merged_rx));
+        thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(chunk_rx, merged_tx));
+        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
         let mut buffer = Vec::with_capacity(2048);
         let mut term_count = 0;
         // For every document in the collection
@@ -281,47 +281,56 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         Ok(self.document_count)
     }
 
-    fn sort_and_merge_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
-                            merged_chunks: mpsc::Sender<Vec<(u64, Listing)>>) {
+    fn sort_and_group_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
+                            grouped_chunks: mpsc::Sender<Vec<(u64, Listing)>>) {
         while let Ok(mut chunk) = ids.recv() {
-            // Sort triples
+            // Sort triples by term_id
             chunk.sort_by_key(|&(a, _, _)| a);
-            let mut distinct_chunk = Vec::with_capacity(512);
+            let mut grouped_chunk = Vec::with_capacity(chunk.len());
             let mut last_tid = 0;
-            let mut c = 0;
+            let mut term_counter = 0;
             // Group by term_id and doc_id
-            for i in 0..chunk.len() {
-                let (term_id, doc_id, pos) = chunk[i];
-                if last_tid < chunk[i].0 || i == 0 {
-                    c += 1;
-                    distinct_chunk.push((term_id, vec![(doc_id, vec![pos])]));
+            for (i, &(term_id, doc_id, pos)) in chunk.iter().enumerate() {
+                // if term is the first term or different to the last term (new group)
+                if last_tid < term_id || i == 0 {
+                    term_counter += 1;
+                    // Term_id has to be added
+                    grouped_chunk.push((term_id, vec![(doc_id, vec![pos])]));
                     last_tid = term_id;
                     continue;
                 }
+                //Term_id is already known.
                 {
-                    let mut posting = distinct_chunk[c - 1].1.last_mut().unwrap();
+                    let mut posting = grouped_chunk[term_counter - 1].1.last_mut().unwrap();
+                    //Check if last doc_id equals this doc_id
                     if posting.0 == doc_id {
+                        //If so only push the new position
                         posting.1.push(pos);
                         continue;
                     }
                 }
-                distinct_chunk[c - 1].1.push((doc_id, vec![pos]));
+                //Otherwise add a whole new posting
+                grouped_chunk[term_counter - 1].1.push((doc_id, vec![pos]));
             }
-            // Simple pushing into the vec
-
-            merged_chunks.send(distinct_chunk).unwrap();
+            // Send grouped chunk to merger thread
+            // (yes, this is a verb: https://en.wiktionary.org/wiki/grouped#English)
+            grouped_chunks.send(grouped_chunk).unwrap();
         }
     }
 
-    fn inv_index(merged_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Vec<Listing> {
+    //receives sorted listings. merges them into the complete inverted index
+    fn invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Vec<Listing> {
         let mut inv_index: Vec<Listing> = Vec::with_capacity(8192);
-        while let Ok(chunk) = merged_chunks.recv() {
+        while let Ok(chunk) = grouped_chunks.recv() {
+            //Threshold determines at what term_id the terms are new.
             let threshold = inv_index.len();
             for (term_id, mut listing) in chunk {
                 let uterm_id = term_id as usize;
                 if uterm_id < threshold {
+                    //term_id is already known. Append listing
                     inv_index[uterm_id].append(&mut listing);
                 } else {
+                    //term_id is new. Push listing
                     inv_index.push(listing);
                 }
             }
