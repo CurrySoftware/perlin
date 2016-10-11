@@ -21,6 +21,7 @@ pub use storage::compression::{vbyte_encode, VByteDecoder};
 
 mod fs_storage;
 mod ram_storage;
+mod comp_ram_storage;
 mod byte_code;
 mod compression;
 
