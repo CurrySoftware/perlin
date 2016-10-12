@@ -6,7 +6,7 @@
 //! * boolean retrieval on arbitrary types
 //! * minimal dependencies
 //! * lazy and zero-allocation query evaluation
-//! 
+//!
 //! # Basic Usage
 //!
 //! Add Perlin to Cargo.toml
@@ -50,10 +50,10 @@
 //!
 //! Have a look in the [examples folder](https://github.com/JDemler/perlin/tree/master/examples) for more
 //! elaborate examples!
-//! 
+//!
 //!
 #![doc(html_root_url = "https://doc.perlin-ir.org/")]
-//#![deny(missing_docs, warnings)]
+// #![deny(missing_docs, warnings)]
 
 #[macro_use]
 mod utils;

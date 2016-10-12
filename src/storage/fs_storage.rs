@@ -30,7 +30,7 @@ impl<TItem> Persistent for FsStorage<TItem>{
     /// afterwards
     fn create(path: &Path) -> Result<Self> {
         assert!(path.is_dir(),
-                "FsStorage::new expects a directory not a file!");
+                "FsStorage::create expects a directory not a file!");
         Ok(FsStorage {
             current_offset: 0,
             current_id: 0,
@@ -60,10 +60,10 @@ impl<TItem> Persistent for FsStorage<TItem>{
         // 2. Decode entries and write them to BTreeMap
         let mut current_id: u64 = 0;
         let mut current_offset: u64 = 0;
-        while let Some(entry) = decode_entry(&mut decoder) {
-            current_id += entry.0 as u64;
-            entries.insert(current_id, (current_offset, entry.1));
-            current_offset += entry.1 as u64;
+        while let Some((id, len)) = decode_entry(&mut decoder) {
+            current_id += id as u64;
+            entries.insert(current_id, (current_offset, len));
+            current_offset += len as u64;
         }
 
         Ok(FsStorage {
