@@ -74,7 +74,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
-        let path = try!(self.check_persist_path());
+        let path = try!(self.check_persist_path(false));
         BooleanIndex::new_persistent(TStorage::create(path).unwrap(), documents, path)
     }
 
@@ -82,15 +82,18 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     /// Returns a `BuilderError` if directory is empty or does not contain
     /// valid data
     pub fn load(&self) -> Result<BooleanIndex<TTerm>> {
-        let path = try!(self.check_persist_path());
+        let path = try!(self.check_persist_path(true));
         BooleanIndex::load::<TStorage>(path)
     }
 
-    fn check_persist_path(&self) -> Result<&Path> {
+    fn check_persist_path(&self, check_for_existing_files: bool) -> Result<&Path> {
         if let Some(ref path) = self.persistence {
             if path.is_dir() {
                 let paths = try!(fs::read_dir(path));
                 // Path is a directory and seems to exist. Lets see if all the files are present
+                if !check_for_existing_files {
+                    return Ok(path);
+                }
                 let mut required_files = Self::required_files();
                 for path in paths.filter(|p| p.is_ok()).map(|p| p.unwrap()) {
                     if let Some(pos) = required_files.iter().position(|f| (**f) == path.file_name()) {
