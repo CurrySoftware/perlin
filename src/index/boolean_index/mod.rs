@@ -42,12 +42,12 @@ const CHUNKSIZE: usize = 1_000_000;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-/// Error kinds that can occure during indexing operations 
-pub enum IndexingError{
+/// Error kinds that can occure during indexing operations
+pub enum IndexingError {
     /// An Error related to sending via `mpsc::Channel`
     Send,
     /// An indexing thread panicked
-    ThreadPanic
+    ThreadPanic,
 }
 
 #[derive(Debug)]
@@ -67,7 +67,7 @@ pub enum Error {
     /// A Storage-Error occured
     Storage(StorageError),
     /// An error occured during indexing
-    Indexing(IndexingError)
+    Indexing(IndexingError),
 }
 
 impl From<io::Error> for Error {
@@ -194,7 +194,7 @@ impl<TTerm> BooleanIndex<TTerm>
                 let term_bytes: Vec<u8> = decoder.underlying_iterator().take(term_len).map(|b| b.unwrap()).collect();
                 match TTerm::decode(&mut term_bytes.as_slice()) {
                     Ok(term) => result.insert(term, id as u64),
-                    Err(e) => return Err(Error::CorruptedIndexFile(Some(e)))                                  
+                    Err(e) => return Err(Error::CorruptedIndexFile(Some(e))),
                 };
             } else {
                 return Err(Error::CorruptedIndexFile(None));
@@ -229,6 +229,11 @@ impl<TTerm> BooleanIndex<TTerm>
 }
 
 impl<TTerm: Ord> BooleanIndex<TTerm> {
+    /// Returns the number of indexed documents
+    pub fn document_count(&self) -> usize {
+        self.document_count
+    }
+
     /// Creates a new volatile `BooleanIndex`. Not intended for public use.
     /// Please use `IndexBuilder` instead
     fn new<TDocsIterator, TDocIterator, TStorage>(storage: TStorage, documents: TDocsIterator) -> Result<Self>
@@ -245,6 +250,8 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         try!(index.index_documents(documents));
         Ok(index)
     }
+
+
 
 
     fn from_parts(inverted_index: Box<Storage<Listing>>,
@@ -291,11 +298,11 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         }
         drop(chunk_tx);
         if sort_and_group.join().is_err() {
-            return Err(Error::Indexing(IndexingError::ThreadPanic))
+            return Err(Error::Indexing(IndexingError::ThreadPanic));
         }
         let inv_index = match inv_index.join() {
             Ok(res) => try!(res),
-            Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic))
+            Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
         };
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
@@ -323,17 +330,17 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                     last_tid = term_id;
                     continue;
                 }
-                //Term_id is already known.
+                // Term_id is already known.
                 {
                     let mut posting = grouped_chunk[term_counter - 1].1.last_mut().unwrap();
-                    //Check if last doc_id equals this doc_id
+                    // Check if last doc_id equals this doc_id
                     if posting.0 == doc_id {
-                        //If so only push the new position
+                        // If so only push the new position
                         posting.1.push(pos);
                         continue;
                     }
                 }
-                //Otherwise add a whole new posting
+                // Otherwise add a whole new posting
                 grouped_chunk[term_counter - 1].1.push((doc_id, vec![pos]));
             }
             // Send grouped chunk to merger thread
@@ -342,19 +349,19 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         }
     }
 
-    //receives sorted listings. merges them into the complete inverted index
+    // receives sorted listings. merges them into the complete inverted index
     fn invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
         let mut inv_index: Vec<Listing> = Vec::with_capacity(8192);
         while let Ok(chunk) = grouped_chunks.recv() {
-            //Threshold determines at what term_id the terms are new.
+            // Threshold determines at what term_id the terms are new.
             let threshold = inv_index.len();
             for (term_id, mut listing) in chunk {
                 let uterm_id = term_id as usize;
                 if uterm_id < threshold {
-                    //term_id is already known. Append listing
+                    // term_id is already known. Append listing
                     inv_index[uterm_id].append(&mut listing);
                 } else {
-                    //term_id is new. Push listing
+                    // term_id is new. Push listing
                     inv_index.push(listing);
                 }
             }
