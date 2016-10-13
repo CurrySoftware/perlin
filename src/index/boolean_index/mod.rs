@@ -197,7 +197,7 @@ impl<TTerm> BooleanIndex<TTerm>
                     Err(e) => return Err(Error::CorruptedIndexFile(Some(e)))                                  
                 };
             } else {
-                // Term len could not be decoded. TODO: Error Handling
+                return Err(Error::CorruptedIndexFile(None));
             }
         }
         Ok(result)

@@ -36,7 +36,6 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     result
 }
 
-// TODO: VByteDecoder to take a Iterator<Item=&u8> not Iterator<Item=u8>
 /// Iterator that decodes a bytestream to unsigned integers
 pub struct VByteDecoder<R> {
     bytes: Bytes<R>

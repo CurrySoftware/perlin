@@ -26,6 +26,12 @@ pub enum DecodeError{
     MalformedInput
 }
 
+impl From<io::Error> for DecodeError {
+    fn from(err: io::Error) -> Self {
+        DecodeError::IO(err)
+    }
+}
+
 /// Defines a method that allows an object to be encoded as a variable number
 /// of bytes
 pub trait ByteEncodable {
@@ -54,8 +60,7 @@ impl ByteEncodable for String {
 impl ByteDecodable for String {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut bytes = vec![];
-        //TODO: Error handling
-        read.read_to_end(&mut bytes).unwrap();
+        try!(read.read_to_end(&mut bytes));
         String::from_utf8(bytes).map_err(|e| DecodeError::Other(Box::new(e)))
     }
 }

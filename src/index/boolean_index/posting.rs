@@ -23,7 +23,6 @@ impl ByteEncodable for Listing {
     }
 }
 
-// TODO: Errorhandling
 impl ByteDecodable for Vec<Posting> {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
         let mut decoder = VByteDecoder::new(read.bytes());
@@ -41,7 +40,6 @@ impl ByteDecodable for Vec<Posting> {
                 postings.push((doc_id as u64, positions));
             }
             Ok(postings)
-
         } else {
             Err(DecodeError::MalformedInput)
         }
