@@ -470,6 +470,8 @@ mod tests {
         assert!(index.term_ids.len() == 15);
         assert!(*index.postings.get(*index.term_ids.get(&0).unwrap()).unwrap() ==
                 vec![(0, vec![0]), (1, vec![0]), (2, vec![5])]);
+        assert_eq!(index.document_count(), 3);
+        
     }
 
     #[test]
