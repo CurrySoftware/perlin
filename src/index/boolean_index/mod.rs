@@ -31,7 +31,7 @@ mod index_builder;
 mod query_builder;
 mod posting;
 mod boolean_query;
-
+mod indexing_chunk;
 
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";

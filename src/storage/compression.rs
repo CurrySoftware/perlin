@@ -36,6 +36,27 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     result
 }
 
+/// Performs a vbyte encode without allocating memory on the heap
+/// Memory layout of the result: [ payload | payload | payload | ... | used_bytes ]
+pub fn heapless_vbyte_encode(mut number: usize) -> [u8; 11]
+{
+    let mut count = 0;
+    let mut result = [0u8; 11];
+    loop {
+        result[9 - count] = (number % 128) as u8;
+        count += 1;
+        if number < 128 {
+            break;
+        } else {
+            number /= 128;
+        }
+    }    
+    result[9] += 128;
+    result[10] = count as u8;
+    result        
+}
+
+
 /// Iterator that decodes a bytestream to unsigned integers
 pub struct VByteDecoder<R> {
     bytes: Bytes<R>
@@ -86,7 +107,22 @@ mod tests {
 
     use super::*;
     use std::io::Read;
+    use std;
 
+    #[test]
+    fn test_heapless_vbyte_encode() {
+        println!("{:?}", heapless_vbyte_encode(0));
+        println!("{:?}", heapless_vbyte_encode(128));
+        assert_eq!(heapless_vbyte_encode(0)[9], 0x80);
+        assert_eq!(heapless_vbyte_encode(0)[10], 0x01);
+        assert_eq!(heapless_vbyte_encode(128)[8..10], [0x01, 0x80]);
+        assert_eq!(heapless_vbyte_encode(128)[10], 0x02);
+               
+        assert_eq!(heapless_vbyte_encode(0xFFFF)[7..10], [0x03, 0x7F, 0xFF]);
+        assert_eq!(heapless_vbyte_encode(0xFFFF)[10], 0x03);
+        assert_eq!(heapless_vbyte_encode(std::u64::MAX as usize), [1, 127, 127, 127, 127, 127, 127, 127, 127, 255, 10]);
+    }
+    
     #[test]
     fn test_vbyte_encode() {
         assert_eq!(vbyte_encode(0), vec![0x80]);
