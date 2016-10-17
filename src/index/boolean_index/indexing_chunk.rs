@@ -31,7 +31,7 @@ impl fmt::Debug for IndexingChunk {
 impl IndexingChunk {
     /// Adds listing to IndexingChunk. Returns Ok if listing fits into chunk
     /// Otherwise returns the posting number which did not fit into this chunk anymore
-    pub fn add_listing(&mut self, listing: &Listing) -> Result<(), usize> {
+    pub fn append(&mut self, listing: &[(u64, Vec<u32>)]) -> Result<(), usize> {
         for (count, &(doc_id, ref positions)) in listing.iter().enumerate() {
             let old_capa = self.capacity;
             // Encode the doc_id as delta
@@ -91,7 +91,7 @@ mod tests {
         };
 
         let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
-        chunk.add_listing(&listing);
+        chunk.append(&listing);
         assert_eq!(chunk.capacity, 4074);
         assert_eq!(chunk.postings_count, 3);
         assert_eq!(chunk.last_doc_id, 204);
@@ -112,7 +112,7 @@ mod tests {
             capacity: 4092,
             data: unsafe { mem::uninitialized() },
         };
-        assert_eq!(chunk.add_listing(&listing), Ok(()));
+        assert_eq!(chunk.append(&listing), Ok(()));
         assert_eq!(chunk.postings_count, 64);
         assert_eq!(chunk.capacity, 0);
     }
@@ -129,7 +129,7 @@ mod tests {
             capacity: 4092,
             data: unsafe { mem::uninitialized() },
         };
-        assert_eq!(chunk.add_listing(&listing), Err(0));
+        assert_eq!(chunk.append(&listing), Err(0));
         assert_eq!(chunk.capacity, 4092);
         assert_eq!(chunk.postings_count, 0);
     }

@@ -14,6 +14,7 @@ use std::sync::mpsc;
 
 use index::Index;
 use storage::{Storage, StorageError};
+use storage::ChunkedStorage;
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
@@ -370,6 +371,30 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         Ok(inv_index)
     }
 
+    fn experimental_invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<ChunkedStorage> {
+        let mut storage = ChunkedStorage::new(32000);
+        while let Ok(chunk) = grouped_chunks.recv() {
+            let threshold = storage.len();
+            for (term_id, mut listing) in chunk {
+                let uterm_id = term_id as usize;
+                // Get chunk to write to or creat if unknown
+                let result = {
+                    let stor_chunk = if uterm_id < threshold {
+                        storage.get_last_mut(term_id)
+                    } else {
+                        storage.new_chunk(term_id)
+                    };
+                    stor_chunk.append(&listing)
+                };
+                if let Err(count) = result {
+                    let next_chunk = storage.next_chunk(term_id);
+                    next_chunk.append(&listing[count..]);
+                }
+            }
+        }
+        Ok(storage)
+    }
+
 
     fn run_query(&self, query: &BooleanQuery<TTerm>) -> QueryResultIterator {
         match *query {
@@ -472,7 +497,7 @@ mod tests {
         assert!(*index.postings.get(*index.term_ids.get(&0).unwrap()).unwrap() ==
                 vec![(0, vec![0]), (1, vec![0]), (2, vec![5])]);
         assert_eq!(index.document_count(), 3);
-        
+
     }
 
     #[test]
