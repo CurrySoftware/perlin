@@ -21,12 +21,14 @@ pub use storage::fs_storage::FsStorage;
 pub use storage::ram_storage::RamStorage;
 pub use storage::comp_ram_storage::CompressedRamStorage;
 pub use storage::byte_code::{ByteDecodable, ByteEncodable, DecodeError, DecodeResult};
+pub use storage::chunked_storage::ChunkedStorage;
 
 pub mod compression;
 mod fs_storage;
 mod ram_storage;
 mod comp_ram_storage;
 mod byte_code;
+mod chunked_storage;
 
 
 
@@ -90,20 +92,4 @@ pub trait Storage<T>
     /// Tries to store a value with a given Id.
     /// Returns an Error if Write fails or if there is no more space.
     fn store(&mut self, id: u64, data: T) -> Result<()>;
-}
-
-
-pub trait ChunkedStorage
-{
-
-    fn store_and_continue(&mut self, id: u64, data: IndexingChunk) -> Result<IndexingChunk>;
-
-    fn store(&mut self, id: u64, data: IndexingChunk) -> Result<()>;
-
-    fn new_chunk(&self, id: u64) -> Result<IndexingChunk>;
-
-    fn get(&self, id: u64) -> Result<IndexingChunk>;
-
-    fn get_pos(&self, position: u32) -> Result<IndexingChunk>;
-    
 }

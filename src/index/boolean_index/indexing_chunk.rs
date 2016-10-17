@@ -3,13 +3,15 @@ use std::fmt;
 use storage::compression::VByteEncoded;
 use index::boolean_index::posting::Listing;
 
+//TODO: Pubs are wrong here. Seriously!
 pub struct IndexingChunk {
-    previous_chunk: u32,
-    reserved_spot: u32,
-    last_doc_id: u64,
-    postings_count: u16,
-    capacity: u16,
-    data: [u8; 4092],
+    pub previous_chunk: u32,
+    pub reserved_spot: u32,
+    pub next_chunk: u32,
+    pub last_doc_id: u64,
+    pub postings_count: u16,
+    pub capacity: u16,
+    pub data: [u8; 4092],
 }
 
 impl fmt::Debug for IndexingChunk {
@@ -29,7 +31,7 @@ impl fmt::Debug for IndexingChunk {
 impl IndexingChunk {
     /// Adds listing to IndexingChunk. Returns Ok if listing fits into chunk
     /// Otherwise returns the posting number which did not fit into this chunk anymore
-    fn add_listing(&mut self, listing: &Listing) -> Result<(), usize> {
+    pub fn add_listing(&mut self, listing: &Listing) -> Result<(), usize> {
         for (count, &(doc_id, ref positions)) in listing.iter().enumerate() {
             let old_capa = self.capacity;
             // Encode the doc_id as delta
@@ -81,6 +83,7 @@ mod tests {
         let mut chunk = IndexingChunk {
             previous_chunk: 0,
             reserved_spot: 0,
+            next_chunk: 0,
             last_doc_id: 0,
             postings_count: 0,
             capacity: 4092,
@@ -103,6 +106,7 @@ mod tests {
         let mut chunk = IndexingChunk {
             previous_chunk: 0,
             reserved_spot: 0,
+            next_chunk: 0,
             last_doc_id: 0,
             postings_count: 0,
             capacity: 4092,
@@ -119,6 +123,7 @@ mod tests {
         let mut chunk = IndexingChunk {
             previous_chunk: 0,
             reserved_spot: 0,
+            next_chunk: 0,
             last_doc_id: 0,
             postings_count: 0,
             capacity: 4092,
