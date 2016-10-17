@@ -5,8 +5,9 @@ use std::path::Path;
 use std::sync::Arc;
 use std::marker::PhantomData;
 
-use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable};
-use utils::persistence::{Persistent};
+use storage::compression::{vbyte_encode, VByteDecoder};
+use storage::{ByteEncodable, ByteDecodable};
+use utils::persistence::Persistent;
 
 use storage::{Result, StorageError, Storage};
 
@@ -25,7 +26,7 @@ pub struct FsStorage<TItem> {
     _item_type: PhantomData<TItem>,
 }
 
-impl<TItem> Persistent for FsStorage<TItem>{
+impl<TItem> Persistent for FsStorage<TItem> {
     /// Creates a new and empty instance of FsStorage which can be loaded
     /// afterwards
     fn create(path: &Path) -> Result<Self> {
@@ -91,7 +92,7 @@ impl<TItem> Persistent for FsStorage<TItem>{
 
 impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsStorage<TItem> {
     fn get(&self, id: u64) -> Result<Arc<TItem>> {
-        //TODO: Think through this once more. Now with the new Read approach in ByteDecodable
+        // TODO: Think through this once more. Now with the new Read approach in ByteDecodable
         if let Some(item_position) = self.entries.get(&id) {
             // Get filehandle
             let mut f = self.data.try_clone().unwrap();

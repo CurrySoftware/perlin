@@ -1,5 +1,6 @@
 use std::io::Read;
-use storage::{ByteDecodable, ByteEncodable, vbyte_encode, VByteDecoder, DecodeResult, DecodeError};
+use storage::compression::{vbyte_encode, VByteDecoder};
+use storage::{ByteDecodable, ByteEncodable, DecodeResult, DecodeError};
 
 // For each term-document pair the doc_id and the
 // positions of the term inside the document are stored

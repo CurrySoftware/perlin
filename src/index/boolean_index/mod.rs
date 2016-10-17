@@ -19,7 +19,8 @@ use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::Listing;
 
-use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable, DecodeError};
+use storage::compression::{vbyte_encode, VByteDecoder};
+use storage::{ByteEncodable, ByteDecodable, DecodeError};
 use utils::owning_iterator::ArcIter;
 use utils::persistence::Persistent;
 
@@ -31,7 +32,7 @@ mod index_builder;
 mod query_builder;
 mod posting;
 mod boolean_query;
-mod indexing_chunk;
+pub mod indexing_chunk;
 
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";

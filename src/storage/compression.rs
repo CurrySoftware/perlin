@@ -18,7 +18,7 @@
 //! assert_eq!(3, three);
 //! ```
 
-use std::io::{Bytes, Read};
+use std::io::{Bytes, Read, Write, Error};
 
 /// Encode an usigned integer as a variable number of bytes
 pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
@@ -36,36 +36,52 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     result
 }
 
-/// Performs a vbyte encode without allocating memory on the heap
-/// Memory layout of the result: [ payload | payload | payload | ... | used_bytes ]
-pub fn heapless_vbyte_encode(mut number: usize) -> [u8; 11]
-{
-    let mut count = 0;
-    let mut result = [0u8; 11];
-    loop {
-        result[9 - count] = (number % 128) as u8;
-        count += 1;
-        if number < 128 {
-            break;
-        } else {
-            number /= 128;
-        }
-    }    
-    result[9] += 128;
-    result[10] = count as u8;
-    result        
+pub struct VByteEncoded {
+    data: [u8; 11],
 }
+
+impl VByteEncoded {
+    /// Performs a vbyte encode without allocating memory on the heap
+    /// Memory layout of the result: [ payload | payload | payload | ... | used_bytes ]
+    pub fn new(mut number: usize) -> Self {
+        let mut count = 0;
+        let mut result = [0u8; 11];
+        loop {
+            result[9 - count] = (number % 128) as u8;
+            count += 1;
+            if number < 128 {
+                break;
+            } else {
+                number /= 128;
+            }
+        }
+        result[9] += 128;
+        result[10] = count as u8;
+        VByteEncoded {
+            data: result
+        }
+    }
+
+    pub fn bytes_used(&self) -> u8 {
+        self.data[10]
+    }
+
+    pub fn write_to<W: Write>(&self, mut target: W) -> Result<u8, Error> {
+        target.write_all(&self.data[(10-self.bytes_used()) as usize..10]).map(|()| self.bytes_used())
+    }
+}
+
 
 
 /// Iterator that decodes a bytestream to unsigned integers
 pub struct VByteDecoder<R> {
-    bytes: Bytes<R>
+    bytes: Bytes<R>,
 }
 
 impl<R: Read> VByteDecoder<R> {
     /// Create a new VByteDecoder by passing a bytestream
     pub fn new(read: Bytes<R>) -> Self {
-        VByteDecoder { bytes:  read }
+        VByteDecoder { bytes: read }
     }
 
     /// Sometimes it is convenient to look at the original bytestream itself
@@ -74,9 +90,10 @@ impl<R: Read> VByteDecoder<R> {
     /// a
     /// mutable borrow
     pub fn underlying_iterator(&mut self) -> &mut Bytes<R> {
-         &mut self.bytes
+        &mut self.bytes
     }
 }
+
 
 impl<R: Read> Iterator for VByteDecoder<R> {
     type Item = usize;
@@ -111,18 +128,17 @@ mod tests {
 
     #[test]
     fn test_heapless_vbyte_encode() {
-        println!("{:?}", heapless_vbyte_encode(0));
-        println!("{:?}", heapless_vbyte_encode(128));
-        assert_eq!(heapless_vbyte_encode(0)[9], 0x80);
-        assert_eq!(heapless_vbyte_encode(0)[10], 0x01);
-        assert_eq!(heapless_vbyte_encode(128)[8..10], [0x01, 0x80]);
-        assert_eq!(heapless_vbyte_encode(128)[10], 0x02);
-               
-        assert_eq!(heapless_vbyte_encode(0xFFFF)[7..10], [0x03, 0x7F, 0xFF]);
-        assert_eq!(heapless_vbyte_encode(0xFFFF)[10], 0x03);
-        assert_eq!(heapless_vbyte_encode(std::u64::MAX as usize), [1, 127, 127, 127, 127, 127, 127, 127, 127, 255, 10]);
+        assert_eq!(VByteEncoded::new(0).data[9], 0x80);
+        assert_eq!(VByteEncoded::new(0).bytes_used(), 1);
+        assert_eq!(VByteEncoded::new(128).data[8..10], [0x01, 0x80]);
+        assert_eq!(VByteEncoded::new(128).bytes_used(), 0x02);
+
+        assert_eq!(VByteEncoded::new(0xFFFF).data[7..10], [0x03, 0x7F, 0xFF]);
+        assert_eq!(VByteEncoded::new(0xFFFF).bytes_used(), 3);
+        assert_eq!(VByteEncoded::new(std::u64::MAX as usize).data,
+                   [1, 127, 127, 127, 127, 127, 127, 127, 127, 255, 10]);
     }
-    
+
     #[test]
     fn test_vbyte_encode() {
         assert_eq!(vbyte_encode(0), vec![0x80]);

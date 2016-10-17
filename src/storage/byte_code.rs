@@ -10,7 +10,7 @@ use std::io;
 use std::io::Read;
 use std::result;
 
-use storage::{vbyte_encode, VByteDecoder};
+use storage::compression::{vbyte_encode, VByteDecoder};
 
 /// Wraps the Result of a decoding operation
 pub type DecodeResult<T> = result::Result<T, DecodeError>;

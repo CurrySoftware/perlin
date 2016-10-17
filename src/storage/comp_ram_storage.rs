@@ -6,7 +6,8 @@ use std::marker::PhantomData;
 
 use utils::persistence::{Persistent, Volatile};
 use storage::{Storage, Result, StorageError};
-use storage::{vbyte_encode, VByteDecoder, ByteEncodable, ByteDecodable};
+use storage::{ByteEncodable, ByteDecodable};
+use storage::compression::{vbyte_encode, VByteDecoder};
 
 const ENTRIES_FILENAME: &'static str = "entries.bin";
 const DATA_FILENAME: &'static str = "data.bin";
