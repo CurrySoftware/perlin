@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
 use std::fs;
+use std::hash::Hash;
 
 use storage::Storage;
 use storage::{ByteEncodable, ByteDecodable};
@@ -35,7 +36,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
 }
 
 impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
-    where TTerm: Ord,
+    where TTerm: Ord + Hash,
           TStorage: Storage<Listing> + Volatile + 'static
 {
     /// Creates a volatile instance of `BooleanIndex`
@@ -51,7 +52,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
 }
 
 impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
-    where TTerm: Ord + ByteDecodable + ByteEncodable,
+    where TTerm: Ord + ByteDecodable + ByteEncodable + Hash,
           TStorage: Storage<Listing> + Persistent + 'static
 {
     /// Enables a persistent index at the passed path.

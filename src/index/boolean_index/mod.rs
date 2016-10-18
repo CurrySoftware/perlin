@@ -4,11 +4,12 @@
 use std;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::collections::BTreeMap;
+use std::collections::{HashMap, BTreeMap};
 use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::thread;
+use std::hash::Hash;
 
 use std::sync::mpsc;
 
@@ -93,15 +94,15 @@ impl<T> From<mpsc::SendError<T>> for Error {
 }
 
 /// Implements the `Index` trait. Limited to boolean retrieval.
-pub struct BooleanIndex<TTerm: Ord> {
+pub struct BooleanIndex<TTerm: Ord + Hash> {
     document_count: usize,
-    term_ids: BTreeMap<TTerm, u64>,
+    term_ids: HashMap<TTerm, u64>,
     postings: Box<Storage<Listing>>,
     persist_path: Option<PathBuf>,
 }
 
 // Index implementation
-impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
+impl<'a, TTerm: Ord + Hash> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
     type QueryResult = Box<Iterator<Item = u64>>;
 
@@ -113,7 +114,7 @@ impl<'a, TTerm: Ord> Index<'a, TTerm> for BooleanIndex<TTerm> {
 }
 
 impl<TTerm> BooleanIndex<TTerm>
-    where TTerm: Ord + ByteDecodable + ByteEncodable
+    where TTerm: Ord + ByteDecodable + ByteEncodable + Hash
 {
     /// Load a `BooleanIndex` from a previously populated folder
     /// Not intended for public use. Please use the `IndexBuilder` instead
@@ -139,7 +140,7 @@ impl<TTerm> BooleanIndex<TTerm>
     {
         let mut index = BooleanIndex {
             document_count: 0,
-            term_ids: BTreeMap::new(),
+            term_ids: HashMap::new(),
             postings: Box::new(storage),
             persist_path: Some(path.to_path_buf()),
         };
@@ -232,7 +233,7 @@ impl<TTerm> BooleanIndex<TTerm>
     }
 }
 
-impl<TTerm: Ord> BooleanIndex<TTerm> {
+impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     /// Returns the number of indexed documents
     pub fn document_count(&self) -> usize {
         self.document_count
@@ -247,7 +248,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     {
         let mut index = BooleanIndex {
             document_count: 0,
-            term_ids: BTreeMap::new(),
+            term_ids: HashMap::new(),
             postings: Box::new(storage),
             persist_path: None,
         };
@@ -262,12 +263,13 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                   vocabulary: BTreeMap<TTerm, u64>,
                   document_count: usize)
                   -> Result<Self> {
-        Ok(BooleanIndex {
-            document_count: document_count,
-            term_ids: vocabulary,
-            postings: inverted_index,
-            persist_path: None,
-        })
+        Err(Error::PersistPathIsFile)
+        // Ok(BooleanIndex {
+        //     document_count: document_count,
+        //     term_ids: vocabulary,
+        //     postings: inverted_index,
+        //     persist_path: None,
+        // })
     }
 
     /// Indexes a document collection for later retrieval
@@ -299,7 +301,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
             }
             // Term was not yet indexed. Add it
             self.document_count += 1;
-            if self.document_count % 64 == 0{
+            if self.document_count % 4 == 0{
                 try!(chunk_tx.send(buffer));
                 buffer = Vec::with_capacity(2048);
             }
@@ -328,6 +330,8 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
         
         while let Ok(mut chunk) = ids.recv() {
             // Sort triples by term_id
+            println!("{:?}", chunk);
+            println!("---------------------------");
             chunk.sort_by_key(|&(a, _, _)| a);
             let mut grouped_chunk = Vec::with_capacity(chunk.len());
             let mut last_tid = 0;
