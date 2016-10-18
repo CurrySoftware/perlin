@@ -97,7 +97,6 @@ impl ChunkedStorage {
         &mut self.chunks[pos as usize]
     }
 
-    #[inline]
     pub fn get_last_mut(&mut self, id: u64) -> &mut IndexingChunk {
         let mut pointer = id as usize;
         loop {

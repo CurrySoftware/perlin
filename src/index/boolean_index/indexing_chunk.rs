@@ -39,6 +39,7 @@ impl IndexingChunk {
             self.last_doc_id = doc_id;
             // Encode the delta_doc_id with vbyte code
             let encoded_ddoc_id = VByteEncoded::new(delta_doc_id as usize);
+            //HOTSPOT
             if let Ok(bytes_written) = encoded_ddoc_id.write_to(&mut self.data[SIZE - self.capacity as usize..]) {
                 // There was enough space. Count down capacity. Start encoding and writing positions
                 self.capacity -= bytes_written as u16;

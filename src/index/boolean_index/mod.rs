@@ -12,6 +12,8 @@ use std::thread;
 
 use std::sync::mpsc;
 
+use time::PreciseTime;
+
 use index::Index;
 use storage::{Storage, StorageError};
 use storage::ChunkedStorage;
@@ -276,6 +278,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
     {
         let (chunk_tx, chunk_rx) = mpsc::channel();
         let (merged_tx, merged_rx) = mpsc::channel();
+        let start = PreciseTime::now();
         let sort_and_group = thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(chunk_rx, merged_tx));
         // let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
         let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::experimental_invert_index(merged_rx));
@@ -296,19 +299,22 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
             }
             // Term was not yet indexed. Add it
             self.document_count += 1;
-            if self.document_count % 128 == 0{
+            if self.document_count % 64 == 0{
                 try!(chunk_tx.send(buffer));
                 buffer = Vec::with_capacity(2048);
             }
         }
+        println!("Done with Vocabulary! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());
         drop(chunk_tx);
         if sort_and_group.join().is_err() {
             return Err(Error::Indexing(IndexingError::ThreadPanic));
         }
+        println!("Sorting done! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());        
         let inv_index = match inv_index.join() {
             Ok(res) => try!(res),
             Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
         };
+        println!("Joined Threads! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index.into_iter().enumerate() {
@@ -319,6 +325,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
 
     fn sort_and_group_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
                             grouped_chunks: mpsc::Sender<Vec<(u64, Listing)>>) {
+        
         while let Ok(mut chunk) = ids.recv() {
             // Sort triples by term_id
             chunk.sort_by_key(|&(a, _, _)| a);
