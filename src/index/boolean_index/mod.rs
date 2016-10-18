@@ -390,7 +390,7 @@ impl<TTerm: Ord> BooleanIndex<TTerm> {
                 // Get chunk to write to or creat if unknown
                 let result = {
                     let stor_chunk = if uterm_id < threshold {
-                        storage.get_last_mut(term_id)
+                        storage.get_current_mut(term_id)
                     } else {
                         storage.new_chunk(term_id)
                     };

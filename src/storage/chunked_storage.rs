@@ -4,21 +4,25 @@ use index::boolean_index::indexing_chunk::{SIZE, IndexingChunk};
 
 #[derive(Debug)]
 pub struct ChunkedStorage {
-    chunks: Vec<IndexingChunk>,
+    hot_chunks: Vec<IndexingChunk>, //Size of vocabulary
+    archived_chunks: Vec<IndexingChunk>, 
     reserved: u32,
+    archive_count: u32,
 }
 
 impl ChunkedStorage {
     pub fn new(capacity: usize) -> Self {
         ChunkedStorage {
             reserved: 0,
-            chunks: Vec::with_capacity(capacity),
+            archive_count: 0,
+            hot_chunks: Vec::with_capacity(capacity),
+            archived_chunks: Vec::with_capacity(capacity/10),
         }
     }
 
     pub fn new_chunk(&mut self, id: u64) -> &mut IndexingChunk {
         self.reserved += 1;
-        self.chunks.push(IndexingChunk {
+        self.hot_chunks.push(IndexingChunk {
             previous_chunk: 0,
             reserved_spot: id as u32,
             last_doc_id: 0,
@@ -27,85 +31,48 @@ impl ChunkedStorage {
             capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         });
-        &mut self.chunks[id as usize]
+        &mut self.hot_chunks[id as usize]
     }
 
     pub fn next_chunk(&mut self, id: u64) -> &mut IndexingChunk {
-        let (last_reserved_spot, last_doc_id) = self.connect_chunk(id);
         let next = IndexingChunk {
-            previous_chunk: last_reserved_spot,
-            reserved_spot: self.reserved,
+            previous_chunk: self.archived_chunks.len() as u32,
+            reserved_spot: id as u32,
             next_chunk: 0,
-            last_doc_id: last_doc_id,
+            last_doc_id: self.hot_chunks[id as usize].last_doc_id,
             postings_count: 0,
             capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         };
-        self.chunks.insert(self.reserved as usize, next);
-        let old = self.reserved;
-        self.reserved += 1;
-        &mut self.chunks[old as usize]
-    }
-
-    fn connect_chunk(&mut self, id: u64) -> (u32, u64) {
-        let mut pointer = id as usize;
-        loop {
-            let tmp = &mut self.chunks[pointer];
-            pointer = tmp.next_chunk as usize;
-            if pointer == 0 {
-                tmp.next_chunk = self.reserved;
-                return (tmp.reserved_spot, tmp.last_doc_id);
-            }
-        }
-    }
+        //That's more fun than I thought
+        self.archived_chunks.push(mem::replace(&mut self.hot_chunks[id as usize], next));
+        &mut self.hot_chunks[id as usize]
+    }    
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.chunks.len()
+        self.hot_chunks.len()
     }
 
     #[inline]
     fn get(&self, id: u64) -> &IndexingChunk {
-        &self.chunks[id as usize]
-    }
-
-    #[inline]
-    fn get_chunk(&self, pos: usize) -> &IndexingChunk {
-        &self.chunks[pos as usize]
+        &self.hot_chunks[id as usize]
     }
 
 
     #[inline]
-    pub fn get_last(&self, id: u64) -> &IndexingChunk {
-        let mut pointer = id as usize;
-        loop {
-            let tmp = &self.chunks[pointer];
-            pointer = tmp.next_chunk as usize;
-            if pointer == 0 {
-                return tmp;
-            }
-        }
+    pub fn get_current(&self, id: u64) -> &IndexingChunk {
+        &self.hot_chunks[id as usize]
     }
 
     #[inline]
     fn get_mut(&mut self, id: u64) -> &mut IndexingChunk {
-        &mut self.chunks[id as usize]
+        &mut self.hot_chunks[id as usize]
     }
 
     #[inline]
-    fn get_chunk_mut(&mut self, pos: usize) -> &mut IndexingChunk {
-        &mut self.chunks[pos as usize]
-    }
-
-    pub fn get_last_mut(&mut self, id: u64) -> &mut IndexingChunk {
-        let mut pointer = id as usize;
-        loop {
-            let old_p = pointer;
-            pointer = self.chunks[pointer].next_chunk as usize;
-            if pointer == 0 {
-                return &mut self.chunks[old_p];
-            }
-        }
+    pub fn get_current_mut(&mut self, id: u64) -> &mut IndexingChunk {
+        &mut self.hot_chunks[id as usize]
     }
 }
 
@@ -118,7 +85,8 @@ mod tests {
     fn basic() {
         let mut store = ChunkedStorage {
             reserved: 0,
-            chunks: Vec::with_capacity(10),
+            hot_chunks: Vec::with_capacity(10),
+            archived_chunks: Vec::with_capacity(10)
         };
         {
             let chunk = store.new_chunk(0);
