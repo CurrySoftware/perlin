@@ -66,7 +66,7 @@ impl VByteEncoded {
         self.data[10]
     }
 
-    pub fn write_to<W: Write>(&self, mut target: W) -> Result<u8, Error> {
+    pub fn write_to<W: Write>(&self, target: &mut W) -> Result<u8, Error> {
         target.write_all(&self.data[(10-self.bytes_used()) as usize..10]).map(|()| self.bytes_used())
     }
 }

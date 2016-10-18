@@ -57,7 +57,7 @@ fn build_and_query_persistent_index() {
                vec![0, 1, 2, 3]);
 }
 
-#[derive(PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Hash, PartialOrd, Ord, PartialEq, Eq)]
 enum Color {
     Red,
     Green,

@@ -42,6 +42,7 @@ pub mod indexing_chunk;
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
 const STATISTICS_FILENAME: &'static str = "statistics.bin";
 const CHUNKSIZE: usize = 1_000_000;
+const SORT_THREADS: usize = 2;
 
 /// A specialized `Result` type for operations related to `BooleanIndex`
 pub type Result<T> = std::result::Result<T, Error>;
@@ -278,15 +279,23 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
-        let (chunk_tx, chunk_rx) = mpsc::channel();
+        let mut chunk_tx = Vec::with_capacity(SORT_THREADS);
         let (merged_tx, merged_rx) = mpsc::channel();
         let start = PreciseTime::now();
-        let sort_and_group = thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(chunk_rx, merged_tx));
+        let mut sort_threads = Vec::with_capacity(SORT_THREADS);
+        for i in 0..SORT_THREADS{
+            let (tx, rx) = mpsc::channel();
+            chunk_tx.push(tx);
+            let m_tx = merged_tx.clone();
+            sort_threads.push(thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(rx, m_tx)));
+        }
+        drop(merged_tx);
         // let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
         let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::experimental_invert_index(merged_rx));
         let mut buffer = Vec::with_capacity(2048);
         let mut term_count = 0;
         // For every document in the collection
+        let mut chunk_count = 0;
         for (doc_id, document) in documents.enumerate() {
             // Enumerate over its terms
             for (term_position, term) in document.into_iter().enumerate() {
@@ -301,15 +310,19 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             }
             // Term was not yet indexed. Add it
             self.document_count += 1;
-            if self.document_count % 4 == 0{
-                try!(chunk_tx.send(buffer));
+            if self.document_count % 256 == 0{
+                let index = chunk_count % SORT_THREADS;
+                try!(chunk_tx[index].send(buffer));
                 buffer = Vec::with_capacity(2048);
+                chunk_count += 1;
             }
         }
         println!("Done with Vocabulary! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());
-        drop(chunk_tx);
-        if sort_and_group.join().is_err() {
-            return Err(Error::Indexing(IndexingError::ThreadPanic));
+        drop(chunk_tx);       
+        for thread in sort_threads {
+            if thread.join().is_err() {
+                return Err(Error::Indexing(IndexingError::ThreadPanic));
+            }
         }
         println!("Sorting done! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());        
         let inv_index = match inv_index.join() {
@@ -330,8 +343,8 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         
         while let Ok(mut chunk) = ids.recv() {
             // Sort triples by term_id
-            println!("{:?}", chunk);
-            println!("---------------------------");
+            // println!("{:?}", chunk);
+            // println!("---------------------------");
             chunk.sort_by_key(|&(a, _, _)| a);
             let mut grouped_chunk = Vec::with_capacity(chunk.len());
             let mut last_tid = 0;
@@ -386,13 +399,13 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     }
 
     fn experimental_invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
-        let mut storage = ChunkedStorage::new(32000);
+        let mut storage = ChunkedStorage::new(400000);
         while let Ok(chunk) = grouped_chunks.recv() {
             let threshold = storage.len();
             for (term_id, mut listing) in chunk {
                 let uterm_id = term_id as usize;
                 // Get chunk to write to or creat if unknown
-                let result = {
+                let result = {                    
                     let stor_chunk = if uterm_id < threshold {
                         storage.get_current_mut(term_id)
                     } else {
