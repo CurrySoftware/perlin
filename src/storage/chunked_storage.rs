@@ -1,8 +1,8 @@
 use std::mem;
 
-use index::boolean_index::indexing_chunk::IndexingChunk;
+use index::boolean_index::indexing_chunk::{SIZE, IndexingChunk};
 
-
+#[derive(Debug)]
 pub struct ChunkedStorage {
     chunks: Vec<IndexingChunk>,
     reserved: u32,
@@ -24,7 +24,7 @@ impl ChunkedStorage {
             last_doc_id: 0,
             next_chunk: 0,
             postings_count: 0,
-            capacity: 4092,
+            capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         });
         &mut self.chunks[id as usize]
@@ -38,7 +38,7 @@ impl ChunkedStorage {
             next_chunk: 0,
             last_doc_id: last_doc_id,
             postings_count: 0,
-            capacity: 4092,
+            capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         };
         self.chunks.insert(self.reserved as usize, next);

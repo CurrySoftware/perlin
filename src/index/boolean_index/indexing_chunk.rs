@@ -3,28 +3,28 @@ use std::fmt;
 use storage::compression::VByteEncoded;
 use index::boolean_index::posting::Listing;
 
+pub const SIZE: usize = 1000;
+
 //TODO: Pubs are wrong here. Seriously!
 pub struct IndexingChunk {
-    pub previous_chunk: u32,
-    pub reserved_spot: u32,
-    pub next_chunk: u32,
-    pub last_doc_id: u64,
-    pub postings_count: u16,
-    pub capacity: u16,
-    pub data: [u8; 4092],
+    pub previous_chunk: u32,//4
+    pub reserved_spot: u32,//4
+    pub next_chunk: u32,//4
+    pub last_doc_id: u64,//8
+    pub postings_count: u16,//2
+    pub capacity: u16,//2
+    pub data: [u8; SIZE],
 }
 
 impl fmt::Debug for IndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f,
-               "IndexingChunk {}, Previous: {}, Holds {} postings and has {} spare bytes! last_doc_id is {}. Data:\n \
-                {:?}",
+               "IndexingChunk {}, Previous: {}, Holds {} postings and has {} spare bytes! last_doc_id is {}\n",
                self.reserved_spot,
                self.previous_chunk,
                self.postings_count,
                self.capacity,
-               self.last_doc_id,
-               self.data.to_vec())
+               self.last_doc_id)
     }
 }
 
@@ -39,12 +39,12 @@ impl IndexingChunk {
             self.last_doc_id = doc_id;
             // Encode the delta_doc_id with vbyte code
             let encoded_ddoc_id = VByteEncoded::new(delta_doc_id as usize);
-            if let Ok(bytes_written) = encoded_ddoc_id.write_to(&mut self.data[(4092 - self.capacity) as usize..]) {
+            if let Ok(bytes_written) = encoded_ddoc_id.write_to(&mut self.data[SIZE - self.capacity as usize..]) {
                 // There was enough space. Count down capacity. Start encoding and writing positions
                 self.capacity -= bytes_written as u16;
                 // Encode positions len and add to data
                 if let Ok(bytes_written) = VByteEncoded::new(positions.len())
-                    .write_to(&mut self.data[(4092 - self.capacity) as usize..]) {
+                    .write_to(&mut self.data[SIZE - self.capacity as usize..]) {
                     self.capacity -= bytes_written as u16;
                 } else {
                     self.capacity = old_capa;
@@ -54,7 +54,7 @@ impl IndexingChunk {
                 let mut last_position = 0;
                 for position in positions {
                     if let Ok(bytes_written) = VByteEncoded::new(*position as usize - last_position)
-                        .write_to(&mut self.data[(4092 - self.capacity) as usize..]) {
+                        .write_to(&mut self.data[SIZE - self.capacity as usize..]) {
                         self.capacity -= bytes_written as u16;
                         last_position = *position as usize;
                     } else {
@@ -86,13 +86,13 @@ mod tests {
             next_chunk: 0,
             last_doc_id: 0,
             postings_count: 0,
-            capacity: 4092,
-            data: [0; 4092],
+            capacity: super::SIZE as u16,
+            data: [0; super::SIZE],
         };
 
         let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
         chunk.append(&listing);
-        assert_eq!(chunk.capacity, 4074);
+        assert_eq!(chunk.capacity, 4050);
         assert_eq!(chunk.postings_count, 3);
         assert_eq!(chunk.last_doc_id, 204);
     }
@@ -109,7 +109,7 @@ mod tests {
             next_chunk: 0,
             last_doc_id: 0,
             postings_count: 0,
-            capacity: 4092,
+            capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         };
         assert_eq!(chunk.append(&listing), Ok(()));
@@ -126,11 +126,11 @@ mod tests {
             next_chunk: 0,
             last_doc_id: 0,
             postings_count: 0,
-            capacity: 4092,
+            capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         };
         assert_eq!(chunk.append(&listing), Err(0));
-        assert_eq!(chunk.capacity, 4092);
+        assert_eq!(chunk.capacity, SIZE as u16);
         assert_eq!(chunk.postings_count, 0);
     }
 
