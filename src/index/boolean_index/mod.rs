@@ -43,7 +43,7 @@ pub mod indexing_chunk;
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
 const STATISTICS_FILENAME: &'static str = "statistics.bin";
 const CHUNKSIZE: usize = 1_000_000;
-const SORT_THREADS: usize = 2;
+const SORT_THREADS: usize = 4;
 
 /// A specialized `Result` type for operations related to `BooleanIndex`
 pub type Result<T> = std::result::Result<T, Error>;
@@ -311,10 +311,11 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             }
             // Term was not yet indexed. Add it
             self.document_count += 1;
-            if self.document_count % 1024 == 0 {
+            if self.document_count % 512 == 0 {
                 let index = chunk_count % SORT_THREADS;
+                let old_len = buffer.len();
                 try!(chunk_tx[index].send(buffer));
-                buffer = Vec::with_capacity(213400);
+                buffer = Vec::with_capacity(old_len + old_len / 10);
                 chunk_count += 1;                
             }
         }
@@ -405,10 +406,13 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     }
 
     fn experimental_invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
-        let mut storage = ChunkedStorage::new(400000);
         let start = PreciseTime::now();
+        let mut storage = ChunkedStorage::new(400000);
+        let mut in_loop = 0;
         while let Ok(chunk) = grouped_chunks.recv() {
+            let chunk_start = PreciseTime::now();
             let threshold = storage.len();
+            let chunk_len = chunk.len();
             for (term_id, mut listing) in chunk {
                 let uterm_id = term_id as usize;
                 // Get chunk to write to or creat if unknown
@@ -425,7 +429,11 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                     next_chunk.append(&listing[count..]);
                 }
             }
+            // let ms = chunk_start.to(PreciseTime::now()).num_milliseconds();
+            // in_loop += ms;
+            // println!("Chunk was {} long\ttook {}ms", chunk_len, ms);
         }
+        println!("Inside loop: {}ms", in_loop);
         println!("Inverting the index took {}ms",
                  start.to(PreciseTime::now()).num_milliseconds());
         // println!("{:?}", storage);

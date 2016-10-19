@@ -12,7 +12,6 @@ pub struct ChunkedStorage {
 
 impl ChunkedStorage {
     pub fn new(capacity: usize) -> Self {
-        println!("Size of IndexingChunk {}", mem::size_of::<IndexingChunk>());       
         ChunkedStorage {
             reserved: 0,
             archive_count: 0,

@@ -3,7 +3,7 @@ use std::fmt;
 use storage::compression::VByteEncoded;
 use index::boolean_index::posting::Listing;
 
-pub const SIZE: usize = 4072;
+pub const SIZE: usize = 104;
 
 // TODO: Pubs are wrong here. Seriously!
 pub struct IndexingChunk {
