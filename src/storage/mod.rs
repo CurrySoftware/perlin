@@ -14,9 +14,6 @@ use std;
 use std::error::Error;
 use std::sync::Arc;
 
-//TODO: Wrong!
-use index::boolean_index::indexing_chunk::IndexingChunk;
-
 pub use storage::fs_storage::FsStorage;
 pub use storage::ram_storage::RamStorage;
 pub use storage::comp_ram_storage::CompressedRamStorage;
