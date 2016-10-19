@@ -10,11 +10,8 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::thread;
 use std::hash::Hash;
-use std::mem;
 
 use std::sync::mpsc;
-
-use time::PreciseTime;
 
 use index::Index;
 use storage::{Storage, StorageError};
@@ -282,9 +279,8 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     {
         let mut chunk_tx = Vec::with_capacity(SORT_THREADS);
         let (merged_tx, merged_rx) = mpsc::sync_channel(64);
-        let start = PreciseTime::now();
         let mut sort_threads = Vec::with_capacity(SORT_THREADS);
-        for i in 0..SORT_THREADS {
+        for _ in 0..SORT_THREADS {
             let (tx, rx) = mpsc::channel();
             chunk_tx.push(tx);
             let m_tx = merged_tx.clone();
@@ -319,24 +315,17 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                 chunk_count += 1;                
             }
         }
-        chunk_tx[chunk_count % SORT_THREADS].send(buffer);
-        println!("Done with Vocabulary! Took {}ms! Sent {} chunks",
-                 start.to(PreciseTime::now()).num_milliseconds(),
-                 chunk_count);
+        try!(chunk_tx[chunk_count % SORT_THREADS].send(buffer));
         drop(chunk_tx);
         for thread in sort_threads {
             if thread.join().is_err() {
                 return Err(Error::Indexing(IndexingError::ThreadPanic));
             }
         }
-        println!("Sorting done! Took {}ms",
-                 start.to(PreciseTime::now()).num_milliseconds());
         let inv_index = match inv_index.join() {
             Ok(res) => try!(res),
             Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
         };
-        println!("Joined Threads! Took {}ms",
-                 start.to(PreciseTime::now()).num_milliseconds());
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index.into_iter().enumerate() {
@@ -385,35 +374,11 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         }
     }
 
-    // receives sorted listings. merges them into the complete inverted index
-    fn invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
-        let mut inv_index: Vec<Listing> = Vec::with_capacity(8192);
-        while let Ok(chunk) = grouped_chunks.recv() {
-            // Threshold determines at what term_id the terms are new.
-            let threshold = inv_index.len();
-            for (term_id, mut listing) in chunk {
-                let uterm_id = term_id as usize;
-                if uterm_id < threshold {
-                    // term_id is already known. Append listing
-                    inv_index[uterm_id].append(&mut listing);
-                } else {
-                    // term_id is new. Push listing
-                    inv_index.push(listing);
-                }
-            }
-        }
-        Ok(inv_index)
-    }
-
     fn experimental_invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
-        let start = PreciseTime::now();
-        let mut storage = ChunkedStorage::new(400000);
-        let mut in_loop = 0;
+        let mut storage = ChunkedStorage::new(4000);
         while let Ok(chunk) = grouped_chunks.recv() {
-            let chunk_start = PreciseTime::now();
             let threshold = storage.len();
-            let chunk_len = chunk.len();
-            for (term_id, mut listing) in chunk {
+            for (term_id, listing) in chunk {
                 let uterm_id = term_id as usize;
                 // Get chunk to write to or creat if unknown
                 let result = {
@@ -426,17 +391,13 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                 };
                 if let Err(count) = result {
                     let next_chunk = storage.next_chunk(term_id);
-                    next_chunk.append(&listing[count..]);
+                    if let Err(_) = next_chunk.append(&listing[count..]) {
+                        return Err(Error::Indexing(IndexingError::ThreadPanic));
+                    }                    
                 }
             }
-            // let ms = chunk_start.to(PreciseTime::now()).num_milliseconds();
-            // in_loop += ms;
-            // println!("Chunk was {} long\ttook {}ms", chunk_len, ms);
+
         }
-        println!("Inside loop: {}ms", in_loop);
-        println!("Inverting the index took {}ms",
-                 start.to(PreciseTime::now()).num_milliseconds());
-        // println!("{:?}", storage);
         Ok(vec![])
     }
 

@@ -22,6 +22,3 @@ path = "examples/tictactoe/main.rs"
 rand = "0.3"
 lazy_static = "0.2.1"
 walkdir = "0.1"
-
-[dependencies]
-time = "0.1.35"
