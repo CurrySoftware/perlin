@@ -5,28 +5,27 @@ use index::boolean_index::posting::Listing;
 
 pub const SIZE: usize = 4072;
 
-//TODO: Pubs are wrong here. Seriously!
+// TODO: Pubs are wrong here. Seriously!
 pub struct IndexingChunk {
-    pub previous_chunk: u32,//4
-    pub reserved_spot: u32,//4
-    pub next_chunk: u32,//4
-    pub postings_count: u16,//2
-    pub capacity: u16,//2
-    pub last_doc_id: u64,//8
-    pub data: [u8; SIZE], //leaves 4072 bytes on the page for data
+    pub previous_chunk: u32, // 4
+    pub reserved_spot: u32, // 4
+    pub next_chunk: u32, // 4
+    pub postings_count: u16, // 2
+    pub capacity: u16, // 2
+    pub last_doc_id: u64, // 8
+    pub data: [u8; SIZE], // leaves 4072 bytes on the page for data
 }
 
 impl fmt::Debug for IndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f,
-               "IndexingChunk {}, Previous: {}, Holds {} postings and has {} spare bytes! last_doc_id is {}\n",
-               self.reserved_spot,
-               self.previous_chunk,
-               self.postings_count,
-               self.capacity,
-               self.last_doc_id));
-        try!(write!(f,
-                   "Data: {:?}", self.data.to_vec()));
+                    "IndexingChunk {}, Previous: {}, Holds {} postings and has {} spare bytes! last_doc_id is {}\n",
+                    self.reserved_spot,
+                    self.previous_chunk,
+                    self.postings_count,
+                    self.capacity,
+                    self.last_doc_id));
+        try!(write!(f, "Data: {:?}", self.data.to_vec()));
         Ok(())
     }
 }
@@ -38,20 +37,23 @@ impl IndexingChunk {
         let mut working_slice = &mut self.data[SIZE - self.capacity as usize..];
         for (count, &(doc_id, ref positions)) in listing.iter().enumerate() {
             let old_capa = self.capacity;
+            let old_doc_id = self.last_doc_id;
             // Encode the doc_id as delta
             let delta_doc_id = doc_id - self.last_doc_id;
             // Encode the delta_doc_id with vbyte code
             let encoded_ddoc_id = VByteEncoded::new(delta_doc_id as usize);
-            //HOTSPOT
+            self.last_doc_id = doc_id;
+            self.postings_count += 1;
+            // HOTSPOT
             if let Ok(bytes_written) = encoded_ddoc_id.write_to(&mut working_slice) {
                 // There was enough space. Count down capacity. Start encoding and writing positions
                 self.capacity -= bytes_written as u16;
                 // Encode positions len and add to data
-                if let Ok(bytes_written) = VByteEncoded::new(positions.len())
-                    .write_to(&mut working_slice) {
+                if let Ok(bytes_written) = VByteEncoded::new(positions.len()).write_to(&mut working_slice) {
                     self.capacity -= bytes_written as u16;
                 } else {
                     self.capacity = old_capa;
+                    self.last_doc_id = old_doc_id;
                     return Err(count);
                 }
                 // Encode positions and add to data
@@ -63,18 +65,18 @@ impl IndexingChunk {
                         last_position = *position as usize;
                     } else {
                         self.capacity = old_capa;
+                        self.last_doc_id = old_doc_id;
                         return Err(count);
                     }
                 }
             } else {
                 self.capacity = old_capa;
+                self.last_doc_id = old_doc_id;
                 return Err(count);
             }
-            self.last_doc_id = doc_id;
-            self.postings_count += 1;
         }
         Ok(())
-    }    
+    }
 }
 
 

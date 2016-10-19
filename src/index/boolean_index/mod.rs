@@ -10,6 +10,7 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::thread;
 use std::hash::Hash;
+use std::mem;
 
 use std::sync::mpsc;
 
@@ -280,10 +281,10 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
               TDocIterator: Iterator<Item = TTerm>
     {
         let mut chunk_tx = Vec::with_capacity(SORT_THREADS);
-        let (merged_tx, merged_rx) = mpsc::channel();
+        let (merged_tx, merged_rx) = mpsc::sync_channel(64);
         let start = PreciseTime::now();
         let mut sort_threads = Vec::with_capacity(SORT_THREADS);
-        for i in 0..SORT_THREADS{
+        for i in 0..SORT_THREADS {
             let (tx, rx) = mpsc::channel();
             chunk_tx.push(tx);
             let m_tx = merged_tx.clone();
@@ -292,7 +293,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         drop(merged_tx);
         // let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
         let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::experimental_invert_index(merged_rx));
-        let mut buffer = Vec::with_capacity(2048);
+        let mut buffer = Vec::with_capacity(213400);
         let mut term_count = 0;
         // For every document in the collection
         let mut chunk_count = 0;
@@ -310,26 +311,31 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             }
             // Term was not yet indexed. Add it
             self.document_count += 1;
-            if self.document_count % 256 == 0{
+            if self.document_count % 1024 == 0 {
                 let index = chunk_count % SORT_THREADS;
                 try!(chunk_tx[index].send(buffer));
-                buffer = Vec::with_capacity(2048);
-                chunk_count += 1;
+                buffer = Vec::with_capacity(213400);
+                chunk_count += 1;                
             }
         }
-        println!("Done with Vocabulary! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());
-        drop(chunk_tx);       
+        chunk_tx[chunk_count % SORT_THREADS].send(buffer);
+        println!("Done with Vocabulary! Took {}ms! Sent {} chunks",
+                 start.to(PreciseTime::now()).num_milliseconds(),
+                 chunk_count);
+        drop(chunk_tx);
         for thread in sort_threads {
             if thread.join().is_err() {
                 return Err(Error::Indexing(IndexingError::ThreadPanic));
             }
         }
-        println!("Sorting done! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());        
+        println!("Sorting done! Took {}ms",
+                 start.to(PreciseTime::now()).num_milliseconds());
         let inv_index = match inv_index.join() {
             Ok(res) => try!(res),
             Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
         };
-        println!("Joined Threads! Took {}ms", start.to(PreciseTime::now()).num_milliseconds());
+        println!("Joined Threads! Took {}ms",
+                 start.to(PreciseTime::now()).num_milliseconds());
         // everything is now indexed. Hand it to our storage.
         // We do not care where it saves our data.
         for (term_id, listing) in inv_index.into_iter().enumerate() {
@@ -339,8 +345,8 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     }
 
     fn sort_and_group_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
-                            grouped_chunks: mpsc::Sender<Vec<(u64, Listing)>>) {
-        
+                            grouped_chunks: mpsc::SyncSender<Vec<(u64, Listing)>>) {
+
         while let Ok(mut chunk) = ids.recv() {
             // Sort triples by term_id
             // println!("{:?}", chunk);
@@ -400,12 +406,13 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn experimental_invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
         let mut storage = ChunkedStorage::new(400000);
+        let start = PreciseTime::now();
         while let Ok(chunk) = grouped_chunks.recv() {
             let threshold = storage.len();
             for (term_id, mut listing) in chunk {
                 let uterm_id = term_id as usize;
                 // Get chunk to write to or creat if unknown
-                let result = {                    
+                let result = {
                     let stor_chunk = if uterm_id < threshold {
                         storage.get_current_mut(term_id)
                     } else {
@@ -419,7 +426,9 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                 }
             }
         }
-        //println!("{:?}", storage);
+        println!("Inverting the index took {}ms",
+                 start.to(PreciseTime::now()).num_milliseconds());
+        // println!("{:?}", storage);
         Ok(vec![])
     }
 
