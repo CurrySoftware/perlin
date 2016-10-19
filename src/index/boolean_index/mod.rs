@@ -307,12 +307,12 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             }
             // Term was not yet indexed. Add it
             self.document_count += 1;
-            if self.document_count % 512 == 0 {
+            if self.document_count % 256 == 0 {
                 let index = chunk_count % SORT_THREADS;
                 let old_len = buffer.len();
                 try!(chunk_tx[index].send(buffer));
                 buffer = Vec::with_capacity(old_len + old_len / 10);
-                chunk_count += 1;                
+                chunk_count += 1;
             }
         }
         try!(chunk_tx[chunk_count % SORT_THREADS].send(buffer));
@@ -380,7 +380,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             let threshold = storage.len();
             for (term_id, listing) in chunk {
                 let uterm_id = term_id as usize;
-                // Get chunk to write to or creat if unknown
+                // Get chunk to write to or create if unknown
                 let result = {
                     let stor_chunk = if uterm_id < threshold {
                         storage.get_current_mut(term_id)
@@ -389,11 +389,18 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                     };
                     stor_chunk.append(&listing)
                 };
-                if let Err(count) = result {
-                    let next_chunk = storage.next_chunk(term_id);
-                    if let Err(_) = next_chunk.append(&listing[count..]) {
-                        return Err(Error::Indexing(IndexingError::ThreadPanic));
-                    }                    
+                // Listing did not fit into current chunk completly
+                // Get the next and put it in there.
+                // Repeat until done
+                if let Err(mut position) = result {
+                    loop {
+                        let next_chunk = storage.next_chunk(term_id);
+                        if let Err(new_position) = next_chunk.append(&listing[position..]) {
+                            position += new_position;
+                        } else {
+                            break;
+                        }
+                    }
                 }
             }
 
