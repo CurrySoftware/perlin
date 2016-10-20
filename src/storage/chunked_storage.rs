@@ -22,6 +22,23 @@ impl ChunkedStorage {
     }
 
     pub fn new_chunk(&mut self, id: u64) -> &mut IndexingChunk {
+        if id as usize > self.hot_chunks.len() {
+            let diff = id as usize - self.hot_chunks.len();
+            for _ in 0..diff {
+                self.hot_chunks.push(unsafe { mem::uninitialized() });
+            }
+        } else if (id as usize) < self.hot_chunks.len() {
+            self.hot_chunks[id as usize] = IndexingChunk {
+                previous_chunk: 0,
+                reserved_spot: id as u32,
+                last_doc_id: 0,
+                next_chunk: 0,
+                postings_count: 0,
+                capacity: SIZE as u16,
+                data: unsafe { mem::uninitialized() },
+            };
+            return &mut self.hot_chunks[id as usize];
+        }
         self.hot_chunks.push(IndexingChunk {
             previous_chunk: 0,
             reserved_spot: id as u32,
@@ -81,10 +98,19 @@ impl ChunkedStorage {
         let mut chunk = self.get_current(id);
         let mut listing = decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])).unwrap();
         loop {
+//            println!("Loop {}", chunk.previous_chunk);
             if chunk.previous_chunk != 0 {
                 chunk = self.get_archived((chunk.previous_chunk - 1) as usize);
-                listing.append(&mut Listing::decode(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8]))
-                    .unwrap());
+                match decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])) {
+                   Ok(mut new) => { new.append(&mut listing);
+                                listing = new;
+                   }
+                    Err((doc_id, position)) => {
+                        println!("{}-{}", doc_id, position);
+                        println!("{:?}", chunk);
+                        panic!("TF");
+                    }
+                } 
             } else {
                 return Some(listing);
             }

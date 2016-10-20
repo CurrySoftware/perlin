@@ -4,7 +4,8 @@ use rand;
 use rand::{XorShiftRng, Rng};
 
 #[allow(dead_code)]
-pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usize> {    
+pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usize> {
+    println!("Building Collection!");
     let collection: Vec<Vec<usize>> = (0..documents)
         .map(|_| ZipfGenerator::new(voc_size(45, 0.5, documents * document_size)).take(document_size).collect())
         .collect();
@@ -13,6 +14,7 @@ pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usi
              document_size);
     let index = IndexBuilder::<_, CompressedRamStorage<_>>::new()
         .create(collection.iter().map(|i| i.iter().cloned()));
+    println!("Done!");
     index.unwrap()
 }
 

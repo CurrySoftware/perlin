@@ -7,17 +7,17 @@ use storage::{ByteDecodable, ByteEncodable, DecodeResult, DecodeError};
 pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);
 pub type Listing = Vec<Posting>;
 
-pub fn decode_from_chunk<R: Read>(read: &mut R) -> DecodeResult<Listing> {
+pub fn decode_from_chunk<R: Read>(read: &mut R) -> Result<Listing, (usize, usize)> {
     let mut decoder = VByteDecoder::new(read.bytes());
     let mut postings = Vec::new();
     let mut decoded_doc_id = 0;
     while let Some(doc_id) = decoder.next() {
         decoded_doc_id += doc_id;
-        let positions_len = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+        let positions_len = try!(decoder.next().ok_or((decoded_doc_id, 0)));
         let mut positions = Vec::with_capacity(positions_len as usize);
         let mut last_position = 0;
-        for _ in 0..positions_len {
-            last_position += try!(decoder.next().ok_or(DecodeError::MalformedInput));
+        for i in 0..positions_len {
+            last_position += try!(decoder.next().ok_or((decoded_doc_id, i)));
             positions.push(last_position as u32);
         }
         postings.push((decoded_doc_id as u64, positions));

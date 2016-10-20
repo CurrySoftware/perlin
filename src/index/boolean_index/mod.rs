@@ -391,6 +391,10 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                     loop {
                         let next_chunk = storage.next_chunk(term_id);
                         if let Err(new_position) = next_chunk.append(&listing[position..]) {
+                            if new_position == 0 {
+                                //TODO: FIXME
+                                panic!("Position list was longer than chunksize. Go Home!");
+                            }
                             position += new_position;
                         } else {
                             break;
@@ -449,8 +453,9 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {            
         if let Some(result) = self.term_ids.get(atom) {
+           // println!("QueryAtomStart");
             QueryResultIterator::Atom(relative_position,
-                                      ArcIter::new(Arc::new(self.chunked_postings.decode_postings(*result).unwrap())))
+                                      ArcIter::new(Arc::new(self.chunked_postings.decode_postings(*result).unwrap())))                
         } else {
             QueryResultIterator::Empty
         }

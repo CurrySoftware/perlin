@@ -17,7 +17,7 @@ lazy_static!{
     pub static ref INDICES: [BooleanIndex<usize>; 3] = [
         prepare_index(1_000, 500), //1.000 documents with 500 terms a 8bytes = 4MB
         prepare_index(10_000, 500), //10.000 documents with 500 terms a 8bytes = 40MB
-        prepare_index(1_000, 5000), //1.000 documents with 5000 terms a 8bytes = 40MB
+        prepare_index(1_000, 500), //100.000 documents with 5000 terms a 8bytes = 400MB
     ];
 }
 
@@ -40,7 +40,7 @@ macro_rules! bench {
         }
 
         #[bench]
-        fn large_docs_first_ten(b: &mut Bencher) {
+        fn huge_collection_first_ten(b: &mut Bencher) {
             b.iter(||
                 black_box(INDICES[2].execute_query($query).take(10).count())
             );
@@ -61,7 +61,7 @@ macro_rules! bench {
         }
 
         #[bench]
-        fn large_docs(b: &mut Bencher) {
+        fn huge_collection(b: &mut Bencher) {
             b.iter(||
                 black_box(INDICES[2].execute_query($query).count())
             );
