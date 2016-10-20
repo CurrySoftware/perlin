@@ -96,7 +96,7 @@ impl<T> From<mpsc::SendError<T>> for Error {
 pub struct BooleanIndex<TTerm: Ord + Hash> {
     document_count: usize,
     term_ids: HashMap<TTerm, u64>,
-    postings: Box<Storage<Listing>>,
+    chunked_postings: ChunkedStorage,
     persist_path: Option<PathBuf>,
 }
 
@@ -140,8 +140,8 @@ impl<TTerm> BooleanIndex<TTerm>
         let mut index = BooleanIndex {
             document_count: 0,
             term_ids: HashMap::new(),
-            postings: Box::new(storage),
             persist_path: Some(path.to_path_buf()),
+            chunked_postings: ChunkedStorage::new(10000),
         };
         try!(index.index_documents(documents));
         try!(index.save_vocabulary());
@@ -248,8 +248,8 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         let mut index = BooleanIndex {
             document_count: 0,
             term_ids: HashMap::new(),
-            postings: Box::new(storage),
             persist_path: None,
+            chunked_postings: ChunkedStorage::new(1000),
         };
         try!(index.index_documents(documents));
         Ok(index)
@@ -287,8 +287,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             sort_threads.push(thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(rx, m_tx)));
         }
         drop(merged_tx);
-        // let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
-        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::experimental_invert_index(merged_rx));
+        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
         let mut buffer = Vec::with_capacity(213400);
         let mut term_count = 0;
         // For every document in the collection
@@ -317,20 +316,16 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         }
         try!(chunk_tx[chunk_count % SORT_THREADS].send(buffer));
         drop(chunk_tx);
-        for thread in sort_threads {
-            if thread.join().is_err() {
-                return Err(Error::Indexing(IndexingError::ThreadPanic));
-            }
+        //Join sort threads
+        if sort_threads.into_iter().any(|thread| thread.join().is_err())  {
+            return Err(Error::Indexing(IndexingError::ThreadPanic));
         }
-        let inv_index = match inv_index.join() {
+        //Join invert index thread and save result
+        self.chunked_postings = match inv_index.join() {
             Ok(res) => try!(res),
             Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
         };
-        // everything is now indexed. Hand it to our storage.
-        // We do not care where it saves our data.
-        for (term_id, listing) in inv_index.into_iter().enumerate() {
-            try!(self.postings.store(term_id as u64, listing));
-        }
+
         Ok(self.document_count)
     }
 
@@ -339,8 +334,6 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
         while let Ok(mut chunk) = ids.recv() {
             // Sort triples by term_id
-            // println!("{:?}", chunk);
-            // println!("---------------------------");
             chunk.sort_by_key(|&(a, _, _)| a);
             let mut grouped_chunk = Vec::with_capacity(chunk.len());
             let mut last_tid = 0;
@@ -374,8 +367,8 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         }
     }
 
-    fn experimental_invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<Vec<Listing>> {
-        let mut storage = ChunkedStorage::new(4000);
+    fn invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<ChunkedStorage> {
+        let mut storage = ChunkedStorage::new(10000);
         while let Ok(chunk) = grouped_chunks.recv() {
             let threshold = storage.len();
             for (term_id, listing) in chunk {
@@ -405,7 +398,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             }
 
         }
-        Ok(vec![])
+        Ok(storage)
     }
 
 
@@ -452,7 +445,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     }
 
 
-    fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
+    fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {            
         if let Some(result) = self.term_ids.get(atom) {
             QueryResultIterator::Atom(relative_position,
                                       ArcIter::new(self.postings.get(*result).unwrap()))

@@ -6,22 +6,17 @@ use index::boolean_index::indexing_chunk::{SIZE, IndexingChunk};
 pub struct ChunkedStorage {
     hot_chunks: Vec<IndexingChunk>, //Size of vocabulary
     archived_chunks: Vec<IndexingChunk>, 
-    reserved: u32,
-    archive_count: u32,
 }
 
 impl ChunkedStorage {
     pub fn new(capacity: usize) -> Self {
         ChunkedStorage {
-            reserved: 0,
-            archive_count: 0,
             hot_chunks: Vec::with_capacity(capacity),
             archived_chunks: Vec::with_capacity(capacity/10),
         }
     }
 
     pub fn new_chunk(&mut self, id: u64) -> &mut IndexingChunk {
-        self.reserved += 1;
         self.hot_chunks.push(IndexingChunk {
             previous_chunk: 0,
             reserved_spot: id as u32,
@@ -55,23 +50,23 @@ impl ChunkedStorage {
     }
 
     #[inline]
-    pub fn get(&self, id: u64) -> &IndexingChunk {
-        &self.hot_chunks[id as usize]
-    }
-
-    #[inline]
     pub fn get_current(&self, id: u64) -> &IndexingChunk {
         &self.hot_chunks[id as usize]
     }
 
     #[inline]
-    pub fn get_mut(&mut self, id: u64) -> &mut IndexingChunk {
+    pub fn get_current_mut(&mut self, id: u64) -> &mut IndexingChunk {
         &mut self.hot_chunks[id as usize]
     }
 
     #[inline]
-    pub fn get_current_mut(&mut self, id: u64) -> &mut IndexingChunk {
-        &mut self.hot_chunks[id as usize]
+    pub fn get_archived(&self, pos: usize) -> &IndexingChunk {
+        &self.archived_chunks[pos]
+    }
+
+    #[inline]
+    pub fn get_archived_mut(&mut self, pos: usize) -> &IndexingChunk{
+        &mut self.archived_chunks[pos]
     }
 }
 
@@ -82,20 +77,16 @@ mod tests {
 
     #[test]
     fn basic() {
-        let mut store = ChunkedStorage {
-            reserved: 0,
-            hot_chunks: Vec::with_capacity(10),
-            archived_chunks: Vec::with_capacity(10)
-        };
+        let mut store = ChunkedStorage::new(10);
         {
             let chunk = store.new_chunk(0);
             let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
-            chunk.append(&listing);
+            chunk.append(&listing).unwrap();
             assert_eq!(chunk.capacity, 4074);
             assert_eq!(chunk.postings_count, 3);
             assert_eq!(chunk.last_doc_id, 204);
         }
-        let chunk = store.get(0);
+        let chunk = store.get_current(0);
         assert_eq!(chunk.capacity, 4074);
         assert_eq!(chunk.postings_count, 3);
         assert_eq!(chunk.last_doc_id, 204);
@@ -103,30 +94,27 @@ mod tests {
 
     #[test]
     fn continued() {
-        let mut store = ChunkedStorage {
-            reserved: 0,
-            chunks: Vec::with_capacity(10),
-        };
+        let mut store = ChunkedStorage::new(10);
         let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
         let next_listing = vec![(205, vec![0, 10, 20]), (225, vec![24, 25, 289]), (424, vec![209, 2456])];
         {
             let chunk = store.new_chunk(0);
-            chunk.append(&listing);
+            chunk.append(&listing).unwrap();
             assert_eq!(chunk.capacity, 4074);
             assert_eq!(chunk.postings_count, 3);
             assert_eq!(chunk.last_doc_id, 204);
         }
         {
             let new_chunk = store.next_chunk(0);
-            new_chunk.append(&next_listing);
+            new_chunk.append(&next_listing).unwrap();
             assert_eq!(new_chunk.capacity, 4074);
             assert_eq!(new_chunk.postings_count, 3);
             assert_eq!(new_chunk.last_doc_id, 424);
             assert_eq!(new_chunk.reserved_spot, 1);
         }
-        let chunk = store.get(0);
-        assert_eq!(chunk.next_chunk, 1);
-        let new_chunk = store.get_chunk(chunk.next_chunk as usize);
+        let chunk = store.get_current(0);
+        assert_eq!(chunk.next_chunk, 0);
+        let new_chunk = store.get_archived(chunk.next_chunk as usize);
         assert_eq!(new_chunk.capacity, 4074);
         assert_eq!(new_chunk.postings_count, 3);
         assert_eq!(new_chunk.last_doc_id, 424);
