@@ -1,18 +1,23 @@
 use std::mem;
+use std::io::Read;
 
+use storage::compression::VByteDecoder;
+use storage::ByteDecodable;
+
+use index::boolean_index::posting::{decode_from_chunk, Listing};
 use index::boolean_index::indexing_chunk::{SIZE, IndexingChunk};
 
 #[derive(Debug)]
 pub struct ChunkedStorage {
-    hot_chunks: Vec<IndexingChunk>, //Size of vocabulary
-    archived_chunks: Vec<IndexingChunk>, 
+    hot_chunks: Vec<IndexingChunk>, // Size of vocabulary
+    archived_chunks: Vec<IndexingChunk>,
 }
 
 impl ChunkedStorage {
     pub fn new(capacity: usize) -> Self {
         ChunkedStorage {
             hot_chunks: Vec::with_capacity(capacity),
-            archived_chunks: Vec::with_capacity(capacity/10),
+            archived_chunks: Vec::with_capacity(capacity / 10),
         }
     }
 
@@ -31,7 +36,7 @@ impl ChunkedStorage {
 
     pub fn next_chunk(&mut self, id: u64) -> &mut IndexingChunk {
         let next = IndexingChunk {
-            previous_chunk: self.archived_chunks.len() as u32,
+            previous_chunk: self.archived_chunks.len() as u32 + 1,
             reserved_spot: id as u32,
             next_chunk: 0,
             last_doc_id: self.hot_chunks[id as usize].last_doc_id,
@@ -39,10 +44,10 @@ impl ChunkedStorage {
             capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         };
-        //That's more fun than I thought
+        // That's more fun than I thought
         self.archived_chunks.push(mem::replace(&mut self.hot_chunks[id as usize], next));
         &mut self.hot_chunks[id as usize]
-    }    
+    }
 
     #[inline]
     pub fn len(&self) -> usize {
@@ -65,8 +70,25 @@ impl ChunkedStorage {
     }
 
     #[inline]
-    pub fn get_archived_mut(&mut self, pos: usize) -> &IndexingChunk{
+    pub fn get_archived_mut(&mut self, pos: usize) -> &IndexingChunk {
         &mut self.archived_chunks[pos]
+    }
+
+    pub fn decode_postings(&self, id: u64) -> Option<Listing> {
+        if self.hot_chunks.len() < id as usize {
+            return None;
+        }
+        let mut chunk = self.get_current(id);
+        let mut listing = decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])).unwrap();
+        loop {
+            if chunk.previous_chunk != 0 {
+                chunk = self.get_archived((chunk.previous_chunk - 1) as usize);
+                listing.append(&mut Listing::decode(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8]))
+                    .unwrap());
+            } else {
+                return Some(listing);
+            }
+        }
     }
 }
 
