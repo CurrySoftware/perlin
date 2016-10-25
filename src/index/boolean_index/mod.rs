@@ -35,9 +35,6 @@ mod query_builder;
 //TODO: WRONG!
 pub mod posting;
 mod boolean_query;
-//TODO: WRONG!
-pub mod indexing_chunk;
-
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
 const STATISTICS_FILENAME: &'static str = "statistics.bin";
