@@ -1,19 +1,32 @@
 use std::mem;
 use std::fmt;
+use std::io::Read;
 
-use storage::compression::VByteEncoded;
+use storage::{ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
+use storage::compression::{VByteDecoder, VByteEncoded};
 use index::boolean_index::posting::{decode_from_chunk, Listing};
 
 pub const SIZE: usize = 104;
 
-
 pub struct IndexingChunk {
+    // TODO: Semantics need to be understandably abstracted
+    // Currently the id of the archived chunk + 1. 0 thus means no predecessor
     previous_chunk: u32, // 4
     postings_count: u16, // 2
     capacity: u16, // 2
     last_doc_id: u64, // 8
-    data: [u8; SIZE], // leaves 4072 bytes on the page for data
+    data: [u8; SIZE], //
 }
+
+impl PartialEq for IndexingChunk {
+    fn eq(&self, other: &IndexingChunk) -> bool {
+        self.previous_chunk == other.previous_chunk && self.postings_count == other.postings_count &&
+        self.capacity == other.capacity && self.last_doc_id == other.last_doc_id &&
+        self.data.as_ref() == other.data.as_ref()
+    }
+}
+
+impl Eq for IndexingChunk {}
 
 impl fmt::Debug for IndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -44,6 +57,7 @@ impl IndexingChunk {
     pub fn append(&mut self, listing: &[(u64, Vec<u32>)]) -> Result<(), usize> {
         let mut working_slice = &mut self.data[SIZE - self.capacity as usize..];
         for (count, &(doc_id, ref positions)) in listing.iter().enumerate() {
+            println!("{}", count);
             let old_capa = self.capacity;
             let old_doc_id = self.last_doc_id;
             // Encode the doc_id as delta
@@ -61,6 +75,7 @@ impl IndexingChunk {
                 } else {
                     self.capacity = old_capa;
                     self.last_doc_id = old_doc_id;
+                    self.postings_count -= 1;
                     return Err(count);
                 }
                 // Encode positions and add to data
@@ -73,16 +88,55 @@ impl IndexingChunk {
                     } else {
                         self.capacity = old_capa;
                         self.last_doc_id = old_doc_id;
+                        self.postings_count -= 1;
                         return Err(count);
                     }
                 }
             } else {
                 self.capacity = old_capa;
                 self.last_doc_id = old_doc_id;
+                self.postings_count -= 1;
                 return Err(count);
             }
         }
         Ok(())
+    }
+}
+
+impl ByteDecodable for IndexingChunk {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
+        let mut result: IndexingChunk;
+        {
+            let mut decoder = VByteDecoder::new(read.bytes());
+            let previous_chunk = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            let postings_count = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            let last_doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            result = IndexingChunk {
+                previous_chunk: previous_chunk as u32,
+                postings_count: postings_count as u16,
+                capacity: capacity as u16,
+                last_doc_id: last_doc_id as u64,
+                data: unsafe { mem::uninitialized() },
+            };
+        }
+        try!(read.read_exact(&mut result.data));
+        Ok(result)
+    }
+}
+
+impl ByteEncodable for IndexingChunk {
+    fn encode(&self) -> Vec<u8> {
+        let mut result = Vec::with_capacity(SIZE + 24);
+        {
+            let mut write_ptr = &mut result;
+            VByteEncoded::new(self.previous_chunk as usize).write_to(write_ptr).unwrap();
+            VByteEncoded::new(self.postings_count as usize).write_to(write_ptr).unwrap();
+            VByteEncoded::new(self.capacity as usize).write_to(write_ptr).unwrap();
+            VByteEncoded::new(self.last_doc_id as usize).write_to(write_ptr).unwrap();
+        }
+        result.extend_from_slice(&self.data);
+        result
     }
 }
 
@@ -179,6 +233,7 @@ impl ChunkedStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use storage::{ByteEncodable, ByteDecodable};
 
     #[test]
     fn basic() {
@@ -187,12 +242,12 @@ mod tests {
             let chunk = store.new_chunk(0);
             let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
             chunk.append(&listing).unwrap();
-            assert_eq!(chunk.capacity, 4074);
+            assert_eq!(chunk.capacity, (SIZE - 18) as u16);
             assert_eq!(chunk.postings_count, 3);
             assert_eq!(chunk.last_doc_id, 204);
         }
         let chunk = store.get_current(0);
-        assert_eq!(chunk.capacity, 4074);
+        assert_eq!(chunk.capacity, (SIZE - 18) as u16);
         assert_eq!(chunk.postings_count, 3);
         assert_eq!(chunk.last_doc_id, 204);
     }
@@ -205,25 +260,25 @@ mod tests {
         {
             let chunk = store.new_chunk(0);
             chunk.append(&listing).unwrap();
-            assert_eq!(chunk.capacity, 4074);
+            assert_eq!(chunk.capacity, (SIZE - 18) as u16);
             assert_eq!(chunk.postings_count, 3);
             assert_eq!(chunk.last_doc_id, 204);
         }
         {
             let new_chunk = store.next_chunk(0);
             new_chunk.append(&next_listing).unwrap();
-            assert_eq!(new_chunk.capacity, 4074);
+            assert_eq!(new_chunk.capacity, (SIZE - 18) as u16);
             assert_eq!(new_chunk.postings_count, 3);
             assert_eq!(new_chunk.last_doc_id, 424);
         }
         let chunk = store.get_current(0);
-        let new_chunk = store.get_archived(chunk.previous_chunk as usize);
-        assert_eq!(new_chunk.capacity, 4074);
-        assert_eq!(new_chunk.postings_count, 3);
-        assert_eq!(new_chunk.last_doc_id, 424);
-        assert_eq!(chunk.capacity, 4074);
+        let old_chunk = store.get_archived((chunk.previous_chunk - 1) as usize);
+        assert_eq!(old_chunk.capacity, (SIZE - 18) as u16);
+        assert_eq!(old_chunk.postings_count, 3);
+        assert_eq!(old_chunk.last_doc_id, 204);
+        assert_eq!(chunk.capacity, (SIZE - 18) as u16);
         assert_eq!(chunk.postings_count, 3);
-        assert_eq!(chunk.last_doc_id, 204);
+        assert_eq!(chunk.last_doc_id, 424);
     }
 
     #[test]
@@ -233,21 +288,19 @@ mod tests {
         let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
         chunk.append(&listing).unwrap();
         println!("{:?}", chunk);
-        assert_eq!(chunk.capacity, 4054);
+        assert_eq!(chunk.capacity, (SIZE - 18) as u16);
         assert_eq!(chunk.postings_count, 3);
         assert_eq!(chunk.last_doc_id, 204);
     }
 
     #[test]
     fn full() {
-        let positions = (0..61).collect::<Vec<_>>();
-        let mut listing = (0..64).map(|i| (i, positions.clone())).collect::<Vec<_>>();
-        let mut additional = (120..160).collect::<Vec<_>>();
+        let mut listing = (0..SIZE / 3).map(|i| (i as u64, vec![0 as u32])).collect::<Vec<_>>();
+        let mut additional = (0u32..(SIZE % 3) as u32).collect::<Vec<_>>();
         listing[0].1.append(&mut additional);
         let mut chunk = IndexingChunk::new(0, 0);
         assert_eq!(chunk.append(&listing), Ok(()));
-        println!("{:?}", chunk);
-        assert_eq!(chunk.postings_count, 64);
+        assert_eq!(chunk.postings_count, (SIZE / 3) as u16);
         assert_eq!(chunk.capacity, 0);
     }
 
@@ -262,19 +315,26 @@ mod tests {
 
     #[test]
     fn overflowing_second() {
-        let positions = (0..61).collect::<Vec<_>>();
-        let mut listing = (0..64).map(|i| (i, positions.clone())).collect::<Vec<_>>();
-        let mut additional = (120..150).collect::<Vec<_>>();
+        let mut listing = (0..SIZE / 3 - 1).map(|i| (i as u64, vec![0 as u32])).collect::<Vec<_>>();
+        let mut additional = (0u32..(SIZE % 3) as u32).collect::<Vec<_>>();
         listing[0].1.append(&mut additional);
         let mut chunk = IndexingChunk::new(0, 0);
         assert_eq!(chunk.append(&listing), Ok(()));
-        assert_eq!(chunk.postings_count, 64);
-        assert_eq!(chunk.capacity, 10);
-        assert_eq!(chunk.last_doc_id, 63);
-        let listing = vec![(64, vec![0]), (65, (0..10000).collect::<Vec<_>>())];
+        assert_eq!(chunk.postings_count, (SIZE / 3 - 1) as u16);
+        assert_eq!(chunk.last_doc_id, (SIZE / 3 - 2) as u64);
+        let listing = vec![((SIZE / 3 - 1) as u64, vec![0]), ((SIZE / 3) as u64, (0..10000).collect::<Vec<_>>())];
         assert_eq!(chunk.append(&listing), Err(1));
-        assert_eq!(chunk.postings_count, 65);
-        assert_eq!(chunk.capacity, 7);
-        assert_eq!(chunk.last_doc_id, 64);
+        assert_eq!(chunk.postings_count, (SIZE / 3) as u16);
+        assert_eq!(chunk.last_doc_id, (SIZE / 3 - 1) as u64);
+    }
+
+    #[test]
+    fn encode_indexing_chunk() {
+        let mut chunk = IndexingChunk::new(0, 0);
+        let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
+        chunk.append(&listing).unwrap();
+        let bytes = chunk.encode();
+        let decoded_chunk = IndexingChunk::decode(&mut bytes.as_slice()).unwrap();
+        assert_eq!(chunk, decoded_chunk);
     }
 }

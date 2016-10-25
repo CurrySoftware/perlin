@@ -276,8 +276,9 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>
     {
-        let mut chunk_tx = Vec::with_capacity(SORT_THREADS);
         let (merged_tx, merged_rx) = mpsc::sync_channel(64);
+        //Initialize and start sorting threads
+        let mut chunk_tx = Vec::with_capacity(SORT_THREADS);
         let mut sort_threads = Vec::with_capacity(SORT_THREADS);
         for _ in 0..SORT_THREADS {
             let (tx, rx) = mpsc::channel();
