@@ -15,7 +15,7 @@ use std::sync::mpsc;
 
 use index::Index;
 use storage::{Storage, StorageError};
-use storage::ChunkedStorage;
+use storage::chunked_storage::{IndexingChunk, ChunkedStorage};
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
@@ -32,7 +32,7 @@ pub use index::boolean_index::index_builder::IndexBuilder;
 mod query_result_iterator;
 mod index_builder;
 mod query_builder;
-//TODO: WRONG!
+// TODO: WRONG!
 pub mod posting;
 mod boolean_query;
 
@@ -117,12 +117,15 @@ impl<TTerm> BooleanIndex<TTerm>
     /// Load a `BooleanIndex` from a previously populated folder
     /// Not intended for public use. Please use the `IndexBuilder` instead
     fn load<TStorage>(path: &Path) -> Result<Self>
-        where TStorage: Storage<Listing> + Persistent + 'static
+        where TStorage: Storage<IndexingChunk> + Persistent + 'static
     {
         let storage = try!(TStorage::load(path));
         let vocab = try!(Self::load_vocabulary(path));
         let doc_count = try!(Self::load_statistics(path));
-        BooleanIndex::from_parts(Box::new(storage), vocab, doc_count)
+        // TODO: Load ChunkedStorage
+        BooleanIndex::from_parts(ChunkedStorage::new(1000, Box::new(storage)),
+                                 vocab,
+                                 doc_count)
     }
 
     /// Creates a new `BooleanIndex` instance which is written to the passed
@@ -134,15 +137,16 @@ impl<TTerm> BooleanIndex<TTerm>
                                                              -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>,
-              TStorage: Storage<Listing> + Persistent + 'static
+              TStorage: Storage<IndexingChunk> + Persistent + 'static
     {
         let mut index = BooleanIndex {
             document_count: 0,
             term_ids: HashMap::new(),
             persist_path: Some(path.to_path_buf()),
-            chunked_postings: ChunkedStorage::new(10000),
+            // Initialized by index_documents
+            chunked_postings: unsafe { std::mem::uninitialized() },
         };
-        try!(index.index_documents(documents));
+        try!(index.index_documents(documents, storage));
         try!(index.save_vocabulary());
         try!(index.save_statistics());
         Ok(index)
@@ -186,12 +190,12 @@ impl<TTerm> BooleanIndex<TTerm>
         }
     }
 
-    fn load_vocabulary(path: &Path) -> Result<BTreeMap<TTerm, u64>> {
+    fn load_vocabulary(path: &Path) -> Result<HashMap<TTerm, u64>> {
         // Open file
         let vocab_file = try!(OpenOptions::new().read(true).open(path.join(VOCAB_FILENAME)));
         // Create a decoder from that vector
         let mut decoder = VByteDecoder::new(vocab_file.bytes());
-        let mut result = BTreeMap::new();
+        let mut result = HashMap::new();
         while let Some(id) = decoder.next() {
             if let Some(term_len) = decoder.next() {
                 let term_bytes: Vec<u8> = decoder.underlying_iterator().take(term_len).map(|b| b.unwrap()).collect();
@@ -242,42 +246,46 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     fn new<TDocsIterator, TDocIterator, TStorage>(storage: TStorage, documents: TDocsIterator) -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>,
-              TStorage: Storage<Listing> + 'static
+              TStorage: Storage<IndexingChunk> + 'static
     {
         let mut index = BooleanIndex {
             document_count: 0,
             term_ids: HashMap::new(),
             persist_path: None,
-            chunked_postings: ChunkedStorage::new(1000),
+            // Initialized by index_documents
+            chunked_postings: unsafe { std::mem::uninitialized() },
         };
-        try!(index.index_documents(documents));
+        try!(index.index_documents(documents, storage));
         Ok(index)
     }
 
 
 
 
-    fn from_parts(inverted_index: Box<Storage<Listing>>,
-                  vocabulary: BTreeMap<TTerm, u64>,
+    fn from_parts(inverted_index: ChunkedStorage,
+                  vocabulary: HashMap<TTerm, u64>,
                   document_count: usize)
                   -> Result<Self> {
-        Err(Error::PersistPathIsFile)
-        // Ok(BooleanIndex {
-        //     document_count: document_count,
-        //     term_ids: vocabulary,
-        //     postings: inverted_index,
-        //     persist_path: None,
-        // })
+        Ok(BooleanIndex {
+            document_count: document_count,
+            term_ids: vocabulary,
+            chunked_postings: inverted_index,
+            persist_path: None,
+        })
     }
 
     /// Indexes a document collection for later retrieval
     /// Returns the number of documents indexed
-    fn index_documents<TDocsIterator, TDocIterator>(&mut self, documents: TDocsIterator) -> Result<(usize)>
+    fn index_documents<TDocsIterator, TDocIterator, TStorage>(&mut self,
+                                                              documents: TDocsIterator,
+                                                              storage: TStorage)
+                                                              -> Result<(usize)>
         where TDocsIterator: Iterator<Item = TDocIterator>,
-              TDocIterator: Iterator<Item = TTerm>
+              TDocIterator: Iterator<Item = TTerm>,
+              TStorage: Storage<IndexingChunk> + 'static
     {
         let (merged_tx, merged_rx) = mpsc::sync_channel(64);
-        //Initialize and start sorting threads
+        // Initialize and start sorting threads
         let mut chunk_tx = Vec::with_capacity(SORT_THREADS);
         let mut sort_threads = Vec::with_capacity(SORT_THREADS);
         for _ in 0..SORT_THREADS {
@@ -287,7 +295,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             sort_threads.push(thread::spawn(|| BooleanIndex::<TTerm>::sort_and_group_chunk(rx, m_tx)));
         }
         drop(merged_tx);
-        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx));
+        let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx, storage));
         let mut buffer = Vec::with_capacity(213400);
         let mut term_count = 0;
         // For every document in the collection
@@ -316,11 +324,11 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         }
         try!(chunk_tx[chunk_count % SORT_THREADS].send(buffer));
         drop(chunk_tx);
-        //Join sort threads
-        if sort_threads.into_iter().any(|thread| thread.join().is_err())  {
+        // Join sort threads
+        if sort_threads.into_iter().any(|thread| thread.join().is_err()) {
             return Err(Error::Indexing(IndexingError::ThreadPanic));
         }
-        //Join invert index thread and save result
+        // Join invert index thread and save result
         self.chunked_postings = match inv_index.join() {
             Ok(res) => try!(res),
             Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
@@ -367,8 +375,12 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         }
     }
 
-    fn invert_index(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>) -> Result<ChunkedStorage> {
-        let mut storage = ChunkedStorage::new(10000);
+    fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
+                              mut storage: TStorage)
+                              -> Result<ChunkedStorage>
+        where TStorage: Storage<IndexingChunk> + 'static
+    {
+        let mut storage = ChunkedStorage::new(10000, Box::new(storage));
         while let Ok(chunk) = grouped_chunks.recv() {
             let threshold = storage.len();
             for (term_id, listing) in chunk {
@@ -390,7 +402,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                         let next_chunk = storage.next_chunk(term_id);
                         if let Err(new_position) = next_chunk.append(&listing[position..]) {
                             if new_position == 0 {
-                                //TODO: FIXME
+                                // TODO: FIXME
                                 panic!("Position list was longer than chunksize. Go Home!");
                             }
                             position += new_position;
@@ -449,11 +461,11 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     }
 
 
-    fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {            
+    fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
-           // println!("QueryAtomStart");
+            // println!("QueryAtomStart");
             QueryResultIterator::Atom(relative_position,
-                                      ArcIter::new(Arc::new(self.chunked_postings.decode_postings(*result).unwrap())))                
+                                      ArcIter::new(Arc::new(self.chunked_postings.decode_postings(*result).unwrap())))
         } else {
             QueryResultIterator::Empty
         }

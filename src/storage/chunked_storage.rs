@@ -2,7 +2,7 @@ use std::mem;
 use std::fmt;
 use std::io::Read;
 
-use storage::{ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
+use storage::{Storage, ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
 use storage::compression::{VByteDecoder, VByteEncoded};
 use index::boolean_index::posting::{decode_from_chunk, Listing};
 
@@ -140,17 +140,18 @@ impl ByteEncodable for IndexingChunk {
     }
 }
 
-#[derive(Debug)]
 pub struct ChunkedStorage {
     hot_chunks: Vec<IndexingChunk>, // Size of vocabulary
     archived_chunks: Vec<IndexingChunk>,
+    archive: Box<Storage<IndexingChunk>>
 }
 
 impl ChunkedStorage {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(capacity: usize, archive: Box<Storage<IndexingChunk>>) -> Self {
         ChunkedStorage {
             hot_chunks: Vec::with_capacity(capacity),
             archived_chunks: Vec::with_capacity(capacity / 10),
+            archive: archive
         }
     }
 

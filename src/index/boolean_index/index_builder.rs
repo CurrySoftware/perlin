@@ -1,10 +1,11 @@
+use std::fs;
 use std::marker::PhantomData;
 use std::path::{PathBuf, Path};
-use std::fs;
 use std::hash::Hash;
 
 use storage::Storage;
 use storage::{ByteEncodable, ByteDecodable};
+use storage::chunked_storage::IndexingChunk;
 use utils::persistence::{Volatile, Persistent};
 
 
@@ -37,7 +38,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
 
 impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     where TTerm: Ord + Hash,
-          TStorage: Storage<Listing> + Volatile + 'static
+          TStorage: Storage<IndexingChunk> + Volatile + 'static
 {
     /// Creates a volatile instance of `BooleanIndex`
     /// At the moment `BooleanIndex` does not support adding or removing
@@ -53,7 +54,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
 
 impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     where TTerm: Ord + ByteDecodable + ByteEncodable + Hash,
-          TStorage: Storage<Listing> + Persistent + 'static
+          TStorage: Storage<IndexingChunk> + Persistent + 'static
 {
     /// Enables a persistent index at the passed path.
     /// `at` must be either a prefilled directory if the `load` method is to be
