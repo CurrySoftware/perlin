@@ -4,7 +4,7 @@
 use std;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{HashMap};
 use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -140,7 +140,7 @@ impl<TTerm> BooleanIndex<TTerm>
               TStorage: Storage<IndexingChunk> + Persistent + 'static
     {
         let (document_count, chunked_postings, term_ids) = try!(BooleanIndex::index_documents(documents, storage));
-        let mut index = BooleanIndex {
+        let index = BooleanIndex {
             document_count: document_count,
             term_ids: term_ids,
             persist_path: Some(path.to_path_buf()),
@@ -249,7 +249,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
               TStorage: Storage<IndexingChunk> + 'static
     {
         let (document_count, chunked_postings, term_ids) = try!(BooleanIndex::index_documents(documents, storage));
-        let mut index = BooleanIndex {
+        let index = BooleanIndex {
             document_count: document_count,
             term_ids: term_ids,
             persist_path: None,        
@@ -376,7 +376,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     }
 
     fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
-                              mut storage: TStorage)
+                              storage: TStorage)
                               -> Result<ChunkedStorage>
         where TStorage: Storage<IndexingChunk> + 'static
     {
