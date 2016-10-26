@@ -139,13 +139,13 @@ impl<TTerm> BooleanIndex<TTerm>
               TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<IndexingChunk> + Persistent + 'static
     {
-        let (document_count, term_ids, chunked_postings) = try!(BooleanIndex::index_documents(documents, storage));
+        let (document_count, chunked_postings, term_ids) = try!(BooleanIndex::index_documents(documents, storage));
         let mut index = BooleanIndex {
-            document_count: 0,
-            term_ids: HashMap::new(),
+            document_count: document_count,
+            term_ids: term_ids,
             persist_path: Some(path.to_path_buf()),
             // Initialized by index_documents
-            chunked_postings: unsafe { std::mem::uninitialized() },
+            chunked_postings: chunked_postings,
         };
         try!(index.save_vocabulary());
         try!(index.save_statistics());
@@ -463,7 +463,6 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
-            // println!("QueryAtomStart");
             QueryResultIterator::Atom(relative_position,
                                       ArcIter::new(Arc::new(self.chunked_postings.decode_postings(*result).unwrap())))
         } else {
