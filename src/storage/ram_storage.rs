@@ -16,6 +16,11 @@ impl<T> Volatile for RamStorage<T> {
 }
 
 impl<T: Sync + Send> Storage<T> for RamStorage<T> {
+
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+    
     fn get(&self, id: u64) -> Result<Arc<T>> {
         self.data.get(id as usize).cloned().ok_or(StorageError::KeyNotFound)
     }

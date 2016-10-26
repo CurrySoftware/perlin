@@ -106,6 +106,11 @@ impl<T> Volatile for CompressedRamStorage<T>
 
 impl<T: ByteDecodable + ByteEncodable + Sync + Send> Storage<T> for CompressedRamStorage<T>
 {
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+    
     fn get(&self, id: u64) -> Result<Arc<T>>{
         if let Some(&(offset, len)) = self.entries.get(id as usize) {
 

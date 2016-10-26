@@ -1,6 +1,7 @@
 use std::mem;
 use std::fmt;
 use std::io::Read;
+use std::sync::Arc;
 
 use storage::{Storage, ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
 use storage::compression::{VByteDecoder, VByteEncoded};
@@ -57,7 +58,7 @@ impl IndexingChunk {
     pub fn append(&mut self, listing: &[(u64, Vec<u32>)]) -> Result<(), usize> {
         let mut working_slice = &mut self.data[SIZE - self.capacity as usize..];
         for (count, &(doc_id, ref positions)) in listing.iter().enumerate() {
-            println!("{}", count);
+            // println!("{}", count);
             let old_capa = self.capacity;
             let old_doc_id = self.last_doc_id;
             // Encode the doc_id as delta
@@ -142,16 +143,14 @@ impl ByteEncodable for IndexingChunk {
 
 pub struct ChunkedStorage {
     hot_chunks: Vec<IndexingChunk>, // Size of vocabulary
-    archived_chunks: Vec<IndexingChunk>,
-    archive: Box<Storage<IndexingChunk>>
+    archive: Box<Storage<IndexingChunk>>,
 }
 
 impl ChunkedStorage {
     pub fn new(capacity: usize, archive: Box<Storage<IndexingChunk>>) -> Self {
         ChunkedStorage {
             hot_chunks: Vec::with_capacity(capacity),
-            archived_chunks: Vec::with_capacity(capacity / 10),
-            archive: archive
+            archive: archive,
         }
     }
 
@@ -170,10 +169,13 @@ impl ChunkedStorage {
     }
 
     pub fn next_chunk(&mut self, id: u64) -> &mut IndexingChunk {
-        let next = IndexingChunk::new(self.archived_chunks.len() as u32 + 1,
+        let next = IndexingChunk::new(self.archive.len() as u32 + 1,
                                       self.hot_chunks[id as usize].last_doc_id);
+        // TODO: Needs to go
+        let new_id = self.archive.len() as u64;
         // That's more fun than I thought
-        self.archived_chunks.push(mem::replace(&mut self.hot_chunks[id as usize], next));
+        self.archive.store(new_id,
+                           mem::replace(&mut self.hot_chunks[id as usize], next));
         &mut self.hot_chunks[id as usize]
     }
 
@@ -193,40 +195,37 @@ impl ChunkedStorage {
     }
 
     #[inline]
-    pub fn get_archived(&self, pos: usize) -> &IndexingChunk {
-        &self.archived_chunks[pos]
-    }
-
-    #[inline]
-    pub fn get_archived_mut(&mut self, pos: usize) -> &IndexingChunk {
-        &mut self.archived_chunks[pos]
+    pub fn get_archived(&self, pos: usize) -> Arc<IndexingChunk> {
+        self.archive.get(pos as u64).unwrap()
     }
 
     pub fn decode_postings(&self, id: u64) -> Option<Listing> {
         if self.hot_chunks.len() < id as usize {
             return None;
         }
-        let mut chunk = self.get_current(id);
-        let mut listing = decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])).unwrap();
-        loop {
-            //            println!("Loop {}", chunk.previous_chunk);
-            if chunk.previous_chunk != 0 {
-                chunk = self.get_archived((chunk.previous_chunk - 1) as usize);
-                match decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])) {
-                    Ok(mut new) => {
-                        new.append(&mut listing);
-                        listing = new;
-                    }
-                    Err((doc_id, position)) => {
-                        println!("{}-{}", doc_id, position);
-                        println!("{:?}", chunk);
-                        panic!("TF");
-                    }
+        // Get hot listing
+        let chunk = self.get_current(id);
+        let mut listing = decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])).unwrap();        
+        let mut previous = chunk.previous_chunk;
+        //If there are predecessors, get them, decode them and append them to the result.
+        //Currently not very efficient.
+        //TODO: Turn that into threaded lazy iterators
+        while previous != 0 {
+            let chunk = self.get_archived((chunk.previous_chunk - 1) as usize);
+            previous = chunk.previous_chunk;
+            match decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])) {
+                Ok(mut new) => {
+                    new.append(&mut listing);
+                    listing = new;
                 }
-            } else {
-                return Some(listing);
+                Err((doc_id, position)) => {
+                    println!("{}-{}", doc_id, position);
+                    println!("{:?}", chunk);
+                    panic!("TF");
+                }
             }
         }
+        return Some(listing);
     }
 }
 
@@ -234,11 +233,12 @@ impl ChunkedStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use storage::{ByteEncodable, ByteDecodable};
+    use utils::persistence::Volatile;
+    use storage::{RamStorage, ByteEncodable, ByteDecodable};
 
     #[test]
     fn basic() {
-        let mut store = ChunkedStorage::new(10);
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
         {
             let chunk = store.new_chunk(0);
             let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn continued() {
-        let mut store = ChunkedStorage::new(10);
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
         let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
         let next_listing = vec![(205, vec![0, 10, 20]), (225, vec![24, 25, 289]), (424, vec![209, 2456])];
         {

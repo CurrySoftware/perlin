@@ -88,4 +88,7 @@ pub trait Storage<T>
     /// Tries to store a value with a given Id.
     /// Returns an Error if Write fails or if there is no more space.
     fn store(&mut self, id: u64, data: T) -> Result<()>;
+
+    /// Returns the number of stored elements
+    fn len(&self) -> usize;
 }

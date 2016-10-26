@@ -91,6 +91,11 @@ impl<TItem> Persistent for FsStorage<TItem> {
 
 
 impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsStorage<TItem> {
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+    
     fn get(&self, id: u64) -> Result<Arc<TItem>> {
         // TODO: Think through this once more. Now with the new Read approach in ByteDecodable
         if let Some(item_position) = self.entries.get(&id) {
