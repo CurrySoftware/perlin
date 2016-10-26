@@ -11,7 +11,6 @@ use utils::persistence::{Volatile, Persistent};
 
 use index::boolean_index;
 use index::boolean_index::{Result, Error, BooleanIndex};
-use index::boolean_index::posting::Listing;
 
 const REQUIRED_FILES: [&'static str; 2] = [boolean_index::VOCAB_FILENAME, boolean_index::STATISTICS_FILENAME];
 
@@ -24,7 +23,7 @@ pub struct IndexBuilder<TTerm, TStorage> {
 
 impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     where TTerm: Ord,
-          TStorage: Storage<Listing>
+          TStorage: Storage<IndexingChunk>
 {
     /// Creates a new instance of `IndexBuilder`
     pub fn new() -> Self {

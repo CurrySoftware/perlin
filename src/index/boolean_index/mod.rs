@@ -139,6 +139,7 @@ impl<TTerm> BooleanIndex<TTerm>
               TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<IndexingChunk> + Persistent + 'static
     {
+        let (document_count, term_ids, chunked_postings) = try!(BooleanIndex::index_documents(documents, storage));
         let mut index = BooleanIndex {
             document_count: 0,
             term_ids: HashMap::new(),
@@ -146,7 +147,6 @@ impl<TTerm> BooleanIndex<TTerm>
             // Initialized by index_documents
             chunked_postings: unsafe { std::mem::uninitialized() },
         };
-        try!(index.index_documents(documents, storage));
         try!(index.save_vocabulary());
         try!(index.save_statistics());
         Ok(index)
@@ -248,14 +248,13 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
               TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<IndexingChunk> + 'static
     {
+        let (document_count, chunked_postings, term_ids) = try!(BooleanIndex::index_documents(documents, storage));
         let mut index = BooleanIndex {
-            document_count: 0,
-            term_ids: HashMap::new(),
-            persist_path: None,
-            // Initialized by index_documents
-            chunked_postings: unsafe { std::mem::uninitialized() },
+            document_count: document_count,
+            term_ids: term_ids,
+            persist_path: None,        
+            chunked_postings: chunked_postings,
         };
-        try!(index.index_documents(documents, storage));
         Ok(index)
     }
 
@@ -276,15 +275,15 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     /// Indexes a document collection for later retrieval
     /// Returns the number of documents indexed
-    fn index_documents<TDocsIterator, TDocIterator, TStorage>(&mut self,
-                                                              documents: TDocsIterator,
+    fn index_documents<TDocsIterator, TDocIterator, TStorage>(documents: TDocsIterator,
                                                               storage: TStorage)
-                                                              -> Result<(usize)>
+                                                              -> Result<(usize, ChunkedStorage, HashMap<TTerm, u64>)>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<IndexingChunk> + 'static
     {
         let (merged_tx, merged_rx) = mpsc::sync_channel(64);
+        let mut document_count = 0;
         // Initialize and start sorting threads
         let mut chunk_tx = Vec::with_capacity(SORT_THREADS);
         let mut sort_threads = Vec::with_capacity(SORT_THREADS);
@@ -296,6 +295,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         }
         drop(merged_tx);
         let inv_index = thread::spawn(|| BooleanIndex::<TTerm>::invert_index(merged_rx, storage));
+        let mut term_ids = HashMap::new();
         let mut buffer = Vec::with_capacity(213400);
         let mut term_count = 0;
         // For every document in the collection
@@ -304,17 +304,17 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             // Enumerate over its terms
             for (term_position, term) in document.into_iter().enumerate() {
                 // Has term already been seen? Is it already in the vocabulary?
-                if let Some(term_id) = self.term_ids.get(&term) {
+                if let Some(term_id) = term_ids.get(&term) {
                     buffer.push((*term_id, doc_id as u64, term_position as u32));
                     continue;
                 }
-                self.term_ids.insert(term, term_count as u64);
+                term_ids.insert(term, term_count as u64);
                 buffer.push((term_count as u64, doc_id as u64, term_position as u32));
                 term_count += 1;
             }
             // Term was not yet indexed. Add it
-            self.document_count += 1;
-            if self.document_count % 256 == 0 {
+            document_count += 1;
+            if document_count % 256 == 0 {
                 let index = chunk_count % SORT_THREADS;
                 let old_len = buffer.len();
                 try!(chunk_tx[index].send(buffer));
@@ -329,12 +329,12 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             return Err(Error::Indexing(IndexingError::ThreadPanic));
         }
         // Join invert index thread and save result
-        self.chunked_postings = match inv_index.join() {
+        let chunked_postings = match inv_index.join() {
             Ok(res) => try!(res),
             Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
         };
-
-        Ok(self.document_count)
+        
+        Ok((document_count, chunked_postings, term_ids))
     }
 
     fn sort_and_group_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
