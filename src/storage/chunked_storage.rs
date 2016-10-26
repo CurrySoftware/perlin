@@ -1,13 +1,17 @@
 use std::mem;
 use std::fmt;
-use std::io::Read;
+use std::io::{Write, Read};
 use std::sync::Arc;
+use std::fs::OpenOptions;
+use std::path::Path;
+
 
 use storage::{Storage, ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
 use storage::compression::{VByteDecoder, VByteEncoded};
 use index::boolean_index::posting::{decode_from_chunk, Listing};
 
 pub const SIZE: usize = 104;
+pub const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
 
 pub struct IndexingChunk {
     // TODO: Semantics need to be understandably abstracted
@@ -152,6 +156,30 @@ impl ChunkedStorage {
             hot_chunks: Vec::with_capacity(capacity),
             archive: archive,
         }
+    }
+
+    /// Persists hot_chunks to a file.
+    /// We currently only need to persist hot_chunks
+    /// Archive takes care of the rest
+    pub fn persist(&self, target: &Path) -> Result<(), ()>  {
+        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(target.join(HOTCHUNKS_FILENAME)).unwrap();
+        for chunk in &self.hot_chunks {
+            let bytes = chunk.encode();
+            file.write(&bytes);
+        }
+        Ok(())
+    }
+
+    pub fn load(source: &Path, archive: Box<Storage<IndexingChunk>>) -> Result<Self, ()> {
+        let mut file = OpenOptions::new().read(true).open(source.join(HOTCHUNKS_FILENAME)).unwrap();
+        let mut hot_chunks = Vec::new();
+        while let Ok(decoded_chunk) = IndexingChunk::decode(&mut file) {
+            hot_chunks.push(decoded_chunk);
+        }
+        Ok(ChunkedStorage{
+            hot_chunks: hot_chunks,
+            archive: archive
+        })
     }
 
     pub fn new_chunk(&mut self, id: u64) -> &mut IndexingChunk {
