@@ -61,3 +61,7 @@ mod chunked_storage;
 pub mod language;
 pub mod index;
 pub mod storage;
+
+
+#[cfg(test)]
+pub mod test_utils;
