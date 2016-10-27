@@ -9,11 +9,10 @@ use std::path::Path;
 
 use storage::{Storage, Result, ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
 use storage::compression::{VByteDecoder, VByteEncoded};
-//use index::boolean_index::posting::{decode_from_chunk, Listing};
 
 pub const SIZE: usize = 104;
-pub const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
-
+const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
+const ASSOCIATED_FILES: &'static [&'static str; 1] = &[HOTCHUNKS_FILENAME];
 
 pub struct IndexingChunk {
     // Currently the id of the archived chunk + 1. 0 thus means no predecessor
@@ -159,6 +158,7 @@ impl ByteEncodable for IndexingChunk {
     }
 }
 
+//TODO: Think about implementing `Persistent` and `Volatile`
 pub struct ChunkedStorage {
     hot_chunks: Vec<IndexingChunk>, // Size of vocabulary
     archive: Box<Storage<IndexingChunk>>,
@@ -239,7 +239,11 @@ impl ChunkedStorage {
     #[inline]
     pub fn get_archived(&self, pos: usize) -> Arc<IndexingChunk> {
         self.archive.get(pos as u64).unwrap()
-    }  
+    }
+
+    pub fn associated_files() -> &'static [&'static str] {
+        ASSOCIATED_FILES
+    }
 }
 
 

@@ -5,7 +5,7 @@ use std::hash::Hash;
 
 use storage::Storage;
 use storage::{ByteEncodable, ByteDecodable};
-use chunked_storage::IndexingChunk;
+use chunked_storage::{ChunkedStorage, IndexingChunk};
 use utils::persistence::{Volatile, Persistent};
 
 
@@ -117,6 +117,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     fn required_files() -> Vec<&'static str> {
         let mut required_files = REQUIRED_FILES.to_vec();
         required_files.extend_from_slice(TStorage::associated_files());
+        required_files.extend_from_slice(ChunkedStorage::associated_files());
         required_files
     }
 }
@@ -125,17 +126,18 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_utils::test_dir;
     use index::boolean_index::Error;
     use storage::FsStorage;
-    use std::env;
     use std::fs;
 
     #[test]
     fn empty_folder() {
-        let path = &env::temp_dir().join("perlin_test_empty_dir");
+        let path = &test_dir().join("empty_dir");
         fs::create_dir_all(path).unwrap();
 
         let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
+        // That is not really beautiful or anything.
         assert!(if let Err(Error::MissingIndexFiles(_)) = result {
             true
         } else {
@@ -144,8 +146,8 @@ mod tests {
     }
 
     #[test]
-    fn file_not_folder() {
-        let path = &env::temp_dir().join("perlin_test_file.bin");
+    fn index_dir_is_file() {
+        let path = &test_dir().join("index_dir_is_file.bin");
         fs::File::create(path).unwrap();
 
         let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
@@ -158,7 +160,7 @@ mod tests {
 
     #[test]
     fn corrupt_file() {
-        let path = &env::temp_dir().join("perlin_corrupted_files_test_dir");
+        let path = &test_dir().join("corrupted_files");
         fs::create_dir_all(path).unwrap();
         for file in IndexBuilder::<usize, FsStorage<_>>::required_files() {
             fs::File::create(path.join(file)).unwrap();
@@ -170,5 +172,24 @@ mod tests {
         } else {
             false
         });
+    }
+
+    #[test]
+    fn required_files_correct() {
+        let path = &test_dir().join("required_files_correct");
+        fs::create_dir_all(path).unwrap();
+        IndexBuilder::<_, FsStorage<_>>::new()
+            .persist(path)
+            .create_persistent(vec![(0..10).collect::<Vec<_>>().into_iter(),
+                                    (0..10)
+                                        .map(|i| i * 2)
+                                        .collect::<Vec<_>>()
+                                        .into_iter(),
+                                    vec![5u32, 4, 3, 2, 1, 0].into_iter()]
+                .into_iter())
+            .unwrap();
+        assert_eq!(fs::read_dir(path).unwrap().count(),
+                   IndexBuilder::<usize, FsStorage<_>>::required_files().len());
+
     }
 }
