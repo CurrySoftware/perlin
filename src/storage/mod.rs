@@ -16,14 +16,12 @@ use std::sync::Arc;
 
 pub use storage::fs_storage::FsStorage;
 pub use storage::ram_storage::RamStorage;
-pub use storage::comp_ram_storage::CompressedRamStorage;
 pub use storage::byte_code::{ByteDecodable, ByteEncodable, DecodeError, DecodeResult};
 
 pub mod compression;
 pub mod chunked_storage;
 mod fs_storage;
 mod ram_storage;
-mod comp_ram_storage;
 mod byte_code;
 
 
