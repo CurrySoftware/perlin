@@ -503,15 +503,14 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
 #[cfg(test)]
 mod tests {
-
-    use std::fs::create_dir_all;
-    use std::path::Path;
-
     use super::*;
-    use index::boolean_index::boolean_query::*;
-
-    use index::Index;
+    
+    use test_utils::create_test_dir;
+    
     use storage::{FsStorage, RamStorage};
+    use index::boolean_index::boolean_query::*;
+    use index::Index;
+    
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {
@@ -670,10 +669,10 @@ mod tests {
 
     #[test]
     fn persistence() {
-        assert!(create_dir_all(Path::new("/tmp/persistent_index_test")).is_ok());
+        let path = &create_test_dir("persistent_index");
         {
             let index = IndexBuilder::<u32, FsStorage<_>>::new()
-                .persist(Path::new("/tmp/persistent_index_test"))
+                .persist(path)
                 .create_persistent(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                         (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
                                         vec![5, 4, 3, 2, 1, 0].into_iter()]
@@ -692,7 +691,7 @@ mod tests {
 
         {
             let index = IndexBuilder::<usize, FsStorage<_>>::new()
-                .persist(Path::new("/tmp/persistent_index_test"))
+                .persist(path)
                 .load()
                 .unwrap();
             assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7)))

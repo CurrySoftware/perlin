@@ -126,15 +126,14 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_utils::test_dir;
+    use test_utils::{test_dir, create_test_dir};
     use index::boolean_index::Error;
     use storage::FsStorage;
     use std::fs;
 
     #[test]
     fn empty_folder() {
-        let path = &test_dir().join("empty_dir");
-        fs::create_dir_all(path).unwrap();
+        let path = &create_test_dir("empty_dir");
 
         let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
         // That is not really beautiful or anything.
@@ -149,7 +148,6 @@ mod tests {
     fn index_dir_is_file() {
         let path = &test_dir().join("index_dir_is_file.bin");
         fs::File::create(path).unwrap();
-
         let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
         assert!(if let Err(Error::PersistPathIsFile) = result {
             true
@@ -160,8 +158,7 @@ mod tests {
 
     #[test]
     fn corrupt_file() {
-        let path = &test_dir().join("corrupted_files");
-        fs::create_dir_all(path).unwrap();
+        let path = &create_test_dir("corrupted_files");
         for file in IndexBuilder::<usize, FsStorage<_>>::required_files() {
             fs::File::create(path.join(file)).unwrap();
         }
@@ -176,7 +173,7 @@ mod tests {
 
     #[test]
     fn required_files_correct() {
-        let path = &test_dir().join("required_files_correct");
+        let path = &create_test_dir("required_files_correct");
         fs::create_dir_all(path).unwrap();
         IndexBuilder::<_, FsStorage<_>>::new()
             .persist(path)
@@ -190,6 +187,5 @@ mod tests {
             .unwrap();
         assert_eq!(fs::read_dir(path).unwrap().count(),
                    IndexBuilder::<usize, FsStorage<_>>::required_files().len());
-
     }
 }
