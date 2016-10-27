@@ -15,7 +15,7 @@ use std::sync::mpsc;
 
 use index::Index;
 use storage::{Storage, StorageError};
-use storage::chunked_storage::{IndexingChunk, ChunkedStorage};
+use chunked_storage::{IndexingChunk, ChunkedStorage};
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;

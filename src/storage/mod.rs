@@ -19,7 +19,6 @@ pub use storage::ram_storage::RamStorage;
 pub use storage::byte_code::{ByteDecodable, ByteEncodable, DecodeError, DecodeResult};
 
 pub mod compression;
-pub mod chunked_storage;
 mod fs_storage;
 mod ram_storage;
 mod byte_code;

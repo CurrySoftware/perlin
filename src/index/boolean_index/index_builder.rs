@@ -5,7 +5,7 @@ use std::hash::Hash;
 
 use storage::Storage;
 use storage::{ByteEncodable, ByteDecodable};
-use storage::chunked_storage::IndexingChunk;
+use chunked_storage::IndexingChunk;
 use utils::persistence::{Volatile, Persistent};
 
 

@@ -14,6 +14,7 @@ use storage::compression::{VByteDecoder, VByteEncoded};
 pub const SIZE: usize = 104;
 pub const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
 
+
 pub struct IndexingChunk {
     // Currently the id of the archived chunk + 1. 0 thus means no predecessor
     previous_chunk: u32, // 4

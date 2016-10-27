@@ -36,13 +36,16 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
     result
 }
 
+/// Stores the result of a vbyte encode operation without indirection that a `Vec<u8>` would introduce.
+/// Can thus be used to vbyte_encode on the stack
 pub struct VByteEncoded {
+    // Memory layout of the result: [ payload | payload | payload | ... | used_bytes ]
     data: [u8; 11],
 }
 
 impl VByteEncoded {
     /// Performs a vbyte encode without allocating memory on the heap
-    /// Memory layout of the result: [ payload | payload | payload | ... | used_bytes ]
+    /// Can then be written to a `Write`-implementor
     pub fn new(mut number: usize) -> Self {
         let mut count = 0;
         let mut result = [0u8; 11];
@@ -62,10 +65,13 @@ impl VByteEncoded {
         }
     }
 
+    /// Return how many bytes are used to encode the number. Min: 1 Max: 10
     pub fn bytes_used(&self) -> u8 {
         self.data[10]
     }
-
+    
+    /// Writes the given VByteEncoded number to a target.
+    /// Returns the number of bytes written (equal to `bytes_used`) or an `io::Error`
     pub fn write_to<W: Write>(&self, target: &mut W) -> Result<u8, Error> {
         target.write_all(&self.data[(10-self.bytes_used()) as usize..10]).map(|()| self.bytes_used())
     }
