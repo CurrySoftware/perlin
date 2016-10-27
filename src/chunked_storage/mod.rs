@@ -17,7 +17,6 @@ const ASSOCIATED_FILES: &'static [&'static str; 1] = &[HOTCHUNKS_FILENAME];
 pub struct IndexingChunk {
     // Currently the id of the archived chunk + 1. 0 thus means no predecessor
     previous_chunk: u32, // 4
-    postings_count: u16, // 2
     capacity: u16, // 2
     last_doc_id: u64, // 8
     data: [u8; SIZE], //
@@ -25,7 +24,7 @@ pub struct IndexingChunk {
 
 impl PartialEq for IndexingChunk {
     fn eq(&self, other: &IndexingChunk) -> bool {
-        self.previous_chunk == other.previous_chunk && self.postings_count == other.postings_count &&
+        self.previous_chunk == other.previous_chunk && 
         self.capacity == other.capacity && self.last_doc_id == other.last_doc_id &&
         self.data.as_ref() == other.data.as_ref()
     }
@@ -36,9 +35,8 @@ impl Eq for IndexingChunk {}
 impl fmt::Debug for IndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f,
-                    "IndexingChunk, Previous: {}, Holds {} postings and has {} spare bytes! last_doc_id is {}\n",
+                    "IndexingChunk, Previous: {}, Has {} spare bytes! last_doc_id is {}\n",
                     self.previous_chunk,
-                    self.postings_count,
                     self.capacity,
                     self.last_doc_id));
         try!(write!(f, "Data: {:?}", self.data.to_vec()));
@@ -51,7 +49,6 @@ impl IndexingChunk {
         IndexingChunk {
             previous_chunk: previous,
             last_doc_id: last_doc_id,
-            postings_count: 0,
             capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         }
@@ -65,8 +62,7 @@ impl IndexingChunk {
         }
     }
 
-    pub fn get_bytes(&self) -> &[u8]
-    {
+    pub fn get_bytes(&self) -> &[u8] {
         &self.data[0..SIZE - self.capacity as usize] as &[u8]
     }
 
@@ -83,7 +79,6 @@ impl IndexingChunk {
             // Encode the delta_doc_id with vbyte code
             let encoded_ddoc_id = VByteEncoded::new(delta_doc_id as usize);
             self.last_doc_id = doc_id;
-            self.postings_count += 1;
             if let Ok(bytes_written) = encoded_ddoc_id.write_to(&mut working_slice) {
                 // There was enough space. Count down capacity. Start encoding and writing positions
                 self.capacity -= bytes_written as u16;
@@ -93,7 +88,6 @@ impl IndexingChunk {
                 } else {
                     self.capacity = old_capa;
                     self.last_doc_id = old_doc_id;
-                    self.postings_count -= 1;
                     return Err(count);
                 }
                 // Encode positions and add to data
@@ -106,14 +100,12 @@ impl IndexingChunk {
                     } else {
                         self.capacity = old_capa;
                         self.last_doc_id = old_doc_id;
-                        self.postings_count -= 1;
                         return Err(count);
                     }
                 }
             } else {
                 self.capacity = old_capa;
                 self.last_doc_id = old_doc_id;
-                self.postings_count -= 1;
                 return Err(count);
             }
         }
@@ -127,12 +119,10 @@ impl ByteDecodable for IndexingChunk {
         {
             let mut decoder = VByteDecoder::new(read.bytes());
             let previous_chunk = try!(decoder.next().ok_or(DecodeError::MalformedInput));
-            let postings_count = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let last_doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             result = IndexingChunk {
                 previous_chunk: previous_chunk as u32,
-                postings_count: postings_count as u16,
                 capacity: capacity as u16,
                 last_doc_id: last_doc_id as u64,
                 data: unsafe { mem::uninitialized() },
@@ -149,7 +139,6 @@ impl ByteEncodable for IndexingChunk {
         {
             let mut write_ptr = &mut result;
             VByteEncoded::new(self.previous_chunk as usize).write_to(write_ptr).unwrap();
-            VByteEncoded::new(self.postings_count as usize).write_to(write_ptr).unwrap();
             VByteEncoded::new(self.capacity as usize).write_to(write_ptr).unwrap();
             VByteEncoded::new(self.last_doc_id as usize).write_to(write_ptr).unwrap();
         }
@@ -158,7 +147,7 @@ impl ByteEncodable for IndexingChunk {
     }
 }
 
-//TODO: Think about implementing `Persistent` and `Volatile`
+// TODO: Think about implementing `Persistent` and `Volatile`
 pub struct ChunkedStorage {
     hot_chunks: Vec<IndexingChunk>, // Size of vocabulary
     archive: Box<Storage<IndexingChunk>>,
@@ -175,8 +164,9 @@ impl ChunkedStorage {
     /// Persists hot_chunks to a file.
     /// We currently only need to persist hot_chunks
     /// Archive takes care of the rest
-    pub fn persist(&self, target: &Path) -> Result<()>  {
-        let mut file = try!(OpenOptions::new().write(true).create(true).truncate(true).open(target.join(HOTCHUNKS_FILENAME)));
+    pub fn persist(&self, target: &Path) -> Result<()> {
+        let mut file =
+            try!(OpenOptions::new().write(true).create(true).truncate(true).open(target.join(HOTCHUNKS_FILENAME)));
         for chunk in &self.hot_chunks {
             let bytes = chunk.encode();
             try!(file.write(&bytes));
@@ -190,9 +180,9 @@ impl ChunkedStorage {
         while let Ok(decoded_chunk) = IndexingChunk::decode(&mut file) {
             hot_chunks.push(decoded_chunk);
         }
-        Ok(ChunkedStorage{
+        Ok(ChunkedStorage {
             hot_chunks: hot_chunks,
-            archive: archive
+            archive: archive,
         })
     }
 

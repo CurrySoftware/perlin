@@ -10,9 +10,6 @@ use storage::Storage;
 
 const SORT_THREADS: usize = 4;
 
-
-
-
 /// Indexes a document collection for later retrieval
 /// Returns the number of documents indexed
 pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TTerm>
@@ -79,6 +76,8 @@ pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TTerm>
     Ok((document_count, chunked_postings, term_ids))
 }
 
+/// Receives chunks of (term_id, doc_id, position) tripels
+/// Sorts and groups them by term_id and doc_id then sends them
 fn sort_and_group_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
                         grouped_chunks: mpsc::SyncSender<Vec<(u64, Listing)>>) {
 
@@ -126,6 +125,7 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
     while let Ok(chunk) = grouped_chunks.recv() {
         let threshold = storage.len();
         for (term_id, listing) in chunk {
+            println!("{:?}", listing);
             let uterm_id = term_id as usize;
             // Get chunk to write to or create if unknown
             let result = {
@@ -134,7 +134,7 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
                 } else {
                     storage.new_chunk(term_id)
                 };
-                stor_chunk.append(&listing)
+                stor_chunk.append(&listing)                 
             };
             // Listing did not fit into current chunk completly
             // Get the next and put it in there.
@@ -157,4 +157,89 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
 
     }
     Ok(storage)
+}
+
+
+#[cfg(test)]
+mod tests {
+
+    use std::thread;
+    use std::sync::mpsc;
+
+    use utils::persistence::Volatile;
+    use index::boolean_index::posting::decode_from_storage;
+    use storage::RamStorage;
+
+    #[test]
+    fn basic_sorting() {
+        let (trp_tx, trp_rx) = mpsc::channel();
+        let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
+
+        thread::spawn(|| super::sort_and_group_chunk(trp_rx, sorted_tx));
+
+        // (term_id, doc_id, position)
+        // Document 0: "0, 0, 1"
+        // Document 1: "0"
+        trp_tx.send(vec![(0, 0, 1), (0, 0, 2), (1, 0, 3), (0, 1, 0)]).unwrap();
+        assert_eq!(sorted_rx.recv().unwrap(),
+                   vec![(0, vec![(0, vec![1, 2]), (1, vec![0])]), (1, vec![(0, vec![3])])]);
+    }
+
+    #[test]
+    fn extended_sorting() {
+        let (trp_tx, trp_rx) = mpsc::channel();
+        let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
+
+        thread::spawn(|| super::sort_and_group_chunk(trp_rx, sorted_tx));
+
+        trp_tx.send((0..100).map(|i| (i, i, i as u32)).collect::<Vec<_>>()).unwrap();
+        let sorted = sorted_rx.recv().unwrap();
+        assert_eq!(sorted,
+                   (0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+
+        trp_tx.send((0..100).map(|i| (i, i, i as u32)).collect::<Vec<_>>()).unwrap();
+        let sorted = sorted_rx.recv().unwrap();
+        assert_eq!(sorted,
+                   (0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+
+        trp_tx.send((200..300).map(|i| (i, i, i as u32)).collect::<Vec<_>>()).unwrap();
+        let sorted = sorted_rx.recv().unwrap();
+        assert_eq!(sorted,
+                   (200..300).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn basic_inverting() {
+        let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
+        let result = thread::spawn(|| super::invert_index(sorted_rx, RamStorage::new()));
+
+        sorted_tx.send((0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>()).unwrap();
+        drop(sorted_tx);
+
+        let chunked_storage = result.join().unwrap().unwrap();
+        assert_eq!(chunked_storage.len(), 100);
+        assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
+                   vec![(0, vec![0u32])]);
+        assert_eq!(decode_from_storage(&chunked_storage, 99).unwrap(),
+                   vec![(99, vec![99u32])]);
+    }
+
+    #[test]
+    fn chunk_overflowing_inverting() {
+        let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
+        let result = thread::spawn(|| super::invert_index(sorted_rx, RamStorage::new()));
+
+        sorted_tx.send((0..10)
+                .map(|i| (i, (i..i+100).map(|k| (k, (0..10).collect::<Vec<_>>())).collect::<Vec<_>>()))
+                .collect::<Vec<_>>())
+            .unwrap();
+        drop(sorted_tx);
+
+        let chunked_storage = result.join().unwrap().unwrap();
+        assert_eq!(chunked_storage.len(), 10);
+        assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
+                   (0..100).map(|k| (k, (0..10).collect::<Vec<_>>())).collect::<Vec<_>>());
+        
+    }
+
 }

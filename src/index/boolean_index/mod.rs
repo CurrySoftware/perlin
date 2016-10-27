@@ -19,7 +19,7 @@ use index::boolean_index::boolean_query::*;
 use index::boolean_index::indexing::index_documents;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::posting::{decode_from_chunk, Listing};
+use index::boolean_index::posting::decode_from_storage;
 
 use storage::compression::{vbyte_encode, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
@@ -108,34 +108,6 @@ impl<'a, TTerm: Ord + Hash> Index<'a, TTerm> for BooleanIndex<TTerm> {
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
         Box::new(self.run_query(query))
     }
-}
-
-
-fn decode_postings(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
-    // Get hot listing
-    let chunk = storage.get_current(id);
-    let mut listing = decode_from_chunk(&mut chunk.get_bytes()).unwrap();
-    let mut previous = chunk.previous_chunk();
-    // If there are predecessors, get them, decode them and append them to the result.
-    // Currently not very efficient.
-    // TODO: Turn that into threaded lazy iterators
-    while previous.is_some() {
-        let chunk = storage.get_archived(previous.unwrap());
-        previous = chunk.previous_chunk();
-        match decode_from_chunk(&mut chunk.get_bytes()) {
-            Ok(mut new) => {
-                new.append(&mut listing);
-                listing = new;
-            }
-            //TODO: Errorhandling
-            Err((doc_id, position)) => {
-                println!("{}-{}", doc_id, position);
-                println!("{:?}", chunk);
-                panic!("TF");
-            }
-        }
-    }
-    return Some(listing);
 }
 
 impl<TTerm> BooleanIndex<TTerm>
@@ -299,7 +271,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         })
     }
 
-    
+
 
 
     fn run_query(&self, query: &BooleanQuery<TTerm>) -> QueryResultIterator {
@@ -348,7 +320,8 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
             QueryResultIterator::Atom(relative_position,
-                                      ArcIter::new(Arc::new(decode_postings(&self.chunked_postings, *result).unwrap())))
+                                      ArcIter::new(Arc::new(decode_from_storage(&self.chunked_postings, *result)
+                                          .unwrap())))
         } else {
             QueryResultIterator::Empty
         }
@@ -362,13 +335,13 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use test_utils::create_test_dir;
-    
+
     use storage::{FsStorage, RamStorage};
     use index::boolean_index::boolean_query::*;
     use index::Index;
-    
+
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {
