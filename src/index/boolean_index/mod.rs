@@ -4,7 +4,7 @@
 use std;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
@@ -19,7 +19,7 @@ use storage::chunked_storage::{IndexingChunk, ChunkedStorage};
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::posting::Listing;
+use index::boolean_index::posting::{decode_from_chunk, Listing};
 
 use storage::compression::{vbyte_encode, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
@@ -32,8 +32,7 @@ pub use index::boolean_index::index_builder::IndexBuilder;
 mod query_result_iterator;
 mod index_builder;
 mod query_builder;
-// TODO: WRONG!
-pub mod posting;
+mod posting;
 mod boolean_query;
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
@@ -111,6 +110,34 @@ impl<'a, TTerm: Ord + Hash> Index<'a, TTerm> for BooleanIndex<TTerm> {
     }
 }
 
+
+fn decode_postings(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
+    // Get hot listing
+    let chunk = storage.get_current(id);
+    let mut listing = decode_from_chunk(&mut chunk.get_bytes()).unwrap();
+    let mut previous = chunk.previous_chunk();
+    // If there are predecessors, get them, decode them and append them to the result.
+    // Currently not very efficient.
+    // TODO: Turn that into threaded lazy iterators
+    while previous.is_some() {
+        let chunk = storage.get_archived(previous.unwrap());
+        previous = chunk.previous_chunk();
+        match decode_from_chunk(&mut chunk.get_bytes()) {
+            Ok(mut new) => {
+                new.append(&mut listing);
+                listing = new;
+            }
+            //TODO: Errorhandling
+            Err((doc_id, position)) => {
+                println!("{}-{}", doc_id, position);
+                println!("{:?}", chunk);
+                panic!("TF");
+            }
+        }
+    }
+    return Some(listing);
+}
+
 impl<TTerm> BooleanIndex<TTerm>
     where TTerm: Ord + ByteDecodable + ByteEncodable + Hash
 {
@@ -124,9 +151,7 @@ impl<TTerm> BooleanIndex<TTerm>
         let doc_count = try!(Self::load_statistics(path));
         let chunked_storage = ChunkedStorage::load(path, Box::new(storage)).unwrap();
         // TODO: Load ChunkedStorage
-        BooleanIndex::from_parts(chunked_storage,
-                                 vocab,
-                                 doc_count)
+        BooleanIndex::from_parts(chunked_storage, vocab, doc_count)
     }
 
     /// Creates a new `BooleanIndex` instance which is written to the passed
@@ -254,7 +279,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         let index = BooleanIndex {
             document_count: document_count,
             term_ids: term_ids,
-            persist_path: None,        
+            persist_path: None,
             chunked_postings: chunked_postings,
         };
         Ok(index)
@@ -335,7 +360,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             Ok(res) => try!(res),
             Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
         };
-        
+
         Ok((document_count, chunked_postings, term_ids))
     }
 
@@ -466,7 +491,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
             QueryResultIterator::Atom(relative_position,
-                                      ArcIter::new(Arc::new(self.chunked_postings.decode_postings(*result).unwrap())))
+                                      ArcIter::new(Arc::new(decode_postings(&self.chunked_postings, *result).unwrap())))
         } else {
             QueryResultIterator::Empty
         }

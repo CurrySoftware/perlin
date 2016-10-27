@@ -8,7 +8,7 @@ use std::path::Path;
 
 use storage::{Storage, ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
 use storage::compression::{VByteDecoder, VByteEncoded};
-use index::boolean_index::posting::{decode_from_chunk, Listing};
+//use index::boolean_index::posting::{decode_from_chunk, Listing};
 
 pub const SIZE: usize = 104;
 pub const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
@@ -55,6 +55,19 @@ impl IndexingChunk {
             capacity: SIZE as u16,
             data: unsafe { mem::uninitialized() },
         }
+    }
+
+    pub fn previous_chunk(&self) -> Option<usize> {
+        if self.previous_chunk == 0 {
+            None
+        } else {
+            Some((self.previous_chunk - 1) as usize)
+        }
+    }
+
+    pub fn get_bytes(&self) -> &[u8]
+    {
+        &self.data[0..SIZE - self.capacity as usize] as &[u8]
     }
 
     /// Adds listing to IndexingChunk. Returns Ok if listing fits into chunk
@@ -225,36 +238,7 @@ impl ChunkedStorage {
     #[inline]
     pub fn get_archived(&self, pos: usize) -> Arc<IndexingChunk> {
         self.archive.get(pos as u64).unwrap()
-    }
-
-    pub fn decode_postings(&self, id: u64) -> Option<Listing> {
-        if self.hot_chunks.len() < id as usize {
-            return None;
-        }
-        // Get hot listing
-        let chunk = self.get_current(id);
-        let mut listing = decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])).unwrap();        
-        let mut previous = chunk.previous_chunk;
-        //If there are predecessors, get them, decode them and append them to the result.
-        //Currently not very efficient.
-        //TODO: Turn that into threaded lazy iterators
-        while previous != 0 {
-            let chunk = self.get_archived((chunk.previous_chunk - 1) as usize);
-            previous = chunk.previous_chunk;
-            match decode_from_chunk(&mut (&chunk.data[0..SIZE - chunk.capacity as usize] as &[u8])) {
-                Ok(mut new) => {
-                    new.append(&mut listing);
-                    listing = new;
-                }
-                Err((doc_id, position)) => {
-                    println!("{}-{}", doc_id, position);
-                    println!("{:?}", chunk);
-                    panic!("TF");
-                }
-            }
-        }
-        return Some(listing);
-    }
+    }  
 }
 
 
