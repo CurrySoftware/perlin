@@ -1,3 +1,4 @@
+use std;
 use std::mem;
 use std::fmt;
 use std::io::{Write, Read};
@@ -6,7 +7,7 @@ use std::fs::OpenOptions;
 use std::path::Path;
 
 
-use storage::{Storage, ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
+use storage::{Storage, Result, ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
 use storage::compression::{VByteDecoder, VByteEncoded};
 //use index::boolean_index::posting::{decode_from_chunk, Listing};
 
@@ -14,7 +15,6 @@ pub const SIZE: usize = 104;
 pub const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
 
 pub struct IndexingChunk {
-    // TODO: Semantics need to be understandably abstracted
     // Currently the id of the archived chunk + 1. 0 thus means no predecessor
     previous_chunk: u32, // 4
     postings_count: u16, // 2
@@ -72,7 +72,7 @@ impl IndexingChunk {
 
     /// Adds listing to IndexingChunk. Returns Ok if listing fits into chunk
     /// Otherwise returns the posting number which did not fit into this chunk anymore
-    pub fn append(&mut self, listing: &[(u64, Vec<u32>)]) -> Result<(), usize> {
+    pub fn append(&mut self, listing: &[(u64, Vec<u32>)]) -> std::result::Result<(), usize> {
         let mut working_slice = &mut self.data[SIZE - self.capacity as usize..];
         for (count, &(doc_id, ref positions)) in listing.iter().enumerate() {
             // println!("{}", count);
@@ -174,17 +174,17 @@ impl ChunkedStorage {
     /// Persists hot_chunks to a file.
     /// We currently only need to persist hot_chunks
     /// Archive takes care of the rest
-    pub fn persist(&self, target: &Path) -> Result<(), ()>  {
-        let mut file = OpenOptions::new().write(true).create(true).truncate(true).open(target.join(HOTCHUNKS_FILENAME)).unwrap();
+    pub fn persist(&self, target: &Path) -> Result<()>  {
+        let mut file = try!(OpenOptions::new().write(true).create(true).truncate(true).open(target.join(HOTCHUNKS_FILENAME)));
         for chunk in &self.hot_chunks {
             let bytes = chunk.encode();
-            file.write(&bytes);
+            try!(file.write(&bytes));
         }
         Ok(())
     }
 
-    pub fn load(source: &Path, archive: Box<Storage<IndexingChunk>>) -> Result<Self, ()> {
-        let mut file = OpenOptions::new().read(true).open(source.join(HOTCHUNKS_FILENAME)).unwrap();
+    pub fn load(source: &Path, archive: Box<Storage<IndexingChunk>>) -> Result<Self> {
+        let mut file = try!(OpenOptions::new().read(true).open(source.join(HOTCHUNKS_FILENAME)));
         let mut hot_chunks = Vec::new();
         while let Ok(decoded_chunk) = IndexingChunk::decode(&mut file) {
             hot_chunks.push(decoded_chunk);
@@ -209,15 +209,15 @@ impl ChunkedStorage {
         &mut self.hot_chunks[id as usize]
     }
 
-    pub fn next_chunk(&mut self, id: u64) -> &mut IndexingChunk {
+    pub fn next_chunk(&mut self, id: u64) -> Result<&mut IndexingChunk> {
         let next = IndexingChunk::new(self.archive.len() as u32 + 1,
                                       self.hot_chunks[id as usize].last_doc_id);
         // TODO: Needs to go
         let new_id = self.archive.len() as u64;
         // That's more fun than I thought
-        self.archive.store(new_id,
-                           mem::replace(&mut self.hot_chunks[id as usize], next));
-        &mut self.hot_chunks[id as usize]
+        try!(self.archive.store(new_id,
+                                mem::replace(&mut self.hot_chunks[id as usize], next)));
+        Ok(&mut self.hot_chunks[id as usize])
     }
 
     #[inline]
@@ -278,7 +278,7 @@ mod tests {
             assert_eq!(chunk.last_doc_id, 204);
         }
         {
-            let new_chunk = store.next_chunk(0);
+            let new_chunk = store.next_chunk(0).unwrap();
             new_chunk.append(&next_listing).unwrap();
             assert_eq!(new_chunk.capacity, (SIZE - 18) as u16);
             assert_eq!(new_chunk.postings_count, 3);

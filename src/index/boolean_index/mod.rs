@@ -150,7 +150,6 @@ impl<TTerm> BooleanIndex<TTerm>
         let vocab = try!(Self::load_vocabulary(path));
         let doc_count = try!(Self::load_statistics(path));
         let chunked_storage = ChunkedStorage::load(path, Box::new(storage)).unwrap();
-        // TODO: Load ChunkedStorage
         BooleanIndex::from_parts(chunked_storage, vocab, doc_count)
     }
 
@@ -175,7 +174,7 @@ impl<TTerm> BooleanIndex<TTerm>
         };
         try!(index.save_vocabulary());
         try!(index.save_statistics());
-        index.chunked_postings.persist(path);
+        try!(index.chunked_postings.persist(path));
         Ok(index)
     }
 
@@ -426,7 +425,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                 // Repeat until done
                 if let Err(mut position) = result {
                     loop {
-                        let next_chunk = storage.next_chunk(term_id);
+                        let next_chunk = try!(storage.next_chunk(term_id));
                         if let Err(new_position) = next_chunk.append(&listing[position..]) {
                             if new_position == 0 {
                                 // TODO: FIXME
