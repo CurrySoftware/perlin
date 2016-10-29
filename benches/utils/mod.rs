@@ -1,5 +1,6 @@
 use perlin::index::boolean_index::{IndexBuilder, BooleanIndex};
-use perlin::storage::CompressedRamStorage;
+use perlin::storage::RamStorage;
+
 use rand;
 use rand::{XorShiftRng, Rng};
 
@@ -12,7 +13,7 @@ pub fn prepare_index(documents: usize, document_size: usize) -> BooleanIndex<usi
     println!("Preparing index with {} documents each {} terms",
              documents,
              document_size);
-    let index = IndexBuilder::<_, CompressedRamStorage<_>>::new()
+    let index = IndexBuilder::<_, RamStorage<_>>::new()
         .create(collection.iter().map(|i| i.iter().cloned()));
     println!("Done!");
     index.unwrap()
