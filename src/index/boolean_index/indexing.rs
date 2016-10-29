@@ -125,7 +125,6 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
     while let Ok(chunk) = grouped_chunks.recv() {
         let threshold = storage.len();
         for (term_id, listing) in chunk {
-            println!("{:?}", listing);
             let uterm_id = term_id as usize;
             // Get chunk to write to or create if unknown
             let result = {
