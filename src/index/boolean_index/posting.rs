@@ -13,27 +13,12 @@ pub type Listing = Vec<Posting>;
     pub fn decode_from_storage(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
         // Get hot listing
         let chunk = storage.get_current(id);
-        let mut listing = decode_from_chunk(&mut chunk.get_bytes()).unwrap();
-        let mut previous = chunk.previous_chunk();
-        // If there are predecessors, get them, decode them and append them to the result.
-        // Currently not very efficient.
-        // TODO: Turn that into threaded lazy iterators
-        while previous.is_some() {
-            let chunk = storage.get_archived(previous.unwrap());
-            previous = chunk.previous_chunk();
-            match decode_from_chunk(&mut chunk.get_bytes()) {
-                Ok(mut new) => {
-                    new.append(&mut listing);
-                    listing = new;
-                }
-                // TODO: Errorhandling
-                Err((doc_id, position)) => {
-                    println!("{}-{}", doc_id, position);
-                    println!("{:?}", chunk);
-                    panic!("TF");
-                }
-            }
+        let mut listing = Vec::new();
+        //TODO: DeltaDecoding
+        for i in chunk.archived_chunks() {
+            listing.append(&mut decode_from_chunk(&mut storage.get_archived(*i as usize).get_bytes()).unwrap());
         }
+        listing.append(&mut decode_from_chunk(&mut chunk.get_bytes()).unwrap());
         return Some(listing);
     }
 
