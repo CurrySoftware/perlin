@@ -76,8 +76,8 @@ pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TTerm>
     Ok((document_count, chunked_postings, term_ids))
 }
 
-/// Receives chunks of (term_id, doc_id, position) tripels
-/// Sorts and groups them by term_id and doc_id then sends them
+/// Receives chunks of (`term_id`, `doc_id`, `position`) tripels
+/// Sorts and groups them by `term_id` and `doc_id` then sends them
 fn sort_and_group_chunk(ids: mpsc::Receiver<Vec<(u64, u64, u32)>>,
                         grouped_chunks: mpsc::SyncSender<Vec<(u64, Listing)>>) {
 

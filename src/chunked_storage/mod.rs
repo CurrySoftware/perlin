@@ -75,8 +75,15 @@ impl IndexingChunk {
     }
 }
 
+impl Default for HotIndexingChunk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 impl HotIndexingChunk {
+
     pub fn new() -> Self {
         HotIndexingChunk {
             last_doc_id: 0,
@@ -268,7 +275,7 @@ impl ChunkedStorage {
         }
 
         self.hot_chunks[term_id as usize] = HotIndexingChunk::new();
-        return &mut self.hot_chunks[term_id as usize];
+        &mut self.hot_chunks[term_id as usize]
     }
 
     pub fn next_chunk(&mut self, id: u64) -> Result<&mut HotIndexingChunk> {

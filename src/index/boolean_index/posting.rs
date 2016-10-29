@@ -9,37 +9,37 @@ pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);
 pub type Listing = Vec<Posting>;
 
 
-//Thanks rustc: impl Listing {
-    pub fn decode_from_storage(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
-        // Get hot listing
-        let chunk = storage.get_current(id);
-        let mut listing = Vec::new();
-        let mut base_doc_id = 0;
-        for i in chunk.archived_chunks() {
-            listing.append(&mut decode_from_chunk(&mut storage.get_archived(*i as usize).get_bytes(), &mut base_doc_id).unwrap());
-        }
-        listing.append(&mut decode_from_chunk(&mut chunk.get_bytes(), &mut base_doc_id).unwrap());
-        return Some(listing);
+pub fn decode_from_storage(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
+    // Get hot listing
+    let chunk = storage.get_current(id);
+    let mut listing = Vec::new();
+    let mut base_doc_id = 0;
+    for i in chunk.archived_chunks() {
+        listing.append(&mut decode_from_chunk(&mut storage.get_archived(*i as usize).get_bytes(),
+                                              &mut base_doc_id)
+            .unwrap());
     }
+    listing.append(&mut decode_from_chunk(&mut chunk.get_bytes(), &mut base_doc_id).unwrap());
+    Some(listing)
+}
 
-    /// Returns the decoded Listing or the (doc_id, position) pair where an error occured
-    fn decode_from_chunk<R: Read>(read: &mut R, base_doc_id: &mut u64) -> Result<Listing, (usize, usize)> {
-        let mut decoder = VByteDecoder::new(read.bytes());
-        let mut postings = Vec::new();
-        while let Some(doc_id) = decoder.next() {
-            *base_doc_id += doc_id as u64;
-            let positions_len = try!(decoder.next().ok_or((*base_doc_id as usize, 0)));
-            let mut positions = Vec::with_capacity(positions_len as usize);
-            let mut last_position = 0;
-            for i in 0..positions_len {
-                last_position += try!(decoder.next().ok_or((*base_doc_id as usize, i)));
-                positions.push(last_position as u32);
-            }
-            postings.push((*base_doc_id, positions));
+/// Returns the decoded Listing or the (`doc_id`, `position`) pair where an error occured
+fn decode_from_chunk<R: Read>(read: &mut R, base_doc_id: &mut u64) -> Result<Listing, (usize, usize)> {
+    let mut decoder = VByteDecoder::new(read.bytes());
+    let mut postings = Vec::new();
+    while let Some(doc_id) = decoder.next() {
+        *base_doc_id += doc_id as u64;
+        let positions_len = try!(decoder.next().ok_or((*base_doc_id as usize, 0)));
+        let mut positions = Vec::with_capacity(positions_len as usize);
+        let mut last_position = 0;
+        for i in 0..positions_len {
+            last_position += try!(decoder.next().ok_or((*base_doc_id as usize, i)));
+            positions.push(last_position as u32);
         }
-        Ok(postings)
+        postings.push((*base_doc_id, positions));
     }
-//}
+    Ok(postings)
+}
 
 impl ByteEncodable for Listing {
     fn encode(&self) -> Vec<u8> {

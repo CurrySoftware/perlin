@@ -88,4 +88,9 @@ pub trait Storage<T>
 
     /// Returns the number of stored elements
     fn len(&self) -> usize;
+
+    /// Returns true if storage is empty
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }

@@ -37,7 +37,7 @@ pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
 }
 
 /// Stores the result of a vbyte encode operation without indirection that a `Vec<u8>` would introduce.
-/// Can thus be used to vbyte_encode on the stack
+/// Can thus be used to `vbyte_encode` on the stack
 pub struct VByteEncoded {
     // Memory layout of the result: [ payload | payload | payload | ... | used_bytes ]
     data: [u8; 11],
