@@ -141,6 +141,8 @@ impl HotIndexingChunk {
                 self.capacity = old_capa;
                 return Err(count);
             }
+            //TODO: Check for performance impact
+            self.last_doc_id += delta_doc_id;
         }
         Ok(())
     }
