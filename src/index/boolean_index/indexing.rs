@@ -241,4 +241,23 @@ mod tests {
         
     }
 
+    #[test]
+    fn overflowing_posting() {
+        let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
+        let result = thread::spawn(|| super::invert_index(sorted_rx, RamStorage::new()));
+
+        sorted_tx.send((0..1)
+                .map(|i| (i, (i..i+1).map(|k| (k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>()))
+                .collect::<Vec<_>>())
+            .unwrap();
+        drop(sorted_tx);
+
+        
+        let chunked_storage = result.join().unwrap().unwrap();
+        assert_eq!(chunked_storage.len(), 10);
+        assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
+                   (0..1).map(|k| (k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>());
+    }
+    
+
 }
