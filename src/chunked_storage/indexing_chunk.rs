@@ -90,6 +90,15 @@ impl HotIndexingChunk {
         }
     }
 
+    #[inline]
+    pub fn get_last_doc_id(&self) -> u64 {
+        self.last_doc_id
+    }
+
+    pub fn set_last_doc_id(&mut self, new_id: u64) {
+        self.last_doc_id = new_id;
+    }
+
     pub fn archive(&mut self, at: u32) -> IndexingChunk {
         self.archived_chunks.push(at);
         let result = IndexingChunk {

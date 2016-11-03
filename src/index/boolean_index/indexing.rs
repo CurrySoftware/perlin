@@ -1,7 +1,10 @@
 use std::thread;
+use std::io::Write;
 use std::sync::mpsc;
 use std::hash::Hash;
 use std::collections::HashMap;
+
+use storage::compression::VByteEncoded;
 
 use index::boolean_index::{Result, Error, IndexingError};
 use index::boolean_index::posting::Listing;
@@ -127,35 +130,35 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
         for (term_id, listing) in chunk {
             let uterm_id = term_id as usize;
             // Get chunk to write to or create if unknown
-            let result = {
-                let stor_chunk = if uterm_id < threshold {
-                    storage.get_current_mut(term_id)
-                } else {
-                    storage.new_chunk(term_id)
-                };
-                stor_chunk.append(&listing)                 
-            };
-            // Listing did not fit into current chunk completly
-            // Get the next and put it in there.
-            // Repeat until done
-            if let Err(mut position) = result {
-                loop {
-                    let next_chunk = try!(storage.next_chunk(term_id));
-                    if let Err(new_position) = next_chunk.append(&listing[position..]) {
-                        if new_position == 0 {
-                            // TODO: FIXME
-                            panic!("Position list was longer than chunksize. Go Home!");
-                        }
-                        position += new_position;
-                    } else {
-                        break;
-                    }
-                }
-            }
+            let mut stor_chunk = if uterm_id < threshold {
+                storage.get_current_mut(term_id)
+            } else {
+                storage.new_chunk(term_id)
+            };           
+            let base_doc_id = stor_chunk.get_last_doc_id();
+            let last_doc_id = write_listing(listing, base_doc_id, &mut stor_chunk);
+            stor_chunk.set_last_doc_id(last_doc_id);
+            assert!(base_doc_id <= last_doc_id);
         }
-
     }
     Ok(storage)
+}
+
+
+fn write_listing<W: Write>(listing: Listing, mut base_doc_id: u64, target: &mut W) -> u64 {    
+    for (doc_id, positions) in listing {
+        let delta_doc_id = doc_id - base_doc_id;
+        base_doc_id = doc_id;
+        VByteEncoded::new(delta_doc_id as usize).write_to(target);
+        VByteEncoded::new(positions.len()).write_to(target);
+        let mut last_position = 0;
+        for position in positions {
+            let delta_pos = position - last_position;
+            last_position = position;
+            VByteEncoded::new(delta_pos as usize).write_to(target);            
+        }
+    }
+    base_doc_id
 }
 
 
@@ -254,7 +257,7 @@ mod tests {
 
         
         let chunked_storage = result.join().unwrap().unwrap();
-        assert_eq!(chunked_storage.len(), 10);
+        assert_eq!(chunked_storage.len(), 1);
         assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
                    (0..1).map(|k| (k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>());
     }
