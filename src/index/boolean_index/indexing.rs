@@ -145,6 +145,7 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
 }
 
 
+//TODO: Errorhandling
 fn write_listing<W: Write>(listing: Listing, mut base_doc_id: u64, target: &mut W) -> u64 {    
     for (doc_id, positions) in listing {
         let delta_doc_id = doc_id - base_doc_id;
