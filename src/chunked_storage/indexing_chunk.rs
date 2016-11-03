@@ -10,11 +10,11 @@ use chunked_storage::SIZE;
 
 
 pub struct HotIndexingChunk {
-    capacity: u16,
+    pub capacity: u16,
     last_doc_id: u64,
     // TODO: Can we remove that indirection?
     archived_chunks: Vec<u32>,
-    data: [u8; SIZE],
+    pub data: [u8; SIZE],
 }
 
 pub struct IndexingChunk {
@@ -40,7 +40,7 @@ impl PartialEq for HotIndexingChunk {
 impl fmt::Debug for IndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f, "IndexingChunk has {} spare bytes!\n", self.capacity));
-        try!(write!(f, "Data: {:?}", self.data.to_vec()));
+        try!(write!(f, "Data: {:?}", self.get_bytes()));
         Ok(())
     }
 }
@@ -48,8 +48,12 @@ impl fmt::Debug for IndexingChunk {
 // TODO: Complete!
 impl fmt::Debug for HotIndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(write!(f, "HotIndexingChunk has {} spare bytes!\n", self.capacity));
-        try!(write!(f, "Data: {:?}", self.data.to_vec()));
+        try!(write!(f,
+                    "HotIndexingChunk has {} predecessors: {:?}\n And {} spare bytes!\n",
+                    self.archived_chunks().len(),
+                    self.archived_chunks(),
+                    self.capacity));
+        try!(write!(f, "Data: {:?}", self.get_bytes()));
         Ok(())
     }
 }

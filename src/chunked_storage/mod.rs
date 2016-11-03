@@ -1,3 +1,4 @@
+use std::io;
 use std::io::Write;
 use std::sync::Arc;
 use std::fs::OpenOptions;
@@ -14,6 +15,58 @@ pub const SIZE: usize = 104;
 const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
 const ASSOCIATED_FILES: &'static [&'static str; 1] = &[HOTCHUNKS_FILENAME];
 
+
+pub struct ChunkRef<'a> {
+    read_ptr: usize,
+    chunk: &'a mut HotIndexingChunk,
+    archive: &'a mut Box<Storage<IndexingChunk>>,
+}
+
+// The idea here is the abstract the inner workings of chunked storage and indexing chunk from the index
+// To do this, we implement Read and Write
+impl<'a> io::Write for ChunkRef<'a> {
+    // Fill the HotIndexingChunk
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let bytes_written = try!((&mut self.chunk.data[SIZE - self.chunk.capacity as usize..]).write(buf));
+        self.chunk.capacity -= bytes_written as u16;
+        if self.chunk.capacity == 0 {
+            let id = self.archive.len();
+            // TODO: Errorhandling
+            self.archive.store(id as u64, self.chunk.archive(id as u32)).unwrap();
+        }
+        Ok(bytes_written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> io::Read for ChunkRef<'a> {
+    // BULLSHIT. RETHINK THIS!
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut bytes_read = 0;
+        loop {
+            let chunk_id = self.read_ptr / SIZE;
+            if chunk_id < self.chunk.archived_chunks().len() {
+                let read = (&self.archive.get(chunk_id as u64).unwrap().get_bytes()[self.read_ptr % SIZE..])
+                    .read(&mut buf[bytes_read..])
+                    .unwrap();
+                if read == 0 {
+                    return Ok(bytes_read);
+                }
+                bytes_read += read;
+                self.read_ptr += read;
+            } else {
+                break;
+            }
+        }
+        let read = (&self.chunk.get_bytes()[self.read_ptr % SIZE..]).read(&mut buf[bytes_read..]).unwrap();
+        bytes_read += read;
+        self.read_ptr += read;
+        Ok(bytes_read)
+    }
+}
 
 // TODO: Think about implementing `Persistent` and `Volatile`
 pub struct ChunkedStorage {
@@ -52,6 +105,14 @@ impl ChunkedStorage {
             hot_chunks: hot_chunks,
             archive: archive,
         })
+    }
+
+    fn chunk_ref(&mut self, term_id: u64) -> ChunkRef {
+        ChunkRef {
+            read_ptr: 0,
+            chunk: &mut self.hot_chunks[term_id as usize],
+            archive: &mut self.archive,
+        }
     }
 
     pub fn new_chunk(&mut self, term_id: u64) -> &mut HotIndexingChunk {
@@ -107,6 +168,7 @@ impl ChunkedStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Write};
     use utils::persistence::Volatile;
     use storage::RamStorage;
 
@@ -145,5 +207,83 @@ mod tests {
         let old_chunk = store.get_archived((chunk.archived_chunks()[0]) as usize);
         assert_eq!(old_chunk.get_bytes().len(), 18);
         assert_eq!(chunk.get_bytes().len(), 18);
+    }
+
+    #[test]
+    fn overflowing_chunk_ref() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..255u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.write_all(&data);
+        }
+        {
+            let chunk = store.get_current(0);
+            let first_chunk = store.get_archived((chunk.archived_chunks()[0]) as usize);
+            assert_eq!(first_chunk.get_bytes(), &data[0..SIZE]);
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.read_to_end(&mut read_data);
+        }
+        assert_eq!(data, read_data);
+    }
+
+    #[test]
+    fn basic_chunk_ref() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..20u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.write_all(&data);
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.read_to_end(&mut read_data);
+        }
+        assert_eq!(data, read_data);
+    }
+
+    #[test]
+    fn repeated_writes() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..20u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.write_all(&data[0..10]);
+            chunk_ref.write_all(&data[10..20]);
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.read_to_end(&mut read_data);
+        }
+        assert_eq!(data, read_data);
+    }
+
+    #[test]
+    fn repeated_writes_overflowing() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..255u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.write_all(&data);
+            chunk_ref.write_all(&data);
+            chunk_ref.write_all(&data);
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.chunk_ref(0);
+            chunk_ref.read_to_end(&mut read_data);
+        }
+        assert_eq!(data, &read_data[0..255]);
+        assert_eq!(data, &read_data[255..510]);
+        assert_eq!(data, &read_data[510..765]);
     }
 }
