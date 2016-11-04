@@ -1,4 +1,3 @@
-use std;
 use std::fmt;
 use std::mem;
 use std::io::Read;

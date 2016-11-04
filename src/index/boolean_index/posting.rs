@@ -11,7 +11,7 @@ pub type Listing = Vec<Posting>;
 pub fn decode_from_storage(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
     // Get hot listing
     let mut chunk = storage.get_current(id);
-    let mut listing = decode_from_chunk_ref(&mut chunk).unwrap();
+    let listing = decode_from_chunk_ref(&mut chunk).unwrap();
     Some(listing)
 }
 

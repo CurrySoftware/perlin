@@ -1,6 +1,5 @@
 use std::io;
 use std::io::Write;
-use std::sync::Arc;
 use std::fs::OpenOptions;
 use std::path::Path;
 
@@ -141,15 +140,6 @@ impl ChunkedStorage {
         }
     }
 
-    pub fn next_chunk(&mut self, id: u64) -> Result<&mut HotIndexingChunk> {
-        let to_archive = self.hot_chunks[id as usize].archive(self.archive.len() as u32);
-        // TODO: Needs to go
-        let new_id = self.archive.len() as u64;
-        // That's more fun than I thought
-        try!(self.archive.store(new_id, to_archive));
-        Ok(&mut self.hot_chunks[id as usize])
-    }
-
     #[inline]
     pub fn len(&self) -> usize {
         self.hot_chunks.len()
@@ -172,10 +162,6 @@ impl ChunkedStorage {
         }
     }
 
-    #[inline]
-    pub fn get_archived(&self, pos: usize) -> Arc<IndexingChunk> {
-        self.archive.get(pos as u64).unwrap()
-    }
 
     pub fn associated_files() -> &'static [&'static str] {
         ASSOCIATED_FILES
