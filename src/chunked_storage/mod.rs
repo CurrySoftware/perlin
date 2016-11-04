@@ -123,13 +123,6 @@ impl ChunkedStorage {
         })
     }
 
-    fn chunk_ref(&mut self, term_id: u64) -> MutChunkRef {
-        MutChunkRef {
-            chunk: &mut self.hot_chunks[term_id as usize],
-            archive: &mut self.archive,
-        }
-    }
-
     pub fn new_chunk(&mut self, term_id: u64) -> MutChunkRef {
         // The following code-uglyness is due to the fact that in indexing one sort thread can
         // overtake the other. That means: ids are not just comming in an incremental order but can jump
@@ -189,8 +182,6 @@ impl ChunkedStorage {
     }
 }
 
-//TODO: Fix Tests
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -198,118 +189,76 @@ mod tests {
     use utils::persistence::Volatile;
     use storage::RamStorage;
 
-    // #[test]
-    // fn basic() {
-    //     let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
-    //     {
-    //         let chunk = store.new_chunk(0);
-    //         let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
-    //         chunk.append(&listing).unwrap();
-    //         let data = chunk.get_bytes();
-    //         assert_eq!(data.len(), 18);
-    //     }
+    #[test]
+    fn overflowing_chunk_ref() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..255u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.get_current_mut(0);
+            chunk_ref.write_all(&data).unwrap();
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.get_current(0);
+            chunk_ref.read_to_end(&mut read_data).unwrap();
+        }
+        assert_eq!(data, read_data);
+    }
 
-    //     let chunk = store.get_current(0);
-    //     let data = chunk.get_bytes();
-    //     assert_eq!(data.len(), 18);
-    // }
+    #[test]
+    fn basic_chunk_ref() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..20u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.get_current_mut(0);
+            chunk_ref.write_all(&data).unwrap();
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.get_current(0);
+            chunk_ref.read_to_end(&mut read_data).unwrap();
+        }
+        assert_eq!(data, read_data);
+    }
 
-    // #[test]
-    // fn continued() {
-    //     let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
-    //     let listing = vec![(0, vec![0, 10, 20]), (20, vec![24, 25, 289]), (204, vec![209, 2456])];
-    //     let next_listing = vec![(205, vec![0, 10, 20]), (225, vec![24, 25, 289]), (424, vec![209, 2456])];
-    //     {
-    //         let chunk = store.new_chunk(0);
-    //         chunk.append(&listing).unwrap();
-    //         assert_eq!(chunk.get_bytes().len(), 18);
-    //     }
-    //     {
-    //         let new_chunk = store.next_chunk(0).unwrap();
-    //         new_chunk.append(&next_listing).unwrap();
-    //         assert_eq!(new_chunk.get_bytes().len(), 18);
-    //     }
-    //     let chunk = store.get_current(0);
-    //     let old_chunk = store.get_archived((chunk.archived_chunks()[0]) as usize);
-    //     assert_eq!(old_chunk.get_bytes().len(), 18);
-    //     assert_eq!(chunk.get_bytes().len(), 18);
-    // }
+    #[test]
+    fn repeated_writes() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..20u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.get_current_mut(0);
+            chunk_ref.write_all(&data[0..10]).unwrap();
+            chunk_ref.write_all(&data[10..20]).unwrap();
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.get_current(0);
+            chunk_ref.read_to_end(&mut read_data).unwrap();
+        }
+        assert_eq!(data, read_data);
+    }
 
-    // #[test]
-    // fn overflowing_chunk_ref() {
-    //     let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
-    //     store.new_chunk(0);
-    //     let data = (0..255u8).collect::<Vec<_>>();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.write_all(&data);
-    //     }
-    //     {
-    //         let chunk_ref = store.get_current(0);
-    //         let first_chunk = store.get_archived((chunk.archived_chunks()[0]) as usize);
-    //         assert_eq!(first_chunk.get_bytes(), &data[0..SIZE]);
-    //     }
-    //     let mut read_data = Vec::new();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.read_to_end(&mut read_data);
-    //     }
-    //     assert_eq!(data, read_data);
-    // }
-
-    // #[test]
-    // fn basic_chunk_ref() {
-    //     let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
-    //     store.new_chunk(0);
-    //     let data = (0..20u8).collect::<Vec<_>>();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.write_all(&data);
-    //     }
-    //     let mut read_data = Vec::new();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.read_to_end(&mut read_data);
-    //     }
-    //     assert_eq!(data, read_data);
-    // }
-
-    // #[test]
-    // fn repeated_writes() {
-    //     let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
-    //     store.new_chunk(0);
-    //     let data = (0..20u8).collect::<Vec<_>>();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.write_all(&data[0..10]);
-    //         chunk_ref.write_all(&data[10..20]);
-    //     }
-    //     let mut read_data = Vec::new();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.read_to_end(&mut read_data);
-    //     }
-    //     assert_eq!(data, read_data);
-    // }
-
-    // #[test]
-    // fn repeated_writes_overflowing() {
-    //     let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
-    //     store.new_chunk(0);
-    //     let data = (0..255u8).collect::<Vec<_>>();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.write_all(&data);
-    //         chunk_ref.write_all(&data);
-    //         chunk_ref.write_all(&data);
-    //     }
-    //     let mut read_data = Vec::new();
-    //     {
-    //         let mut chunk_ref = store.chunk_ref(0);
-    //         chunk_ref.read_to_end(&mut read_data);
-    //     }
-    //     assert_eq!(data, &read_data[0..255]);
-    //     assert_eq!(data, &read_data[255..510]);
-    //     assert_eq!(data, &read_data[510..765]);
-    // }
+    #[test]
+    fn repeated_writes_overflowing() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..255u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.get_current_mut(0);
+            chunk_ref.write_all(&data).unwrap();
+            chunk_ref.write_all(&data).unwrap();
+            chunk_ref.write_all(&data).unwrap();
+        }
+        let mut read_data = Vec::new();
+        {
+            let mut chunk_ref = store.get_current(0);
+            chunk_ref.read_to_end(&mut read_data).unwrap();
+        }
+        assert_eq!(data, &read_data[0..255]);
+        assert_eq!(data, &read_data[255..510]);
+        assert_eq!(data, &read_data[510..765]);
+    }
 }
