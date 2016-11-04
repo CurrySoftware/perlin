@@ -119,7 +119,7 @@ fn sort_and_group_chunk(sync: Arc<AtomicUsize>,
             // Otherwise add a whole new posting
             grouped_chunk[term_counter - 1].1.push((doc_id, vec![pos]));
         }
-        // Send grouped chunk to merger thread
+        // Send grouped chunk to merger thread. Make sure to send chunks in right order
         // (yes, this is a verb: https://en.wiktionary.org/wiki/grouped#English)
         loop{
             let atm = sync.load(Ordering::SeqCst);
@@ -149,34 +149,27 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
                 storage.new_chunk(term_id)
             };
             let base_doc_id = stor_chunk.get_last_doc_id();
-            let last_doc_id = write_listing(listing, base_doc_id, &mut stor_chunk);
+            let last_doc_id = try!(write_listing(listing, base_doc_id, &mut stor_chunk));
             stor_chunk.set_last_doc_id(last_doc_id);
-            assert!(base_doc_id <= last_doc_id);
         }
     }
     Ok(storage)
 }
 
-
-// TODO: Errorhandling
-fn write_listing<W: Write>(listing: Listing, mut base_doc_id: u64, target: &mut W) -> u64 {
+fn write_listing<W: Write>(listing: Listing, mut base_doc_id: u64, target: &mut W) -> Result<u64> {
     for (doc_id, positions) in listing {
         let delta_doc_id = doc_id - base_doc_id;
-        if doc_id < base_doc_id {
-            println!("{}-{},{:?}", doc_id, base_doc_id, positions);
-        }
-        assert!(doc_id >= base_doc_id);
         base_doc_id = doc_id;
-        VByteEncoded::new(delta_doc_id as usize).write_to(target);
-        VByteEncoded::new(positions.len()).write_to(target);
+        try!(VByteEncoded::new(delta_doc_id as usize).write_to(target));
+        try!(VByteEncoded::new(positions.len()).write_to(target));
         let mut last_position = 0;
         for position in positions {
             let delta_pos = position - last_position;
             last_position = position;
-            VByteEncoded::new(delta_pos as usize).write_to(target);
+            try!(VByteEncoded::new(delta_pos as usize).write_to(target));
         }
     }
-    base_doc_id
+    Ok(base_doc_id)
 }
 
 
