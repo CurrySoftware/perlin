@@ -3,7 +3,7 @@ use std::io::Write;
 use std::fs::OpenOptions;
 use std::path::Path;
 
-use storage::{Storage, Result, ByteEncodable, ByteDecodable};
+use storage::{Storage, StorageError, Result, ByteEncodable, ByteDecodable};
 use chunked_storage::indexing_chunk::HotIndexingChunk;
 pub use chunked_storage::indexing_chunk::IndexingChunk;
 
@@ -35,8 +35,14 @@ impl<'a> io::Write for MutChunkRef<'a> {
         self.chunk.capacity -= bytes_written as u16;
         if self.chunk.capacity == 0 {
             let id = self.archive.len();
-            // TODO: Errorhandling
-            self.archive.store(id as u64, self.chunk.archive(id as u32)).unwrap();
+
+            match self.archive.store(id as u64, self.chunk.archive(id as u32)) {
+                Ok(_) => {},
+                Err(StorageError::IO(error)) => return Err(error),
+                Err(StorageError::ReadError(Some(error))) => return Err(error),
+                Err(StorageError::WriteError(Some(error))) => return Err(error),
+                _ => return Err(io::Error::last_os_error())                        
+            }
         }
         Ok(bytes_written)
     }
