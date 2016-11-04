@@ -108,8 +108,8 @@ impl<R: Read> Iterator for VByteDecoder<R> {
     /// bytestream
     /// May iterate the underlying bytestream an arbitrary number of times
     /// Returns None when the underlying bytream returns None
+    //This can panic... TODO: FIX
     fn next(&mut self) -> Option<Self::Item> {
-
         let mut result: usize = 0;
         loop {
             result *= 128;

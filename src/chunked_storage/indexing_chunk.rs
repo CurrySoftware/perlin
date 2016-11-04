@@ -23,7 +23,7 @@ pub struct IndexingChunk {
 
 impl PartialEq for IndexingChunk {
     fn eq(&self, other: &IndexingChunk) -> bool {
-        self.capacity == other.capacity && self.data.as_ref() == other.data.as_ref()
+        self.capacity == other.capacity && self.get_bytes() == other.get_bytes()
     }
 }
 
@@ -32,7 +32,7 @@ impl Eq for IndexingChunk {}
 impl PartialEq for HotIndexingChunk {
     fn eq(&self, other: &HotIndexingChunk) -> bool {
         self.capacity == other.capacity && self.last_doc_id == other.last_doc_id &&
-        self.archived_chunks == other.archived_chunks && self.data.as_ref() == other.data.as_ref()
+        self.archived_chunks == other.archived_chunks && self.get_bytes() == other.get_bytes()
     }
 }
 
@@ -44,14 +44,14 @@ impl fmt::Debug for IndexingChunk {
     }
 }
 
-// TODO: Complete!
 impl fmt::Debug for HotIndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f,
-                    "HotIndexingChunk has {} predecessors: {:?}\n And {} spare bytes!\n",
+                    "HotIndexingChunk has {} predecessors: {:?}\n And {} spare bytes! Its last document id is {}\n",
                     self.archived_chunks().len(),
                     self.archived_chunks(),
-                    self.capacity));
+                    self.capacity,
+                    self.last_doc_id));
         try!(write!(f, "Data: {:?}", self.get_bytes()));
         Ok(())
     }
@@ -185,4 +185,98 @@ impl ByteEncodable for HotIndexingChunk {
         result
     }
 }
-//TODO: Write meaningful tests
+
+#[cfg(test)]
+mod tests{
+
+    mod hot_indexing_chunk {
+        use super::super::*;
+        use storage::{ByteDecodable, ByteEncodable};
+        use chunked_storage::SIZE;
+        
+        #[test]
+        fn encoding_basic() {
+            let chunk = HotIndexingChunk::new();
+            let bytes = chunk.encode();
+            assert_eq!(chunk, HotIndexingChunk::decode(&mut (&bytes as &[u8])).unwrap());
+            assert_eq!(HotIndexingChunk::new(), HotIndexingChunk::decode(&mut (&bytes as &[u8])).unwrap());            
+        }
+
+        #[test]
+        fn encoding_with_data() {
+            let mut chunk = HotIndexingChunk::new();
+            chunk.data = [1; SIZE];
+            chunk.capacity = 0;
+            let bytes = chunk.encode();
+            assert_eq!(chunk, HotIndexingChunk::decode(&mut (&bytes as &[u8])).unwrap());
+            assert_eq!(HotIndexingChunk::decode(&mut (&bytes as &[u8])).unwrap().get_bytes(), &[1u8; SIZE] as &[u8]);
+        }
+
+        #[test]
+        fn decoding_zeroed_data() {
+            let bytes = vec![0u8; 100];
+            assert!(HotIndexingChunk::decode(&mut (&bytes as &[u8])).is_err());
+        }
+
+        #[test]
+        fn decoding_from_corrup_data() {
+            let chunk = HotIndexingChunk::new();
+            let bytes = chunk.encode();            
+//TODO: As soon as VByte            assert!(HotIndexingChunk::decode(&mut (&bytes[1..] as &[u8])).is_err());
+            assert!(HotIndexingChunk::decode(&mut (&bytes[..100] as &[u8])).is_err());
+            assert!(HotIndexingChunk::decode(&mut (&bytes.iter().map(|i| i%2 * 128).collect::<Vec<_>>() as &[u8])).is_err());
+        }
+
+        #[test]
+        fn archive() {
+            let mut chunk = HotIndexingChunk::new();
+            chunk.data = [1; SIZE];
+            chunk.capacity = 0;
+            let archived = chunk.archive(0);
+            assert_eq!(chunk.capacity, SIZE as u16);
+            assert_eq!(chunk.get_bytes(), &[0u8; 0] as &[u8]);
+            assert_eq!(archived.get_bytes(), &[1u8; SIZE] as &[u8]);
+        }
+
+        #[test]
+        fn last_doc_id() {
+            let mut chunk = HotIndexingChunk::new();
+            assert_eq!(chunk.get_last_doc_id(), 0);
+            chunk.set_last_doc_id(100);
+            assert_eq!(chunk.get_last_doc_id(), 100);
+        }
+    }
+
+    mod indexing_chunk {
+        use super::super::*;        
+        use storage::{ByteDecodable, ByteEncodable};
+        use chunked_storage::SIZE;
+        
+        #[test]
+        fn encoding_basic() {
+            let chunk = IndexingChunk{
+                capacity: SIZE as u16,
+                data: [0; SIZE]
+            };
+            let bytes = chunk.encode();
+            assert_eq!(chunk.get_bytes(), &[0u8; 0] as &[u8]);
+            assert_eq!(chunk, IndexingChunk::decode(&mut (&bytes as &[u8])).unwrap());
+            assert_eq!(IndexingChunk{ capacity: SIZE as u16, data: [0; SIZE] }, IndexingChunk::decode(&mut (&bytes as &[u8])).unwrap());
+            assert_eq!(IndexingChunk::decode(&mut (&bytes as &[u8])).unwrap().get_bytes(), &[0u8; 0] as &[u8]);
+        }
+
+        #[test]
+        fn encoding_with_data() {
+            let chunk = IndexingChunk{
+                capacity: 0,
+                data: [1; SIZE]
+            };
+            let bytes = chunk.encode();
+            assert_eq!(chunk, IndexingChunk::decode(&mut (&bytes as &[u8])).unwrap());
+            assert_eq!(IndexingChunk{ capacity: 0, data: [1; SIZE] }, IndexingChunk::decode(&mut (&bytes as &[u8])).unwrap());
+              assert_eq!(IndexingChunk::decode(&mut (&bytes as &[u8])).unwrap().get_bytes(), &[1u8; SIZE] as &[u8]);
+        }
+    }
+    
+
+}
