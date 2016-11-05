@@ -192,11 +192,18 @@ impl<TTerm> BooleanIndex<TTerm>
         // Open file
         let vocab_file = try!(OpenOptions::new().read(true).open(path.join(VOCAB_FILENAME)));
         // Create a decoder from that vector
-        let mut decoder = VByteDecoder::new(vocab_file.bytes());
+        let mut decoder = VByteDecoder::new(vocab_file);
         let mut result = HashMap::new();
+        // Get the id
         while let Some(id) = decoder.next() {
+            // Get the length of the term in bytes
+            println!("ID {}", id);
             if let Some(term_len) = decoder.next() {
-                let term_bytes: Vec<u8> = decoder.underlying_iterator().take(term_len).map(|b| b.unwrap()).collect();
+                println!("Term_Len {}", term_len);
+                let mut term_bytes = vec![0; term_len];
+                try!(decoder.read_exact(&mut term_bytes));
+                println!("Term Bytes {:?}", term_bytes);
+                //Read the bytes and decode them
                 match TTerm::decode(&mut term_bytes.as_slice()) {
                     Ok(term) => result.insert(term, id as u64),
                     Err(e) => return Err(Error::CorruptedIndexFile(Some(e))),
@@ -225,7 +232,7 @@ impl<TTerm> BooleanIndex<TTerm>
 
     fn load_statistics(path: &Path) -> Result<usize> {
         let statistics_file = try!(OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)));
-        if let Some(doc_count) = VByteDecoder::new(statistics_file.bytes()).next() {
+        if let Some(doc_count) = VByteDecoder::new(statistics_file).next() {
             Ok(doc_count)
         } else {
             Err(Error::CorruptedIndexFile(None))

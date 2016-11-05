@@ -75,7 +75,7 @@ impl ByteEncodable for usize {
 
 impl ByteDecodable for usize {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read.bytes());
+        let mut decoder = VByteDecoder::new(read);
         if let Some(res) = decoder.next() {
             Ok(res)
         } else {
@@ -92,7 +92,7 @@ impl ByteEncodable for u64 {
 
 impl ByteDecodable for u64 {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read.bytes());
+        let mut decoder = VByteDecoder::new(read);
         if let Some(res) = decoder.next() {
             Ok(res as u64)
         } else {
@@ -109,7 +109,7 @@ impl ByteEncodable for u32 {
 
 impl ByteDecodable for u32 {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read.bytes());
+        let mut decoder = VByteDecoder::new(read);
         if let Some(res) = decoder.next() {
             Ok(res as u32)
         } else {
@@ -126,7 +126,7 @@ impl ByteEncodable for u16 {
 
 impl ByteDecodable for u16 {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read.bytes());
+        let mut decoder = VByteDecoder::new(read);
         if let Some(res) = decoder.next() {
             Ok(res as u16)
         } else {

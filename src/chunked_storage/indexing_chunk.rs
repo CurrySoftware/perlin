@@ -119,16 +119,16 @@ impl HotIndexingChunk {
 
 impl ByteDecodable for IndexingChunk {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
+        let mut decoder = VByteDecoder::new(read);
         let mut result: IndexingChunk;
         {
-            let mut decoder = VByteDecoder::new(read.bytes());
             let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             result = IndexingChunk {
                 capacity: capacity as u16,
                 data: unsafe { mem::uninitialized() },
             };
         }
-        try!(read.read_exact(&mut result.data));
+        try!(decoder.read_exact(&mut result.data));
         Ok(result)
     }
 }
@@ -147,9 +147,9 @@ impl ByteEncodable for IndexingChunk {
 
 impl ByteDecodable for HotIndexingChunk {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
+        let mut decoder = VByteDecoder::new(read);
         let mut result: HotIndexingChunk;
         {
-            let mut decoder = VByteDecoder::new(read.bytes());
             let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let last_doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let archived_chunks_len = try!(decoder.next().ok_or(DecodeError::MalformedInput));
@@ -164,7 +164,7 @@ impl ByteDecodable for HotIndexingChunk {
                 data: unsafe { mem::uninitialized() },
             };
         }
-        try!(read.read_exact(&mut result.data));
+        try!(decoder.read_exact(&mut result.data));
         Ok(result)
     }
 }

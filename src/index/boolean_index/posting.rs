@@ -17,7 +17,7 @@ pub fn decode_from_storage(storage: &ChunkedStorage, id: u64) -> Option<Listing>
 
 /// Returns the decoded Listing or the (`doc_id`, `position`) pair where an error occured
 fn decode_from_chunk_ref<R: Read>(read: &mut R) -> Result<Listing, (usize, usize)> {
-    let mut decoder = VByteDecoder::new(read.bytes());
+    let mut decoder = VByteDecoder::new(read);
     let mut postings = Vec::new();
     let mut base_doc_id = 0;
     while let Some(doc_id) = decoder.next() {
@@ -53,7 +53,7 @@ impl ByteEncodable for Listing {
 
 impl ByteDecodable for Vec<Posting> {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read.bytes());
+        let mut decoder = VByteDecoder::new(read);
         if let Some(postings_len) = decoder.next() {
             let mut postings = Vec::with_capacity(postings_len);
             for _ in 0..postings_len {

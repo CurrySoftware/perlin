@@ -57,7 +57,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
         let mut entries = BTreeMap::new();
         // 1. Open file and pass it to the decoder
         let entries_file = try!(OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME)));
-        let mut decoder = VByteDecoder::new(entries_file.bytes());
+        let mut decoder = VByteDecoder::new(entries_file);
         // 2. Decode entries and write them to BTreeMap
         let mut current_id: u64 = 0;
         let mut current_offset: u64 = 0;
