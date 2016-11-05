@@ -15,7 +15,7 @@ const HOTCHUNKS_FILENAME: &'static str = "hot_chunks.bin";
 const ASSOCIATED_FILES: &'static [&'static str; 1] = &[HOTCHUNKS_FILENAME];
 
 
-pub struct MutChunkRef<'a> { 
+pub struct MutChunkRef<'a> {
     chunk: &'a mut HotIndexingChunk,
     archive: &'a mut Box<Storage<IndexingChunk>>,
 }
@@ -37,11 +37,11 @@ impl<'a> io::Write for MutChunkRef<'a> {
             let id = self.archive.len();
 
             match self.archive.store(id as u64, self.chunk.archive(id as u32)) {
-                Ok(_) => {},
-                Err(StorageError::IO(error)) => return Err(error),
-                Err(StorageError::ReadError(Some(error))) => return Err(error),
+                Ok(_) => {}
+                Err(StorageError::IO(error)) |
+                Err(StorageError::ReadError(Some(error))) |
                 Err(StorageError::WriteError(Some(error))) => return Err(error),
-                _ => return Err(io::Error::last_os_error())                        
+                _ => return Err(io::Error::last_os_error()),
             }
         }
         Ok(bytes_written)
@@ -156,13 +156,13 @@ impl ChunkedStorage {
         ChunkRef {
             read_ptr: 0,
             chunk: &self.hot_chunks[id as usize],
-            archive: &self.archive               
+            archive: &self.archive,
         }
     }
 
     #[inline]
     pub fn get_current_mut(&mut self, id: u64) -> MutChunkRef {
-        MutChunkRef {           
+        MutChunkRef {
             chunk: &mut self.hot_chunks[id as usize],
             archive: &mut self.archive,
         }

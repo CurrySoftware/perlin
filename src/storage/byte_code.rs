@@ -36,6 +36,8 @@ impl From<io::Error> for DecodeError {
 /// of bytes
 pub trait ByteEncodable {
     /// Encodes the object as a vector of bytes
+    //TODO:
+    //Most probably wrong and should use Write instead of returning a vector of bytes.
     fn encode(&self) -> Vec<u8>;
 }
 
@@ -50,8 +52,6 @@ pub trait ByteDecodable
 
 
 impl ByteEncodable for String {
-    //TODO:
-    //Most probably wrong and should use Write instead of returning a vector of bytes.
     fn encode(&self) -> Vec<u8> {
         let mut result = Vec::with_capacity(self.len());
         result.extend_from_slice(self.as_bytes());
