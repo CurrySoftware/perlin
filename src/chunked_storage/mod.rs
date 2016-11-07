@@ -253,4 +253,22 @@ mod tests {
         assert_eq!(data, &read_data[255..510]);
         assert_eq!(data, &read_data[510..765]);
     }
+
+    #[test]
+    fn multiple_chunks() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        for i in 0..100u8 {
+            let data = (0..4096).map(|_| i).collect::<Vec<_>>();
+            let mut chunk_ref = store.new_chunk(i as u64);
+            chunk_ref.write_all(&data).unwrap();
+        }
+        for i in 0..100u8 {
+            let data = (0..4096).map(|_| i).collect::<Vec<_>>();
+            let mut chunk_ref = store.get_current(i as u64);
+            let mut read_data = Vec::new();
+            chunk_ref.read_to_end(&mut read_data).unwrap();
+            assert_eq!(data, read_data);
+        }
+    }
+            
 }
