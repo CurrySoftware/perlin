@@ -57,8 +57,9 @@ impl<'a> io::Read for ChunkRef<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut bytes_read = 0;
         loop {
-            let chunk_id = self.read_ptr / SIZE;
-            if chunk_id < self.chunk.archived_chunks().len() {
+            let chunk_index = self.read_ptr / SIZE;            
+            if chunk_index < self.chunk.archived_chunks().len() {
+                let chunk_id = self.chunk.archived_chunks()[chunk_index];
                 let read = (&self.archive.get(chunk_id as u64).unwrap().get_bytes()[self.read_ptr % SIZE..])
                     .read(&mut buf[bytes_read..])
                     .unwrap();
@@ -270,5 +271,42 @@ mod tests {
             assert_eq!(data, read_data);
         }
     }
-            
+
+    #[test]
+    fn repeated_reads() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..20u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.get_current_mut(0);
+            chunk_ref.write_all(&data).unwrap();
+        }
+        let mut read_data = [0u8; 10];
+        {
+            let mut chunk_ref = store.get_current(0);
+            chunk_ref.read(&mut read_data).unwrap();
+            assert_eq!(read_data, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+            chunk_ref.read(&mut read_data).unwrap();
+            assert_eq!(read_data, [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+        }
+    }
+
+        #[test]
+    fn repeated_reads_overflowing() {
+        let mut store = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        store.new_chunk(0);
+        let data = (0..1000u32).map(|i| (i % 255) as u8).collect::<Vec<_>>();
+        {
+            let mut chunk_ref = store.get_current_mut(0);
+            chunk_ref.write_all(&data).unwrap();
+        }
+        let mut read_data = [0u8; 10];
+        {
+            let mut chunk_ref = store.get_current(0);
+            for i in 0..100 {
+                chunk_ref.read(&mut read_data).unwrap();
+                assert_eq!(read_data.to_vec(), (i*10..i*10+10).map(|i| (i % 255) as u8).collect::<Vec<_>>());
+            }
+        }
+    }
 }

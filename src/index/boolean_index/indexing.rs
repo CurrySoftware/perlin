@@ -121,13 +121,13 @@ fn sort_and_group_chunk(sync: Arc<AtomicUsize>,
         }
         // Send grouped chunk to merger thread. Make sure to send chunks in right order
         // (yes, this is a verb: https://en.wiktionary.org/wiki/grouped#English)
-        loop{
+        loop {
             let atm = sync.load(Ordering::SeqCst);
             if atm == id {
                 grouped_chunks.send(grouped_chunk).unwrap();
                 sync.fetch_add(1, Ordering::SeqCst);
                 break;
-            } 
+            }
         }
     }
 }
@@ -182,6 +182,7 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     use utils::persistence::Volatile;
+    use storage::compression::VByteDecoder;
     use index::boolean_index::posting::decode_from_storage;
     use storage::RamStorage;
 
@@ -243,7 +244,7 @@ mod tests {
                    (1..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
     }
 
-        #[test]
+    #[test]
     fn multi_sorting_asymetric() {
         let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
         let sync = Arc::new(AtomicUsize::new(0));
@@ -267,7 +268,7 @@ mod tests {
                    (1..10).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
     }
 
-        #[test]
+    #[test]
     fn multi_sorting_messedup() {
         let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
         let sync = Arc::new(AtomicUsize::new(0));
@@ -276,7 +277,7 @@ mod tests {
             let local_sync = sync.clone();
             let loc_tx = sorted_tx.clone();
             thread::spawn(|| super::sort_and_group_chunk(local_sync, trp_rx, loc_tx));
-            trp_tx.send((1-i, (i as u64..100).map(|k| (k, k, k as u32)).collect::<Vec<_>>())).unwrap();
+            trp_tx.send((1 - i, (i as u64..100).map(|k| (k, k, k as u32)).collect::<Vec<_>>())).unwrap();
         }
 
         let sorted = sorted_rx.recv().unwrap();
@@ -339,6 +340,61 @@ mod tests {
         assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
                    (0..1).map(|k| (k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>());
     }
+
+
+    #[test]
+    fn write_listing_basic() {
+        let listing = vec![(0, vec![0, 1, 2]), (1, vec![1, 2, 3])];
+        let mut bytes = Vec::new();
+        super::write_listing(listing, 0, &mut bytes).unwrap();
+        let data = VByteDecoder::new(bytes.as_slice()).collect::<Vec<_>>();
+        assert_eq!(data, vec![0, 3, 0, 1, 1, 1, 3, 1, 1, 1]);
+    }
+
+    #[test]
+    fn write_listing_real_data() {
+        let listing = vec![(0, vec![16]),
+                           (1, vec![12, 25]),
+                           (2, vec![14, 21, 44]),
+                           (3, vec![18]),
+                           (4, vec![28, 38]),
+                           (6, vec![11]),
+                           (7, vec![19, 45]),
+                           (8, vec![23]),
+                           (9, vec![32]),
+                           (10, vec![2, 4]),
+                           (11, vec![18, 27]),
+                           (12, vec![19]),
+                           (13, vec![12, 29]),
+                           (14, vec![33]),
+                           (16, vec![3]),
+                           (20, vec![32]),
+                           (22, vec![2, 22, 29]),
+                           (23, vec![32]),
+                           (24, vec![4, 25]),
+                           (25, vec![11]),
+                           (27, vec![42]),
+                           (28, vec![8, 14, 46]),
+                           (29, vec![48]),
+                           (30, vec![23]),
+                           (31, vec![36]),
+                           (33, vec![1]),
+                           (36, vec![9]),
+                           (37, vec![30]),
+                           (39, vec![21]),
+                           (43, vec![7, 9, 18]),
+                           (44, vec![34]),
+                           (45, vec![23]),
+                           (46, vec![17, 35]),
+                           (47, vec![33]),
+                           (48, vec![19]),
+                           (49, vec![1])];
+        let mut bytes = Vec::new();
+        super::write_listing(listing, 0, &mut bytes).unwrap();
+        let data = VByteDecoder::new(bytes.as_slice()).collect::<Vec<_>>();
+        assert_eq!(data[..12].to_vec(), vec![0, 1, 16, 1, 2, 12, 13, 1, 3, 14, 7, 23]);
+    }
+
 
 
 }
