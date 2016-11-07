@@ -27,13 +27,20 @@
 *** DONE Host Documentation
     CLOSED: [2016-09-21 Wed 18:09]
 
-** [2/6] post 0.1
-*** TODO improve entries.bin compression
-*** TODO improve vocab.bin compression
-*** TODO implement compressed presistent ram storage
-*** TODO allow non persistent use of fsstorage
+** [2/2] post 0.1
 *** DONE Custom Errors for utils::byte_code
-    CLOSED: [2016-10-13 Thu 08:58]
+    CLOSED: [2016-11-07 Mon 12:05]
 *** DONE improve indexing
     CLOSED: [2016-10-13 Thu 08:58]
 
+
+** [0/3] pre 0.2
+*** TODO Improve Query performance by lazily decoding IndexingChunks
+*** TODO Implement mutable indices. Adding and Removing Documents should be possible
+*** TODO Rewrite IndexBuilder to be more ergonomic
+
+** [0/4] Less Important
+*** TODO allow non persistent use of fsstorage
+*** TODO implement compressed presistent ram storage
+*** TODO improve vocab.bin compression
+*** TODO improve entries.bin compression
