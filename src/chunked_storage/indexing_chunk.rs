@@ -222,7 +222,7 @@ mod tests{
         fn decoding_from_corrup_data() {
             let chunk = HotIndexingChunk::new();
             let bytes = chunk.encode();            
-            assert!(HotIndexingChunk::decode(&mut (&bytes[1..] as &[u8])).is_err());
+            assert!(HotIndexingChunk::decode(&mut (&bytes[5..] as &[u8])).is_err());
             assert!(HotIndexingChunk::decode(&mut (&bytes[..100] as &[u8])).is_err());
             assert!(HotIndexingChunk::decode(&mut (&bytes.iter().map(|i| i%2 * 128).collect::<Vec<_>>() as &[u8])).is_err());
         }

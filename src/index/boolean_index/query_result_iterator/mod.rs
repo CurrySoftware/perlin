@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use utils::owning_iterator::{OwningIterator, ArcIter};
+use utils::owning_iterator::{OwningIterator, SeekingIterator, ArcIter};
 
 pub mod nary_query_iterator;
 
@@ -58,9 +58,27 @@ impl<'a> OwningIterator<'a> for QueryResultIterator {
     fn len(&self) -> usize {
         self.estimate_length()
     }
+}
 
-    fn is_empty(&self) -> bool {
-        self.len() == 0
+impl<'a> SeekingIterator<'a> for QueryResultIterator {
+    type Item = &'a Posting;
+
+    fn next_seek(&'a self, target: Self::Item) -> Option<Self::Item> {
+        match *self {
+            QueryResultIterator::Empty => None,
+            QueryResultIterator::Atom(_, ref iter) => iter.next_seek(target),
+            QueryResultIterator::NAry(ref iter) => iter.next_seek(target),
+            QueryResultIterator::Filter(ref iter) => iter.next_seek(target),
+        }
+    }
+
+    fn peek_seek(&'a self, target: Self::Item) -> Option<Self::Item> {
+        match *self {
+            QueryResultIterator::Empty => None,
+            QueryResultIterator::Atom(_, ref iter) => iter.peek_seek(target),
+            QueryResultIterator::NAry(ref iter) => iter.peek_seek(target),
+            QueryResultIterator::Filter(ref iter) => iter.peek_seek(target),
+        }
     }
 }
 
@@ -125,9 +143,26 @@ impl<'a> OwningIterator<'a> for FilterIterator {
     fn len(&self) -> usize {
         self.estimate_length()
     }
+}
 
-    fn is_empty(&self) -> bool {
-        self.len() == 0
+impl<'a> SeekingIterator<'a> for FilterIterator {
+    type Item = &'a Posting;
+
+    fn next_seek(&'a self, target: &Posting) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_some() {
+            *peeked_value = None;
+        }
+        self.sand.peek_seek(target);
+        self.next()
+    }
+
+    fn peek_seek(&'a self, target: &Posting) -> Option<&'a Posting> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_none() {
+            *peeked_value = Some(self.next_seek(target).map(|p| p as *const Posting));
+        }
+        unsafe { peeked_value.unwrap().map(|p| &*p) }        
     }
 }
 
@@ -152,29 +187,23 @@ impl FilterIterator {
         }
     }
 
-
     fn next_not(&self) -> Option<&Posting> {
         'sand: loop {
+            // This slight inconvinience is there because of the conflicting implementations of
+            // QueryResultIterator::next() (one for Iterator and one for OwningIterator)
+            // TODO: Can we fix this?
             if let Some(sand) = OwningIterator::next(self.sand.as_ref()) {
                 'sieve: loop {
-                    if let Some(sieve) = self.sieve.peek() {
-                        if sand.0 < sieve.0 {
-                            return Some(sand);
-                        } else if sand.0 > sieve.0 {
-                            OwningIterator::next(self.sieve.as_ref());
-                            continue 'sieve;
-                        } else {
+                    if let Some(sieve) = self.sieve.peek_seek(sand) {
+                        if sieve.0 == sand.0 {
                             continue 'sand;
                         }
-                    } else {
-                        return Some(sand);
                     }
+                    return Some(sand);
                 }
-            } else {
-                return None;
             }
+            return None;
         }
-
     }
 }
 

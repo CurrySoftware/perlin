@@ -5,9 +5,6 @@ use storage::{Storage, StorageError};
 use chunked_storage::indexing_chunk::{IndexingChunk, HotIndexingChunk};
 use chunked_storage::SIZE;
 
-
-
-
 pub struct MutChunkRef<'a> {
     chunk: &'a mut HotIndexingChunk,
     archive: &'a mut Box<Storage<IndexingChunk>>,
@@ -18,8 +15,6 @@ pub struct ChunkRef<'a> {
     chunk: &'a HotIndexingChunk,
     archive: &'a Box<Storage<IndexingChunk>>,
 }
-
-
 
 // The idea here is the abstract the inner workings of
 // chunked storage and indexing chunk from the index

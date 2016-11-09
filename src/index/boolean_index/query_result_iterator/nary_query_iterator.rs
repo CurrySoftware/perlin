@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use utils::owning_iterator::OwningIterator;
+use utils::owning_iterator::{SeekingIterator, OwningIterator};
 
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::Posting;
@@ -63,6 +63,30 @@ impl<'a> OwningIterator<'a> for NAryQueryIterator {
 
     fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+impl<'a> SeekingIterator<'a> for NAryQueryIterator{
+    type Item = &'a Posting;
+
+    fn next_seek(&'a self, target: &Posting) -> Option<Self::Item> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_some() {
+            *peeked_value = None;
+        }
+        //Advance operands
+        for op in self.operands.iter() {
+            op.peek_seek(target);
+        }
+        self.next()
+    }
+
+    fn peek_seek(&'a self, target: &Posting) -> Option<Self::Item> {
+        let mut peeked_value = self.peeked_value.borrow_mut();
+        if peeked_value.is_none() {
+            *peeked_value = Some(self.next_seek(target).map(|p| p as *const Posting));
+        }
+        unsafe { peeked_value.unwrap().map(|p| &*p) }        
     }
 }
 
@@ -225,7 +249,7 @@ impl NAryQueryIterator {
                         last_iter = i;
                         continue 'possible_documents;
                     } else {
-                        // If the value is equal, we are content. Proceed with the next iterator
+                        // If the value is equal, we are content. Proceed with the next term
                         break 'term_documents;
                     }
 
