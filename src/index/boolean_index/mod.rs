@@ -327,7 +327,9 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
             QueryResultIterator::Atom(relative_position,
-                                      ArcIter::new(Arc::new(decode_from_storage(&self.chunked_postings, *result)
+                                      ArcIter::new(
+                                          Arc::new(
+                                              decode_from_storage(&self.chunked_postings, *result)
                                           .unwrap())))
         } else {
             QueryResultIterator::Empty
