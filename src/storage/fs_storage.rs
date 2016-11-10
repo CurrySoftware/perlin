@@ -161,7 +161,8 @@ mod tests {
     use test_utils::create_test_dir;
     use utils::persistence::Persistent;
     use storage::{Storage, StorageError};
-
+    
+    
     #[test]
     fn basic() {
         let item1: u32 = 15;
@@ -178,12 +179,12 @@ mod tests {
 
     #[test]
     fn not_found() {
-        let posting1 = vec![(10, vec![0, 1, 2, 3, 4]), (1, vec![15])];
-        let posting2 = vec![(0, vec![0, 1, 4]), (1, vec![5, 15566, 3423565]), (5, vec![0, 24, 56])];
+        let item1 = 15u32;
+        let item2 = 32u32;
         let path = &create_test_dir("fs_storage_not_found");
         let mut prov = FsStorage::create(path).unwrap();
-        assert!(prov.store(0, posting1.clone()).is_ok());
-        assert!(prov.store(1, posting2.clone()).is_ok());
+        assert!(prov.store(0, item1.clone()).is_ok());
+        assert!(prov.store(1, item2.clone()).is_ok());
         assert!(if let StorageError::KeyNotFound = prov.get(2).err().unwrap() {
             true
         } else {

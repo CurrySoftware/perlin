@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use storage::compression::VByteEncoded;
 
 use index::boolean_index::{Result, Error, IndexingError};
-use index::boolean_index::posting::Listing;
+use index::boolean_index::posting::{Posting, Listing};
 use chunked_storage::{ChunkedStorage, IndexingChunk};
 use storage::Storage;
 
@@ -102,7 +102,7 @@ fn sort_and_group_chunk(sync: Arc<AtomicUsize>,
             if last_tid < term_id || i == 0 {
                 term_counter += 1;
                 // Term_id has to be added
-                grouped_chunk.push((term_id, vec![(doc_id, vec![pos])]));
+                grouped_chunk.push((term_id, vec![Posting::new(doc_id, vec![pos])]));
                 last_tid = term_id;
                 continue;
             }
@@ -110,14 +110,15 @@ fn sort_and_group_chunk(sync: Arc<AtomicUsize>,
             {
                 let mut posting = grouped_chunk[term_counter - 1].1.last_mut().unwrap();
                 // Check if last doc_id equals this doc_id
-                if posting.0 == doc_id {
+                // TODO: the "posting.doc_id().0" is ugly. Fix it
+                if *posting.doc_id() == doc_id {
                     // If so only push the new position
                     posting.1.push(pos);
                     continue;
                 }
             }
             // Otherwise add a whole new posting
-            grouped_chunk[term_counter - 1].1.push((doc_id, vec![pos]));
+            grouped_chunk[term_counter - 1].1.push(Posting::new(doc_id, vec![pos]));
         }
         // Send grouped chunk to merger thread. Make sure to send chunks in right order
         // (yes, this is a verb: https://en.wiktionary.org/wiki/grouped#English)
@@ -157,7 +158,7 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
 }
 
 fn write_listing<W: Write>(listing: Listing, mut base_doc_id: u64, target: &mut W) -> Result<u64> {
-    for (doc_id, positions) in listing {
+    for Posting(doc_id, positions) in listing {
         let delta_doc_id = doc_id - base_doc_id;
         base_doc_id = doc_id;
         try!(VByteEncoded::new(delta_doc_id as usize).write_to(target));
@@ -183,7 +184,7 @@ mod tests {
 
     use utils::persistence::Volatile;
     use storage::compression::VByteDecoder;
-    use index::boolean_index::posting::decode_from_storage;
+    use index::boolean_index::posting::{Posting, decode_from_storage};
     use storage::RamStorage;
 
     #[test]
@@ -198,7 +199,8 @@ mod tests {
         // Document 1: "0"
         trp_tx.send((0, vec![(0, 0, 1), (0, 0, 2), (1, 0, 3), (0, 1, 0)])).unwrap();
         assert_eq!(sorted_rx.recv().unwrap(),
-                   vec![(0, vec![(0, vec![1, 2]), (1, vec![0])]), (1, vec![(0, vec![3])])]);
+                   vec![(0, vec![Posting::new(0, vec![1, 2]), Posting::new(1, vec![0])]),
+                        (1, vec![Posting::new(0, vec![3])])]);
     }
 
     #[test]
@@ -211,17 +213,17 @@ mod tests {
         trp_tx.send((0, (0..100).map(|i| (i, i, i as u32)).collect::<Vec<_>>())).unwrap();
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (0..100).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
 
         trp_tx.send((1, (0..100).map(|i| (i, i, i as u32)).collect::<Vec<_>>())).unwrap();
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (0..100).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
 
         trp_tx.send((2, (200..300).map(|i| (i, i, i as u32)).collect::<Vec<_>>())).unwrap();
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (200..300).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (200..300).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
     }
 
     #[test]
@@ -238,10 +240,10 @@ mod tests {
 
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (0..100).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (1..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (1..100).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
     }
 
     #[test]
@@ -262,10 +264,10 @@ mod tests {
 
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (0..10000).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (0..10000).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (1..10).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (1..10).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
     }
 
     #[test]
@@ -282,10 +284,10 @@ mod tests {
 
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (1..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (1..100).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
         let sorted = sorted_rx.recv().unwrap();
         assert_eq!(sorted,
-                   (0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>());
+                   (0..100).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>());
     }
 
 
@@ -294,15 +296,15 @@ mod tests {
         let (sorted_tx, sorted_rx) = mpsc::sync_channel(64);
         let result = thread::spawn(|| super::invert_index(sorted_rx, RamStorage::new()));
 
-        sorted_tx.send((0..100).map(|i| (i, vec![(i, vec![i as u32])])).collect::<Vec<_>>()).unwrap();
+        sorted_tx.send((0..100).map(|i| (i, vec![Posting::new(i, vec![i as u32])])).collect::<Vec<_>>()).unwrap();
         drop(sorted_tx);
 
         let chunked_storage = result.join().unwrap().unwrap();
         assert_eq!(chunked_storage.len(), 100);
         assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
-                   vec![(0, vec![0u32])]);
+                   vec![Posting::new(0, vec![0u32])]);
         assert_eq!(decode_from_storage(&chunked_storage, 99).unwrap(),
-                   vec![(99, vec![99u32])]);
+                   vec![Posting::new(99, vec![99u32])]);
     }
 
     #[test]
@@ -311,7 +313,7 @@ mod tests {
         let result = thread::spawn(|| super::invert_index(sorted_rx, RamStorage::new()));
 
         sorted_tx.send((0..10)
-                .map(|i| (i, (i..i + 100).map(|k| (k, (0..10).collect::<Vec<_>>())).collect::<Vec<_>>()))
+                .map(|i| (i, (i..i + 100).map(|k| Posting::new(k, (0..10).collect::<Vec<_>>())).collect::<Vec<_>>()))
                 .collect::<Vec<_>>())
             .unwrap();
         drop(sorted_tx);
@@ -319,7 +321,7 @@ mod tests {
         let chunked_storage = result.join().unwrap().unwrap();
         assert_eq!(chunked_storage.len(), 10);
         assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
-                   (0..100).map(|k| (k, (0..10).collect::<Vec<_>>())).collect::<Vec<_>>());
+                   (0..100).map(|k| Posting::new(k, (0..10).collect::<Vec<_>>())).collect::<Vec<_>>());
 
     }
 
@@ -329,7 +331,7 @@ mod tests {
         let result = thread::spawn(|| super::invert_index(sorted_rx, RamStorage::new()));
 
         sorted_tx.send((0..1)
-                .map(|i| (i, (i..i + 1).map(|k| (k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>()))
+                .map(|i| (i, (i..i + 1).map(|k| Posting::new(k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>()))
                 .collect::<Vec<_>>())
             .unwrap();
         drop(sorted_tx);
@@ -338,13 +340,13 @@ mod tests {
         let chunked_storage = result.join().unwrap().unwrap();
         assert_eq!(chunked_storage.len(), 1);
         assert_eq!(decode_from_storage(&chunked_storage, 0).unwrap(),
-                   (0..1).map(|k| (k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>());
+                   (0..1).map(|k| Posting::new(k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>());
     }
 
 
     #[test]
     fn write_listing_basic() {
-        let listing = vec![(0, vec![0, 1, 2]), (1, vec![1, 2, 3])];
+        let listing = vec![Posting::new(0, vec![0, 1, 2]), Posting::new(1, vec![1, 2, 3])];
         let mut bytes = Vec::new();
         super::write_listing(listing, 0, &mut bytes).unwrap();
         let data = VByteDecoder::new(bytes.as_slice()).collect::<Vec<_>>();
@@ -353,46 +355,47 @@ mod tests {
 
     #[test]
     fn write_listing_real_data() {
-        let listing = vec![(0, vec![16]),
-                           (1, vec![12, 25]),
-                           (2, vec![14, 21, 44]),
-                           (3, vec![18]),
-                           (4, vec![28, 38]),
-                           (6, vec![11]),
-                           (7, vec![19, 45]),
-                           (8, vec![23]),
-                           (9, vec![32]),
-                           (10, vec![2, 4]),
-                           (11, vec![18, 27]),
-                           (12, vec![19]),
-                           (13, vec![12, 29]),
-                           (14, vec![33]),
-                           (16, vec![3]),
-                           (20, vec![32]),
-                           (22, vec![2, 22, 29]),
-                           (23, vec![32]),
-                           (24, vec![4, 25]),
-                           (25, vec![11]),
-                           (27, vec![42]),
-                           (28, vec![8, 14, 46]),
-                           (29, vec![48]),
-                           (30, vec![23]),
-                           (31, vec![36]),
-                           (33, vec![1]),
-                           (36, vec![9]),
-                           (37, vec![30]),
-                           (39, vec![21]),
-                           (43, vec![7, 9, 18]),
-                           (44, vec![34]),
-                           (45, vec![23]),
-                           (46, vec![17, 35]),
-                           (47, vec![33]),
-                           (48, vec![19]),
-                           (49, vec![1])];
+        let listing = vec![Posting::new(0, vec![16]),
+                           Posting::new(1, vec![12, 25]),
+                           Posting::new(2, vec![14, 21, 44]),
+                           Posting::new(3, vec![18]),
+                           Posting::new(4, vec![28, 38]),
+                           Posting::new(6, vec![11]),
+                           Posting::new(7, vec![19, 45]),
+                           Posting::new(8, vec![23]),
+                           Posting::new(9, vec![32]),
+                           Posting::new(10, vec![2, 4]),
+                           Posting::new(11, vec![18, 27]),
+                           Posting::new(12, vec![19]),
+                           Posting::new(13, vec![12, 29]),
+                           Posting::new(14, vec![33]),
+                           Posting::new(16, vec![3]),
+                           Posting::new(20, vec![32]),
+                           Posting::new(22, vec![2, 22, 29]),
+                           Posting::new(23, vec![32]),
+                           Posting::new(24, vec![4, 25]),
+                           Posting::new(25, vec![11]),
+                           Posting::new(27, vec![42]),
+                           Posting::new(28, vec![8, 14, 46]),
+                           Posting::new(29, vec![48]),
+                           Posting::new(30, vec![23]),
+                           Posting::new(31, vec![36]),
+                           Posting::new(33, vec![1]),
+                           Posting::new(36, vec![9]),
+                           Posting::new(37, vec![30]),
+                           Posting::new(39, vec![21]),
+                           Posting::new(43, vec![7, 9, 18]),
+                           Posting::new(44, vec![34]),
+                           Posting::new(45, vec![23]),
+                           Posting::new(46, vec![17, 35]),
+                           Posting::new(47, vec![33]),
+                           Posting::new(48, vec![19]),
+                           Posting::new(49, vec![1])];
         let mut bytes = Vec::new();
         super::write_listing(listing, 0, &mut bytes).unwrap();
         let data = VByteDecoder::new(bytes.as_slice()).collect::<Vec<_>>();
-        assert_eq!(data[..12].to_vec(), vec![0, 1, 16, 1, 2, 12, 13, 1, 3, 14, 7, 23]);
+        assert_eq!(data[..12].to_vec(),
+                   vec![0, 1, 16, 1, 2, 12, 13, 1, 3, 14, 7, 23]);
     }
 
 
