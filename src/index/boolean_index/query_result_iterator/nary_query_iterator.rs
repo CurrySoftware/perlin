@@ -132,64 +132,47 @@ impl NAryQueryIterator {
     }
 
     fn next_inorder(&self) -> Option<&Posting> {
-        let mut focus = None; //Acts as temporary to be compared against
-        let mut focus_positions = vec![];
+        let mut focus = try_option!(self.operands[0].next()); //Acts as temporary to be compared against
+        let mut focus_positions = focus.positions().clone();
         // The iterator index that last set 'focus'
-        let mut last_doc_iter = self.operands.len() + 1;
-        // The the relative position of last_doc_iter
-        let mut last_positions_iter = self.operands.len() + 1;
+        let mut last_doc_iter = 0;
+        // The relative position of last_doc_iter
+        let mut last_positions_iter = self.operands[0].relative_position();;
         'possible_documents: loop {
             // For every term
             for (i, input) in self.operands.iter().enumerate() {
-                'term_documents: loop {
-                    // If the focus was set by the current iterator, we have a match
-                    if last_doc_iter == i {
-                        break 'term_documents;
-                    }
-                    // Get the next doc_id for the current iterator
-                    let mut v = try_option!(input.next());
-                    if focus.is_none() {
-                        focus = Some(v);
-                        focus_positions = v.1.clone();
-                        last_doc_iter = i;
-                        last_positions_iter = input.relative_position();
-                        break 'term_documents;
-                    } else if v.0 < focus.unwrap().0 {
-                        // If the doc_id is smaller, get its next value
-                        continue 'term_documents;
-                    } else if v.0 == focus.unwrap().0 {
-                        // If the doc_id is equal, check positions
-                        let position_offset = last_positions_iter as i64 - input.relative_position() as i64;
-                        focus_positions = positional_intersect(&focus_positions,
-                                                               &v.positions(),
-                                                               (position_offset, position_offset))
-                            .iter()
-                            .map(|pos| pos.1)
-                            .collect::<Vec<_>>();
-                        if focus_positions.is_empty() {
-                            // No suitable positions found. Next document
-                            v = try_option!(input.next());
-                            focus = Some(v);
-                            focus_positions = v.1.clone();
-                            last_doc_iter = i;
-                            last_positions_iter = input.relative_position();
-                            continue 'possible_documents;
-                        } else {
-                            last_positions_iter = input.relative_position();
-                            break 'term_documents;
-                        }
+                // If the focus was set by the current iterator, we have a match
+                if last_doc_iter == i {
+                    continue;
+                }
+                // Get the next doc_id >= focus for the current iterator
+                let mut v = try_option!(input.next_seek(focus));
+                if v.0 == focus.0 {
+                    // If the doc_id is equal, check positions
+                    let position_offset = last_positions_iter as i64 - input.relative_position() as i64;
+                    focus_positions = positional_intersect(&focus_positions,
+                                                           &v.positions(),
+                                                           (position_offset, position_offset))
+                        .iter()
+                        .map(|pos| pos.1)
+                        .collect::<Vec<_>>();
+                    last_positions_iter = input.relative_position();
+                    if focus_positions.is_empty() {
+                        // No suitable positions found. Next document
+                        v = try_option!(input.next());
                     } else {
-                        // If it is larger, we are now looking at a different focus.
-                        // Reset focus and last_iter. Then start from the beginning
-                        focus = Some(v);
-                        focus_positions = v.1.clone();
-                        last_doc_iter = i;
-                        last_positions_iter = input.relative_position();
-                        continue 'possible_documents;
+                        continue;
                     }
                 }
+                // If it is larger or no positions matched, we are now looking at a different focus.
+                // Reset focus and last_iter. Then start from the beginning
+                focus = v;
+                focus_positions = v.positions().clone();
+                last_doc_iter = i;
+                last_positions_iter = input.relative_position();
+                continue 'possible_documents;
             }
-            return focus;
+            return Some(focus);
         }
     }
 
