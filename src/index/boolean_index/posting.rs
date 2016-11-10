@@ -1,12 +1,55 @@
 use std::io::Read;
+use std::cmp::Ordering;
+
 use chunked_storage::ChunkedStorage;
 use storage::compression::{vbyte_encode, VByteDecoder};
 use storage::{ByteDecodable, ByteEncodable, DecodeResult, DecodeError};
 
 // For each term-document pair the doc_id and the
-// positions of the term inside the document are stored
-pub type Posting = (u64 /* doc_id */, Vec<u32> /* positions */);
+// positions of the term inside the document is stored
+#[derive(Debug, Eq)]
+pub struct Posting(pub DocId, pub Positions);
+
+pub type DocId = u64;
+pub type Positions = Vec<u32>;
 pub type Listing = Vec<Posting>;
+
+impl Posting {
+    pub fn new(doc_id: DocId, positions: Positions) -> Self{
+        Posting(doc_id, positions)
+    }
+
+    //TODO: Does it have an impact if we declare the
+    //#[inline]-attribute on these kinds of functions?
+    pub fn doc_id(&self) -> &DocId {
+        &self.0
+    }
+
+    pub fn positions(&self) -> &Positions {
+        &self.1
+    }
+}
+
+//When we compare postings, we usually only care about doc_ids.
+//For comparisons that consider positions have a look at
+//`index::boolean_index::query_result_iterator::nary_query_iterator::positional_intersect` ...
+impl Ord for Posting {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.doc_id().cmp(other.doc_id())
+    }
+}
+
+impl PartialEq for Posting {
+    fn eq(&self, other: &Self) -> bool {
+        self.doc_id().eq(other.doc_id())
+    }    
+}
+
+impl PartialOrd for Posting {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.doc_id().partial_cmp(other.doc_id())
+    }
+}
 
 pub fn decode_from_storage(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
     // Get hot listing
@@ -29,7 +72,7 @@ fn decode_from_chunk_ref<R: Read>(read: &mut R) -> Result<Listing, (usize, usize
             last_position += try!(decoder.next().ok_or((base_doc_id as usize, i)));
             positions.push(last_position as u32);
         }
-        postings.push((base_doc_id, positions));
+        postings.push(Posting::new(base_doc_id, positions));
     }
     Ok(postings)
 }
@@ -39,8 +82,8 @@ impl ByteEncodable for Listing {
         let mut bytes: Vec<u8> = Vec::new();
         bytes.append(&mut vbyte_encode(self.len()));
         for posting in self {
-            bytes.append(&mut vbyte_encode(posting.0 as usize));
-            bytes.append(&mut vbyte_encode(posting.1.len() as usize));
+            bytes.append(&mut vbyte_encode(*posting.doc_id() as usize));
+            bytes.append(&mut vbyte_encode(posting.positions().len() as usize));
             let mut last_position = 0;
             for position in &posting.1 {
                 bytes.append(&mut vbyte_encode((*position - last_position) as usize));
@@ -65,7 +108,7 @@ impl ByteDecodable for Vec<Posting> {
                     last_position += try!(decoder.next().ok_or(DecodeError::MalformedInput));
                     positions.push(last_position as u32);
                 }
-                postings.push((doc_id as u64, positions));
+                postings.push(Posting::new(doc_id as u64, positions));
             }
             Ok(postings)
         } else {

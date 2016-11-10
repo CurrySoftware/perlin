@@ -154,6 +154,14 @@ mod tests {
     }
 
     #[test]
+    fn seeking_first() {
+        let data = Arc::new(vec![2, 3]);
+        let iter = ArcIter::new(data);
+
+        assert_eq!(iter.next_seek(&2), Some(&2));
+    }
+
+    #[test]
     fn peek_seeking() {
         let data = Arc::new(vec![0,1,2,3,4,5]);
         let iter = ArcIter::new(data);

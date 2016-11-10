@@ -66,17 +66,19 @@ impl<'a> OwningIterator<'a> for NAryQueryIterator {
     }
 }
 
-impl<'a> SeekingIterator<'a> for NAryQueryIterator{
+impl<'a> SeekingIterator<'a> for NAryQueryIterator {
     type Item = &'a Posting;
 
     fn next_seek(&'a self, target: &Posting) -> Option<Self::Item> {
-        let mut peeked_value = self.peeked_value.borrow_mut();
-        if peeked_value.is_some() {
-            *peeked_value = None;
-        }
-        //Advance operands
-        for op in self.operands.iter() {
-            op.peek_seek(target);
+        {
+            let mut peeked_value = self.peeked_value.borrow_mut();
+            if peeked_value.is_some() {
+                *peeked_value = None;
+            }
+            // Advance operands
+            for op in self.operands.iter() {
+                op.peek_seek(target);
+            }
         }
         self.next()
     }
@@ -86,7 +88,7 @@ impl<'a> SeekingIterator<'a> for NAryQueryIterator{
         if peeked_value.is_none() {
             *peeked_value = Some(self.next_seek(target).map(|p| p as *const Posting));
         }
-        unsafe { peeked_value.unwrap().map(|p| &*p) }        
+        unsafe { peeked_value.unwrap().map(|p| &*p) }
     }
 }
 
@@ -158,11 +160,12 @@ impl NAryQueryIterator {
                     } else if v.0 == focus.unwrap().0 {
                         // If the doc_id is equal, check positions
                         let position_offset = last_positions_iter as i64 - input.relative_position() as i64;
-                        focus_positions =
-                            positional_intersect(&focus_positions, &v.1, (position_offset, position_offset))
-                                .iter()
-                                .map(|pos| pos.1)
-                                .collect::<Vec<_>>();
+                        focus_positions = positional_intersect(&focus_positions,
+                                                               &v.positions(),
+                                                               (position_offset, position_offset))
+                            .iter()
+                            .map(|pos| pos.1)
+                            .collect::<Vec<_>>();
                         if focus_positions.is_empty() {
                             // No suitable positions found. Next document
                             v = try_option!(input.next());
@@ -191,8 +194,8 @@ impl NAryQueryIterator {
     }
 
     fn next_or(&self) -> Option<&Posting> {
-        // Find the smallest current value of all operands
 
+        // Find the smallest current value of all operands
         let min_value = self.operands
             .iter()
             .map(|op| op.peek())
@@ -222,40 +225,26 @@ impl NAryQueryIterator {
     }
 
     fn next_and(&self) -> Option<&Posting> {
-        let mut focus = None; //Acts as temporary to be compared against
-        let mut last_iter = self.operands.len() + 1; //The iterator that last set 'focus'
+        let mut focus = try_option!(self.operands[0].next()); //Acts as temporary to be compared against
+        let mut last_iter = 0; //The iterator that last set 'focus'
         'possible_documents: loop {
             // For every term
             for (i, input) in self.operands.iter().enumerate() {
-                'term_documents: loop {
-                    // If the focus was set by the current iterator, we have a match
-                    // We cycled through all the iterators once
-                    if last_iter == i {
-                        break 'term_documents;
-                    }
-                    // Get the next value for the current iterator
-                    let v = try_option!(input.next());
-                    if focus.is_none() {
-                        focus = Some(v);
-                        last_iter = i;
-                        break 'term_documents;
-                    } else if v.0 < focus.unwrap().0 {
-                        // If the value is smaller, get its next value
-                        continue 'term_documents;
-                    } else if v.0 > focus.unwrap().0 {
-                        // If it is larger, we are now looking at a different focus.
-                        // Reset focus and last_iter. Then start from the beginning
-                        focus = Some(v);
-                        last_iter = i;
-                        continue 'possible_documents;
-                    } else {
-                        // If the value is equal, we are content. Proceed with the next term
-                        break 'term_documents;
-                    }
-
+                // If the focus was set by the current iterator, we have a match
+                // We cycled through all the iterators once
+                if last_iter == i {
+                    continue;
+                }
+                let v = try_option!(input.next_seek(focus));
+                if v.0 > focus.0 {
+                    // If it is larger, we are now looking at a different focus.
+                    // Reset focus and last_iter. Then start from the beginning
+                    focus = v;
+                    last_iter = i;
+                    continue 'possible_documents;
                 }
             }
-            return focus;
+            return Some(focus);
         }
     }
 }
