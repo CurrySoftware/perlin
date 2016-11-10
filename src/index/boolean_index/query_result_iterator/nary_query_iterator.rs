@@ -60,10 +60,6 @@ impl<'a> OwningIterator<'a> for NAryQueryIterator {
     fn len(&self) -> usize {
         self.estimate_length()
     }
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
 }
 
 impl<'a> SeekingIterator<'a> for NAryQueryIterator {
@@ -73,6 +69,9 @@ impl<'a> SeekingIterator<'a> for NAryQueryIterator {
         {
             let mut peeked_value = self.peeked_value.borrow_mut();
             if peeked_value.is_some() {
+                if peeked_value.unwrap() == Some(target) {
+                    return unsafe { peeked_value.take().unwrap().map(|p| &*p) };
+                }
                 *peeked_value = None;
             }
             // Advance operands
@@ -136,7 +135,7 @@ impl NAryQueryIterator {
         let mut focus_positions = focus.positions().clone();
         // The iterator index that last set 'focus'
         let mut last_doc_iter = 0;
-        // The relative position of last_doc_iter
+        // The relative position of the term in last_doc_iter
         let mut last_positions_iter = self.operands[0].relative_position();;
         'possible_documents: loop {
             // For every term
@@ -177,7 +176,7 @@ impl NAryQueryIterator {
     }
 
     fn next_or(&self) -> Option<&Posting> {
-
+        //TODO: Probably improveable
         // Find the smallest current value of all operands
         let min_value = self.operands
             .iter()

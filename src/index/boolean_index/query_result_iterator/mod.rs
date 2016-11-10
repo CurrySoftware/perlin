@@ -148,9 +148,13 @@ impl<'a> OwningIterator<'a> for FilterIterator {
 impl<'a> SeekingIterator<'a> for FilterIterator {
     type Item = &'a Posting;
 
+    //TODO: Write meaningful tests for this implementation
     fn next_seek(&'a self, target: &Posting) -> Option<&'a Posting> {
         let mut peeked_value = self.peeked_value.borrow_mut();
         if peeked_value.is_some() {
+            if peeked_value.unwrap() == Some(target) {
+                return unsafe { peeked_value.take().unwrap().map(|p| &*p) };
+            }
             *peeked_value = None;
         }
         self.sand.peek_seek(target);
@@ -162,7 +166,7 @@ impl<'a> SeekingIterator<'a> for FilterIterator {
         if peeked_value.is_none() {
             *peeked_value = Some(self.next_seek(target).map(|p| p as *const Posting));
         }
-        unsafe { peeked_value.unwrap().map(|p| &*p) }        
+        unsafe { peeked_value.unwrap().map(|p| &*p) }
     }
 }
 
