@@ -25,31 +25,25 @@ pub trait SeekingIterator {
     fn next_seek(&mut self, &Self::Item) -> Option<Self::Item>;
 }
 
-pub struct PeekableSeekable<I>
-    where I: Iterator+ SeekingIterator,
-          Option<<I as Iterator>::Item>: From<Option<<I as SeekingIterator>::Item>>,
-          Option<<I as SeekingIterator>::Item>: From<Option<<I as Iterator>::Item>>
-{
+pub struct PeekableSeekable<I: Iterator> {
     iter: I,
-    peeked: Option<<I as Iterator>::Item>,
+    peeked: Option<I::Item>,
 }
 
 
 impl<I> SeekingIterator for PeekableSeekable<I>
-    where I: Iterator + SeekingIterator,
-          Option<<I as Iterator>::Item>: From<Option<<I as SeekingIterator>::Item>>,
-          Option<<I as SeekingIterator>::Item>: From<Option<<I as Iterator>::Item>>,
+    where I: Iterator<Item = <I as SeekingIterator>::Item> + SeekingIterator,
           <I as SeekingIterator>::Item: Ord
 {
     type Item = <I as SeekingIterator>::Item;
 
     #[inline]
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
-        let peeked = Option::<<I as SeekingIterator>::Item>::from(self.peeked.take());
+        let peeked = self.peeked.take();
         if peeked.is_some() {
             let val = peeked.unwrap();
             if val >= *other {
-                return Some(val)
+                return Some(val);
             }
         }
         self.iter.next_seek(other)
@@ -57,17 +51,15 @@ impl<I> SeekingIterator for PeekableSeekable<I>
 }
 
 impl<I> PeekableSeekable<I>
-    where I: Iterator + SeekingIterator,
-          Option<<I as Iterator>::Item>: From<Option<<I as SeekingIterator>::Item>>,
-          Option<<I as SeekingIterator>::Item>: From<Option<<I as Iterator>::Item>>
+    where I: Iterator<Item = <I as SeekingIterator>::Item> + SeekingIterator
 {
     pub fn new(iter: I) -> Self {
-        PeekableSeekable{
+        PeekableSeekable {
             iter: iter,
-            peeked: None
+            peeked: None,
         }
     }
-    
+
     #[inline]
     pub fn peek(&mut self) -> Option<&<I as Iterator>::Item> {
         if self.peeked.is_none() {
@@ -82,7 +74,7 @@ impl<I> PeekableSeekable<I>
     #[inline]
     pub fn peek_seek(&mut self, other: &<I as SeekingIterator>::Item) -> Option<&<I as Iterator>::Item> {
         if self.peeked.is_none() {
-            self.peeked = Option::from(self.iter.next_seek(other));
+            self.peeked = self.iter.next_seek(other);
         }
         match self.peeked {
             Some(ref value) => Some(value),
@@ -98,9 +90,7 @@ impl<I> PeekableSeekable<I>
 
 // Heavily "inspired" by `std::iter::Peekable`
 impl<I> Iterator for PeekableSeekable<I>
-    where I: Iterator + SeekingIterator,
-          Option<<I as Iterator>::Item>: From<Option<<I as SeekingIterator>::Item>>,
-          Option<<I as SeekingIterator>::Item>: From<Option<<I as Iterator>::Item>>
+    where I: Iterator<Item = <I as SeekingIterator>::Item> + SeekingIterator
 {
     type Item = <I as Iterator>::Item;
 
