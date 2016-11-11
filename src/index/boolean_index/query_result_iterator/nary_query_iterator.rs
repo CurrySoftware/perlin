@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use utils::owning_iterator::{SeekingIterator};
+use utils::owning_iterator::{PeekableSeekable, SeekingIterator};
 
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::Posting;
@@ -9,8 +9,7 @@ use index::boolean_index::query_result_iterator::*;
 pub struct NAryQueryIterator<'a> {
     pos_operator: Option<PositionalOperator>,
     bool_operator: Option<BooleanOperator>,
-    operands: Vec<QueryResultIterator<'a>>,
-    peeked_value: Option<Option<Posting>>,
+    operands: Vec<PeekableSeekable<QueryResultIterator<'a>>>,
 }
 
 
@@ -19,9 +18,6 @@ impl<'a> Iterator for NAryQueryIterator<'a> {
 
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.peeked_value.is_some() {
-            return self.peeked_value.take().unwrap();
-        }
         match self.bool_operator {
             Some(BooleanOperator::And) => self.next_and(),
             Some(BooleanOperator::Or) => self.next_or(),
@@ -35,94 +31,49 @@ impl<'a> Iterator for NAryQueryIterator<'a> {
             }
         }
     }
-
-    // fn peek(&'a self) -> Option<&'a Posting> {
-    //     let mut peeked_value = self.peeked_value.borrow_mut();
-    //     if peeked_value.is_none() {
-    //         *peeked_value = Some((match self.bool_operator {
-    //                 Some(BooleanOperator::And) => self.next_and(),
-    //                 Some(BooleanOperator::Or) => self.next_or(),
-    //                 None => {
-    //                     match self.pos_operator {
-    //                         Some(PositionalOperator::InOrder) => self.next_inorder(),
-    //                         None => {
-    //                             unreachable!(false);
-    //                         }
-    //                     }
-    //                 }
-    //             })
-    //             .map(|p| p as *const Posting))
-    //     }
-    //     unsafe { peeked_value.unwrap().map(|p| &*p) }
-    // }
-
-    // fn len(&self) -> usize {
-    //     self.estimate_length()
-    // }
 }
 
 impl<'a> SeekingIterator for NAryQueryIterator<'a> {
     type Item = Posting;
 
     fn next_seek(&mut self, target: &Self::Item) -> Option<Self::Item> {
-        //TODO:
-        None
-        // {
-        //     if self.peeked_value.is_some() {
-        //         if self.peeked_value.unwrap() == Some(*target) {
-        //             return self.peeked_value.take().unwrap();
-        //         }
-        //         self.peeked_value = None;
-        //     }
-        //     // Advance operands
-        //     for op in self.operands.iter_mut() {
-        //         op.peek_seek(target);
-        //     }
-        // }
-        // self.next()
-    }
-
-    fn peek_seek(&mut self, target: &Self::Item) -> Option<&Self::Item> {
-        //TODO:
-        None
-        // if self.peeked_value.is_none() {
-        //     self.peeked_value = Some(self.next_seek(target));
-        // }
-        // self.peek_seek.unwrap()
+        //Advance operands to `target`
+        for op in self.operands.iter_mut() {
+            op.peek_seek(target);
+        }
+        self.next()
     }
 }
 
 impl<'a> NAryQueryIterator<'a> {
-    pub fn new_positional(operator: PositionalOperator, operands: Vec<QueryResultIterator>) -> NAryQueryIterator {
+    pub fn new_positional(operator: PositionalOperator, operands: Vec<PeekableSeekable<QueryResultIterator>>) -> NAryQueryIterator {
         let mut result = NAryQueryIterator {
             pos_operator: Some(operator),
             bool_operator: None,
-            operands: operands,
-            peeked_value: None,
+            operands: operands       
         };
-        result.operands.sort_by_key(|op| op.estimate_length());
+        result.operands.sort_by_key(|op| op.inner().estimate_length());
         result
     }
 
 
-    pub fn new(operator: BooleanOperator, operands: Vec<QueryResultIterator>) -> NAryQueryIterator {
+    pub fn new(operator: BooleanOperator, operands: Vec<PeekableSeekable<QueryResultIterator>>) -> NAryQueryIterator {
         let mut result = NAryQueryIterator {
             pos_operator: None,
             bool_operator: Some(operator),
-            operands: operands,
-            peeked_value: None,
+            operands: operands
         };
-        result.operands.sort_by_key(|op| op.estimate_length());
+        result.operands.sort_by_key(|op| op.inner().estimate_length());
         result
     }
 
     pub fn estimate_length(&self) -> usize {
         match self.bool_operator {
-            Some(BooleanOperator::And) => self.operands[0].estimate_length(),
-            Some(BooleanOperator::Or) => self.operands[self.operands.len() - 1].estimate_length(),
+            Some(BooleanOperator::And) => self.operands[0].inner().estimate_length(),
+            Some(BooleanOperator::Or) => self.operands[self.operands.len() - 1].inner().estimate_length(),
             None => {
                 match self.pos_operator {
-                    Some(PositionalOperator::InOrder) => self.operands[0].estimate_length(),
+                    Some(PositionalOperator::InOrder) => self.operands[0].inner().estimate_length(),
                     None => {
                         unreachable!();
                     }
@@ -137,7 +88,7 @@ impl<'a> NAryQueryIterator<'a> {
         // The iterator index that last set 'focus'
         let mut last_doc_iter = 0;
         // The relative position of the term in last_doc_iter
-        let mut last_positions_iter = self.operands[0].relative_position();;
+        let mut last_positions_iter = self.operands[0].inner().relative_position();
         'possible_documents: loop {
             // For every term
             for (i, input) in self.operands.iter_mut().enumerate() {
@@ -149,14 +100,14 @@ impl<'a> NAryQueryIterator<'a> {
                 let mut v = try_option!(input.next_seek(&focus));
                 if v.0 == focus.0 {
                     // If the doc_id is equal, check positions
-                    let position_offset = last_positions_iter as i64 - input.relative_position() as i64;
+                    let position_offset = last_positions_iter as i64 - input.inner().relative_position() as i64;
                     focus_positions = positional_intersect(&focus_positions,
                                                            &v.positions(),
                                                            (position_offset, position_offset))
                         .iter()
                         .map(|pos| pos.1)
                         .collect::<Vec<_>>();
-                    last_positions_iter = input.relative_position();
+                    last_positions_iter = input.inner().relative_position();
                     if focus_positions.is_empty() {
                         // No suitable positions found. Next document
                         v = try_option!(input.next());
@@ -169,20 +120,21 @@ impl<'a> NAryQueryIterator<'a> {
                 focus = v;
                 focus_positions = focus.positions().clone();
                 last_doc_iter = i;
-                last_positions_iter = input.relative_position();
+                last_positions_iter = input.inner().relative_position();
                 continue 'possible_documents;
             }
             return Some(focus);
         }
     }
 
-    fn next_or(&self) -> Option<Posting> {
-        //TODO: Probably improveable
-        // Find the smallest current value of all operands
+    fn next_or(&mut self) -> Option<Posting> {
+        // TODO: Probably improveable
 
-
+        //TODO:
+        None
+        // // Find the smallest current value of all operands
         // let min_value = self.operands
-        //     .iter()
+        //     .iter_mut()
         //     .map(|op| op.peek())
         //     .filter(|val| val.is_some())
         //     .map(|val| val.unwrap().0)
@@ -196,19 +148,20 @@ impl<'a> NAryQueryIterator<'a> {
         //     // Throw the ones out which are empty. Then return the minimal value as
         //     // reference
         //     while i < self.operands.len() {
-        //         if let Some(val) = self.operands[i].peek() {
-        //             if val.0 == min {
+        //         let v = self.operands[i].peek();
+        //         if v.is_some() {
+        //             if v.unwrap().0 == min {
         //                 tmp = self.operands[i].next();
         //             }
+        //             continue;
         //         }
+        //         self.operands.swap_remove(i);
         //         i += 1;
         //     }
         //     return tmp;
         // } else {
         //     return None;
-        // }
-        
-        None
+        // } 
     }
 
     fn next_and(&mut self) -> Option<Posting> {

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use storage::{Storage, Result, ByteEncodable, ByteDecodable};
 use chunked_storage::indexing_chunk::HotIndexingChunk;
-use chunked_storage::chunk_ref::{ChunkRef, MutChunkRef};
+use chunked_storage::chunk_ref::{ChunkIter, ChunkRef, MutChunkRef};
 pub use chunked_storage::indexing_chunk::IndexingChunk;
 
 
@@ -76,12 +76,17 @@ impl ChunkedStorage {
     }
 
     #[inline]
-    pub fn get_current(&self, id: u64) -> ChunkRef {
+    pub fn get(&self, id: u64) -> ChunkRef {
         ChunkRef::new(&self.hot_chunks[id as usize], &self.archive)        
     }
 
     #[inline]
-    pub fn get_current_mut(&mut self, id: u64) -> MutChunkRef {
+    pub fn get_iter<T: ByteDecodable>(&self, id: u64) -> ChunkIter<T> {
+        ChunkIter::new(self.get(id))
+    }
+
+    #[inline]
+    pub fn get_mut(&mut self, id: u64) -> MutChunkRef {
         MutChunkRef::new(&mut self.hot_chunks[id as usize], &mut self.archive)        
     }
 
@@ -104,12 +109,12 @@ mod tests {
         store.new_chunk(0);
         let data = (0..255u8).collect::<Vec<_>>();
         {
-            let mut chunk_ref = store.get_current_mut(0);
+            let mut chunk_ref = store.get_mut(0);
             chunk_ref.write_all(&data).unwrap();
         }
         let mut read_data = Vec::new();
         {
-            let mut chunk_ref = store.get_current(0);
+            let mut chunk_ref = store.get(0);
             chunk_ref.read_to_end(&mut read_data).unwrap();
         }
         assert_eq!(data, read_data);
@@ -121,12 +126,12 @@ mod tests {
         store.new_chunk(0);
         let data = (0..20u8).collect::<Vec<_>>();
         {
-            let mut chunk_ref = store.get_current_mut(0);
+            let mut chunk_ref = store.get_mut(0);
             chunk_ref.write_all(&data).unwrap();
         }
         let mut read_data = Vec::new();
         {
-            let mut chunk_ref = store.get_current(0);
+            let mut chunk_ref = store.get(0);
             chunk_ref.read_to_end(&mut read_data).unwrap();
         }
         assert_eq!(data, read_data);
@@ -138,13 +143,13 @@ mod tests {
         store.new_chunk(0);
         let data = (0..20u8).collect::<Vec<_>>();
         {
-            let mut chunk_ref = store.get_current_mut(0);
+            let mut chunk_ref = store.get_mut(0);
             chunk_ref.write_all(&data[0..10]).unwrap();
             chunk_ref.write_all(&data[10..20]).unwrap();
         }
         let mut read_data = Vec::new();
         {
-            let mut chunk_ref = store.get_current(0);
+            let mut chunk_ref = store.get(0);
             chunk_ref.read_to_end(&mut read_data).unwrap();
         }
         assert_eq!(data, read_data);
@@ -156,14 +161,14 @@ mod tests {
         store.new_chunk(0);
         let data = (0..255u8).collect::<Vec<_>>();
         {
-            let mut chunk_ref = store.get_current_mut(0);
+            let mut chunk_ref = store.get_mut(0);
             chunk_ref.write_all(&data).unwrap();
             chunk_ref.write_all(&data).unwrap();
             chunk_ref.write_all(&data).unwrap();
         }
         let mut read_data = Vec::new();
         {
-            let mut chunk_ref = store.get_current(0);
+            let mut chunk_ref = store.get(0);
             chunk_ref.read_to_end(&mut read_data).unwrap();
         }
         assert_eq!(data, &read_data[0..255]);
@@ -181,7 +186,7 @@ mod tests {
         }
         for i in 0..100u8 {
             let data = (0..4096).map(|_| i).collect::<Vec<_>>();
-            let mut chunk_ref = store.get_current(i as u64);
+            let mut chunk_ref = store.get(i as u64);
             let mut read_data = Vec::new();
             chunk_ref.read_to_end(&mut read_data).unwrap();
             assert_eq!(data, read_data);
@@ -194,12 +199,12 @@ mod tests {
         store.new_chunk(0);
         let data = (0..20u8).collect::<Vec<_>>();
         {
-            let mut chunk_ref = store.get_current_mut(0);
+            let mut chunk_ref = store.get_mut(0);
             chunk_ref.write_all(&data).unwrap();
         }
         let mut read_data = [0u8; 10];
         {
-            let mut chunk_ref = store.get_current(0);
+            let mut chunk_ref = store.get(0);
             chunk_ref.read(&mut read_data).unwrap();
             assert_eq!(read_data, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
             chunk_ref.read(&mut read_data).unwrap();
@@ -213,12 +218,12 @@ mod tests {
         store.new_chunk(0);
         let data = (0..1000u32).map(|i| (i % 255) as u8).collect::<Vec<_>>();
         {
-            let mut chunk_ref = store.get_current_mut(0);
+            let mut chunk_ref = store.get_mut(0);
             chunk_ref.write_all(&data).unwrap();
         }
         let mut read_data = [0u8; 10];
         {
-            let mut chunk_ref = store.get_current(0);
+            let mut chunk_ref = store.get(0);
             for i in 0..100 {
                 chunk_ref.read(&mut read_data).unwrap();
                 assert_eq!(read_data.to_vec(),

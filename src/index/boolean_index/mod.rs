@@ -19,7 +19,7 @@ use index::boolean_index::boolean_query::*;
 use index::boolean_index::indexing::index_documents;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::posting::decode_from_storage;
+use index::boolean_index::posting::{PostingDecoder, decode_from_storage};
 
 use storage::compression::{vbyte_encode, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
@@ -202,7 +202,7 @@ impl<TTerm> BooleanIndex<TTerm>
                 let mut term_bytes = vec![0; term_len];
                 try!(decoder.read_exact(&mut term_bytes));
                 println!("Term Bytes {:?}", term_bytes);
-                //Read the bytes and decode them
+                // Read the bytes and decode them
                 match TTerm::decode(&mut term_bytes.as_slice()) {
                     Ok(term) => result.insert(term, id as u64),
                     Err(e) => return Err(Error::CorruptedIndexFile(Some(e))),
@@ -293,10 +293,13 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     }
 
-    fn run_nary_query<'a>(&'a self, operator: &BooleanOperator, operands: &[BooleanQuery<TTerm>]) -> QueryResultIterator<'a> {
+    fn run_nary_query<'a>(&'a self,
+                          operator: &BooleanOperator,
+                          operands: &[BooleanQuery<TTerm>])
+                          -> QueryResultIterator<'a> {
         let mut ops = Vec::new();
         for operand in operands {
-            ops.push(self.run_query(operand))
+            ops.push(self.run_query(operand).peekable_seekable())
         }
         QueryResultIterator::NAry(NAryQueryIterator::new(*operator, ops))
     }
@@ -307,33 +310,28 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                             -> QueryResultIterator {
         let mut ops = Vec::new();
         for operand in operands {
-            ops.push(self.run_atom(operand.relative_position, &operand.query_term));
+            ops.push(self.run_atom(operand.relative_position, &operand.query_term).peekable_seekable());
         }
         QueryResultIterator::NAry(NAryQueryIterator::new_positional(*operator, ops))
     }
 
     fn run_filter<'a>(&'a self,
-                  operator: &FilterOperator,
-                  sand: &BooleanQuery<TTerm>,
-                  sieve: &BooleanQuery<TTerm>)
-                  -> QueryResultIterator<'a> {
+                      operator: &FilterOperator,
+                      sand: &BooleanQuery<TTerm>,
+                      sieve: &BooleanQuery<TTerm>)
+                      -> QueryResultIterator<'a> {
         QueryResultIterator::Filter(FilterIterator::new(*operator,
-                                                        Box::new(self.run_query(sand)),
-                                                        Box::new(self.run_query(sieve))))
+                                                        Box::new(self.run_query(sand).peekable_seekable()),
+                                                        Box::new(self.run_query(sieve).peekable_seekable())))
     }
 
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
-        // if let Some(result) = self.term_ids.get(atom) {
-        //     QueryResultIterator::Atom(relative_position,
-        //                               ArcIter::new(
-        //                                   Arc::new(
-        //                                       decode_from_storage(&self.chunked_postings, *result)
-        //                                   .unwrap())))
-        // } else {
-        // }
-        //TODO:
-        QueryResultIterator::Empty
+        if let Some(result) = self.term_ids.get(atom) {
+            QueryResultIterator::Atom(relative_position, PostingDecoder::new(self.chunked_postings.get(*result)))
+        } else {
+            QueryResultIterator::Empty
+        }
     }
 }
 
@@ -391,14 +389,14 @@ mod tests {
     fn query_atom() {
         let index = prepare_index();
 
-        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7)))
-            .collect::<Vec<_>>() == vec![0]);
-        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 5)))
-            .collect::<Vec<_>>() == vec![0, 2]);
-        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 0)))
-            .collect::<Vec<_>>() == vec![0, 1, 2]);
-        assert!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 16)))
-            .collect::<Vec<_>>() == vec![1]);
+        assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7)))
+            .collect::<Vec<_>>(), vec![0]);
+        assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 5)))
+            .collect::<Vec<_>>(), vec![0, 2]);
+        assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 0)))
+            .collect::<Vec<_>>(), vec![0, 1, 2]);
+        assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 16)))
+            .collect::<Vec<_>>(), vec![1]);
     }
 
     #[test]
