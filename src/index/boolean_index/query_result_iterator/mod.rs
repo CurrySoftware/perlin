@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::{PostingDecoder, Posting};
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;

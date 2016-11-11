@@ -9,7 +9,6 @@ use std::iter::Iterator;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::hash::Hash;
-use std::sync::Arc;
 use std::sync::mpsc;
 
 use index::Index;
@@ -19,7 +18,7 @@ use index::boolean_index::boolean_query::*;
 use index::boolean_index::indexing::index_documents;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use index::boolean_index::posting::{PostingDecoder, decode_from_storage};
+use index::boolean_index::posting::PostingDecoder;
 
 use storage::compression::{vbyte_encode, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
@@ -392,13 +391,17 @@ mod tests {
         let index = prepare_index();
 
         assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 7)))
-            .collect::<Vec<_>>(), vec![0]);
+                       .collect::<Vec<_>>(),
+                   vec![0]);
         assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 5)))
-            .collect::<Vec<_>>(), vec![0, 2]);
+                       .collect::<Vec<_>>(),
+                   vec![0, 2]);
         assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 0)))
-            .collect::<Vec<_>>(), vec![0, 1, 2]);
+                       .collect::<Vec<_>>(),
+                   vec![0, 1, 2]);
         assert_eq!(index.execute_query(&BooleanQuery::Atom(QueryAtom::new(0, 16)))
-            .collect::<Vec<_>>(), vec![1]);
+                       .collect::<Vec<_>>(),
+                   vec![1]);
     }
 
     #[test]

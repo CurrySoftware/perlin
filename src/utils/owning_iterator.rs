@@ -20,7 +20,7 @@ pub trait SeekingIterator {
     // TODO: Define how peek_seek and next_seek should work in terms of iterator progression
     // Especially in combination with OwningIterator::next, OwningIterator::peek and
     // QueryResultIterator::peek implementations
-    // For now. Assume next_seek is not called after peek and peek advances the iterator so
+    // For now. Assume next_seek is not called after peek and peek_seek advances the iterator so
     // that assert_eq!(it.peek_seek(t); it.next(), it.next_seek(t))
     fn next_seek(&mut self, &Self::Item) -> Option<Self::Item>;
 }

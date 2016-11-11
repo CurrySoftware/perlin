@@ -1,9 +1,6 @@
 use std::io;
-use std::marker::PhantomData;
 
-use utils::owning_iterator::SeekingIterator;
-
-use storage::{ByteDecodable, Storage, StorageError};
+use storage::{Storage, StorageError};
 
 use chunked_storage::indexing_chunk::{IndexingChunk, HotIndexingChunk};
 use chunked_storage::SIZE;
