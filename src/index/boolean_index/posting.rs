@@ -116,3 +116,10 @@ impl ByteDecodable for Vec<Posting> {
         }
     }
 }
+
+impl ByteDecodable for Posting {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
+        //TODO:
+        Ok(Posting::new(0, vec![]))
+    }
+}

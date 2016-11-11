@@ -1,6 +1,8 @@
 use std::io;
 
-use storage::{Storage, StorageError};
+use utils::owning_iterator::SeekingIterator;
+
+use storage::{ByteDecodable, Storage, StorageError};
 
 use chunked_storage::indexing_chunk::{IndexingChunk, HotIndexingChunk};
 use chunked_storage::SIZE;
@@ -14,6 +16,46 @@ pub struct ChunkRef<'a> {
     read_ptr: usize,
     chunk: &'a HotIndexingChunk,
     archive: &'a Box<Storage<IndexingChunk>>,
+}
+
+pub struct ChunkIter<'a, T: ByteDecodable> {
+    data: ChunkRef<'a>,
+    peeked: Option<T>
+}
+
+
+impl<'a, T: ByteDecodable> Iterator for ChunkIter<'a, T> {
+    type Item = T;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        T::decode(&mut self.data).ok()
+    }       
+}
+
+impl<'a, T: ByteDecodable + Ord> SeekingIterator for ChunkIter<'a, T> {
+    type Item = T;
+
+    fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
+        loop {
+            let v = try_option!(self.next());
+            if v >= *other {
+                return Some(v);
+            }
+        }
+    }
+    
+    fn peek_seek(&mut self, other: &Self::Item) -> Option<&Self::Item> {
+        loop {
+            let v = try_option!(self.next());
+            if v >= *other  {
+                self.peeked = Some(v);
+                return match self.peeked {
+                    Some(ref value) => Some(value),
+                    None => None
+                };
+            }
+        }
+    }
 }
 
 // The idea here is the abstract the inner workings of

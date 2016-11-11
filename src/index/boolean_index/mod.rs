@@ -23,7 +23,6 @@ use index::boolean_index::posting::decode_from_storage;
 
 use storage::compression::{vbyte_encode, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
-use utils::owning_iterator::ArcIter;
 use utils::persistence::Persistent;
 
 pub use index::boolean_index::query_builder::QueryBuilder;
@@ -101,12 +100,12 @@ pub struct BooleanIndex<TTerm: Ord + Hash> {
 // Index implementation
 impl<'a, TTerm: Ord + Hash> Index<'a, TTerm> for BooleanIndex<TTerm> {
     type Query = BooleanQuery<TTerm>;
-    type QueryResult = Box<Iterator<Item = u64>>;
+    type QueryResult = Box<Iterator<Item = u64> + 'a>;
 
     /// Executes a `BooleanQuery` and returns a boxed iterator over the resulting document ids.
     /// The query execution is lazy.
     fn execute_query(&'a self, query: &Self::Query) -> Self::QueryResult {
-        Box::new(self.run_query(query))
+        Box::new(self.run_query(query).map(|p| p.0))
     }
 }
 
@@ -281,7 +280,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
 
 
-    fn run_query(&self, query: &BooleanQuery<TTerm>) -> QueryResultIterator {
+    fn run_query<'a>(&'a self, query: &BooleanQuery<TTerm>) -> QueryResultIterator<'a> {
         match *query {
             BooleanQuery::Atom(ref atom) => self.run_atom(atom.relative_position, &atom.query_term),
             BooleanQuery::NAry(ref operator, ref operands) => self.run_nary_query(operator, operands),
@@ -294,7 +293,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     }
 
-    fn run_nary_query(&self, operator: &BooleanOperator, operands: &[BooleanQuery<TTerm>]) -> QueryResultIterator {
+    fn run_nary_query<'a>(&'a self, operator: &BooleanOperator, operands: &[BooleanQuery<TTerm>]) -> QueryResultIterator<'a> {
         let mut ops = Vec::new();
         for operand in operands {
             ops.push(self.run_query(operand))
@@ -313,11 +312,11 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         QueryResultIterator::NAry(NAryQueryIterator::new_positional(*operator, ops))
     }
 
-    fn run_filter(&self,
+    fn run_filter<'a>(&'a self,
                   operator: &FilterOperator,
                   sand: &BooleanQuery<TTerm>,
                   sieve: &BooleanQuery<TTerm>)
-                  -> QueryResultIterator {
+                  -> QueryResultIterator<'a> {
         QueryResultIterator::Filter(FilterIterator::new(*operator,
                                                         Box::new(self.run_query(sand)),
                                                         Box::new(self.run_query(sieve))))
@@ -325,15 +324,16 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
-        if let Some(result) = self.term_ids.get(atom) {
-            QueryResultIterator::Atom(relative_position,
-                                      ArcIter::new(
-                                          Arc::new(
-                                              decode_from_storage(&self.chunked_postings, *result)
-                                          .unwrap())))
-        } else {
-            QueryResultIterator::Empty
-        }
+        // if let Some(result) = self.term_ids.get(atom) {
+        //     QueryResultIterator::Atom(relative_position,
+        //                               ArcIter::new(
+        //                                   Arc::new(
+        //                                       decode_from_storage(&self.chunked_postings, *result)
+        //                                   .unwrap())))
+        // } else {
+        // }
+        //TODO:
+        QueryResultIterator::Empty
     }
 }
 
