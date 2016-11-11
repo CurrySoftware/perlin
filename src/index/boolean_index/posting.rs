@@ -33,15 +33,21 @@ impl Posting {
 
 pub struct PostingDecoder<R: Read> {
     decoder: VByteDecoder<R>,
-    last_doc_id: u64
+    last_doc_id: u64,
+    len: usize
 }
 
 impl<R: Read> PostingDecoder<R> {
-    pub fn new(read: R) -> Self {
+    pub fn new(read: R, len: usize) -> Self {
         PostingDecoder{
             decoder: VByteDecoder::new(read),
-            last_doc_id: 0
+            last_doc_id: 0,
+            len: len
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
     }
 }
 

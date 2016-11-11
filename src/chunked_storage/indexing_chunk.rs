@@ -11,6 +11,7 @@ use chunked_storage::SIZE;
 pub struct HotIndexingChunk {
     pub capacity: u16,
     last_doc_id: u64,
+    total_postings: u64,
     // TODO: Can we remove that indirection?
     archived_chunks: Vec<u32>,
     pub data: [u8; SIZE],
@@ -85,6 +86,7 @@ impl HotIndexingChunk {
             last_doc_id: 0,
             capacity: SIZE as u16,
             archived_chunks: Vec::new(),
+            total_postings: 0,
             data: unsafe { mem::uninitialized() },
         }
     }
@@ -94,8 +96,19 @@ impl HotIndexingChunk {
         self.last_doc_id
     }
 
+    #[inline]
     pub fn set_last_doc_id(&mut self, new_id: u64) {
         self.last_doc_id = new_id;
+    }
+
+    #[inline]
+    pub fn increment_postings(&mut self, by: usize) {
+        self.total_postings += by as u64;
+    }
+
+    #[inline]
+    pub fn get_total_postings(&self) -> usize {
+        self.total_postings as usize
     }
 
     pub fn archive(&mut self, at: u32) -> IndexingChunk {
@@ -152,6 +165,7 @@ impl ByteDecodable for HotIndexingChunk {
         {
             let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let last_doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            let total_postings = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let archived_chunks_len = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let mut archived_chunks = Vec::with_capacity(archived_chunks_len);
             for _ in 0..archived_chunks_len {
@@ -160,6 +174,7 @@ impl ByteDecodable for HotIndexingChunk {
             result = HotIndexingChunk {
                 capacity: capacity as u16,
                 last_doc_id: last_doc_id as u64,
+                total_postings: total_postings as u64,
                 archived_chunks: archived_chunks,
                 data: unsafe { mem::uninitialized() },
             };
@@ -176,6 +191,7 @@ impl ByteEncodable for HotIndexingChunk {
             let mut write_ptr = &mut result;
             VByteEncoded::new(self.capacity as usize).write_to(write_ptr).unwrap();
             VByteEncoded::new(self.last_doc_id as usize).write_to(write_ptr).unwrap();
+            VByteEncoded::new(self.total_postings as usize).write_to(write_ptr).unwrap();
             VByteEncoded::new(self.archived_chunks.len()).write_to(write_ptr).unwrap();
             for i in &self.archived_chunks {
                 VByteEncoded::new(*i as usize).write_to(write_ptr).unwrap();

@@ -22,14 +22,6 @@ pub enum QueryResultIterator<'a> {
 }
 
 
-// impl<'a> Iterator for QueryResultIterator<'a> {
-//     type Item = u64;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.next_id()
-//     }
-// }
-
 impl<'a> Iterator for QueryResultIterator<'a> {
     type Item = Posting;
 
@@ -42,23 +34,6 @@ impl<'a> Iterator for QueryResultIterator<'a> {
             QueryResultIterator::Filter(ref mut iter) => iter.next(),
         }
     }
-
-
-    // /// Allows peeking. Used for union queries,
-    // /// which need to advance operands in some cases and peek in others
-    // fn peek(&'a self) -> Option<&'a Posting> {
-    //     match *self {
-    //         QueryResultIterator::Empty => None,
-    //         QueryResultIterator::Atom(_, ref iter) => iter.peek(),
-    //         QueryResultIterator::NAry(ref iter) => iter.peek(),
-    //         QueryResultIterator::Filter(ref iter) => iter.peek(),
-    //     }
-    // }
-
-
-    // fn len(&self) -> usize {
-    //     self.estimate_length()
-    // }
 }
 
 impl<'a> SeekingIterator for QueryResultIterator<'a> {
@@ -75,14 +50,13 @@ impl<'a> SeekingIterator for QueryResultIterator<'a> {
 }
 
 impl<'a> QueryResultIterator<'a> {
-    
     /// Used to be able to sort queries according to their estimated number of
     /// results
     /// This can be used to optimize efficiency on intersecting queries
     fn estimate_length(&self) -> usize {
         match *self {
             QueryResultIterator::Empty => 0,
-            QueryResultIterator::Atom(_, ref iter) => iter.size_hint().0,
+            QueryResultIterator::Atom(_, ref iter) => iter.len(),
             QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
             QueryResultIterator::Filter(ref iter) => iter.estimate_length(),
         }
@@ -142,33 +116,24 @@ impl<'a> FilterIterator<'a> {
 
 
     fn estimate_length(&self) -> usize {
-        //TODO: 
-        0
-        // let sand_len = self.sand.estimate_length();
-        // let sieve_len = self.sieve.estimate_length();
-        // if sand_len > sieve_len {
-        //     sand_len - sieve_len
-        // } else {
-        //     0
-        // }
+        let sand_len = self.sand.inner().estimate_length();
+        let sieve_len = self.sieve.inner().estimate_length();
+        if sand_len > sieve_len {
+            sand_len - sieve_len
+        } else {
+            0
+        }
     }
 
     fn next_not(&mut self) -> Option<Posting> {
-        'sand: loop {
-            // This slight inconvinience is there because of the conflicting implementations of
-            // QueryResultIterator::next() (one for Iterator and one for OwningIterator)
-            // TODO: Can we fix this?
-            if let Some(sand) = Iterator::next(&mut self.sand) {
-                'sieve: loop {
-                    if let Some(sieve) = self.sieve.peek_seek(&sand) {
-                        if sieve.0 == sand.0 {
-                            continue 'sand;
-                        }
-                    }
-                    return Some(sand);
+        loop {
+            let sand = try_option!(self.sand.next());
+            if let Some(sieve) = self.sieve.peek_seek(&sand) {
+                if sieve.0 == sand.0 {
+                    continue;
                 }
             }
-            return None;
+            return Some(sand);
         }
     }
 }
@@ -180,18 +145,20 @@ mod tests {
     use index::boolean_index::tests::prepare_index;
 
 
-    // TODO:
-    // #[test]
-    // fn peek() {
-    //     let index = prepare_index();
-    //     let qri = index.run_atom(0, &0);
-    //     assert!(qri.peek() == qri.peek());
-    //     let qri2 = index.run_nary_query(&BooleanOperator::And,
-    //                                     &vec![BooleanQuery::Atom(QueryAtom::new(0, 0)),
-    //                                           BooleanQuery::Atom(QueryAtom::new(0, 0))]);
-    //     assert!(qri2.peek() == qri2.peek());
-
-    // }
+    #[test]
+    fn peek() {
+        let index = prepare_index();
+        let mut qri = index.run_atom(0, &0).peekable_seekable();
+        let doc_id_1 = qri.peek().map(|p| *p.doc_id());
+        let doc_id_2 = qri.peek().map(|p| *p.doc_id());
+        assert_eq!(doc_id_1, doc_id_2);
+        let mut qri2 = index.run_nary_query(&BooleanOperator::And,
+                            &vec![BooleanQuery::Atom(QueryAtom::new(0, 0)), BooleanQuery::Atom(QueryAtom::new(0, 0))])
+            .peekable_seekable();
+        let doc_id_1 = qri2.peek().map(|p| *p.doc_id());
+        let doc_id_2 = qri2.peek().map(|p| *p.doc_id());
+        assert_eq!(doc_id_1, doc_id_2);
+    }
 
     #[test]
     fn estimate_length() {
