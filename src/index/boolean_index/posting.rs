@@ -2,6 +2,7 @@ use std::io::Read;
 use std::cmp::Ordering;
 
 use chunked_storage::ChunkedStorage;
+use utils::owning_iterator::SeekingIterator;
 use storage::compression::{vbyte_encode, VByteDecoder};
 use storage::{ByteDecodable, ByteEncodable, DecodeResult, DecodeError};
 
@@ -15,12 +16,12 @@ pub type Positions = Vec<u32>;
 pub type Listing = Vec<Posting>;
 
 impl Posting {
-    pub fn new(doc_id: DocId, positions: Positions) -> Self{
+    pub fn new(doc_id: DocId, positions: Positions) -> Self {
         Posting(doc_id, positions)
     }
 
-    //TODO: Does it have an impact if we declare the
-    //#[inline]-attribute on these kinds of functions?
+    // TODO: Does it have an impact if we declare the
+    // #[inline]-attribute on these kinds of functions?
     pub fn doc_id(&self) -> &DocId {
         &self.0
     }
@@ -30,9 +31,54 @@ impl Posting {
     }
 }
 
-//When we compare postings, we usually only care about doc_ids.
-//For comparisons that consider positions have a look at
-//`index::boolean_index::query_result_iterator::nary_query_iterator::positional_intersect` ...
+pub struct PostingDecoder<R: Read> {
+    decoder: VByteDecoder<R>,
+    last_doc_id: u64
+}
+
+impl<R: Read> PostingDecoder<R> {
+    pub fn new(read: R) -> Self {
+        PostingDecoder{
+            decoder: VByteDecoder::new(read),
+            last_doc_id: 0
+        }
+    }
+}
+
+impl<R: Read> Iterator for PostingDecoder<R> {
+    type Item = Posting;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let delta_doc_id = try_option!(self.decoder.next()) as u64;
+        let positions_len = try_option!(self.decoder.next());
+        let mut positions = Vec::with_capacity(positions_len as usize);
+        let mut last_position = 0;
+        for _ in 0..positions_len {
+            last_position += try_option!(self.decoder.next());
+            positions.push(last_position as u32);
+        }
+        self.last_doc_id += delta_doc_id;
+        Some(Posting::new(self.last_doc_id, positions))
+    }    
+}
+
+impl<R: Read> SeekingIterator for PostingDecoder<R> {
+    type Item = Posting;
+
+    fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
+        loop {
+            let v = try_option!(self.next());
+            if v >= *other {
+                return Some(v);
+            }
+        }
+    }    
+}
+        
+
+// When we compare postings, we usually only care about doc_ids.
+// For comparisons that consider positions have a look at
+// `index::boolean_index::query_result_iterator::nary_query_iterator::positional_intersect` ...
 impl Ord for Posting {
     fn cmp(&self, other: &Self) -> Ordering {
         self.doc_id().cmp(other.doc_id())
@@ -42,7 +88,7 @@ impl Ord for Posting {
 impl PartialEq for Posting {
     fn eq(&self, other: &Self) -> bool {
         self.doc_id().eq(other.doc_id())
-    }    
+    }
 }
 
 impl PartialOrd for Posting {
@@ -53,10 +99,11 @@ impl PartialOrd for Posting {
 
 pub fn decode_from_storage(storage: &ChunkedStorage, id: u64) -> Option<Listing> {
     // Get hot listing
-    let mut chunk = storage.get_current(id);
+    let mut chunk = storage.get(id);
     let listing = decode_from_chunk_ref(&mut chunk).unwrap();
     Some(listing)
 }
+
 
 /// Returns the decoded Listing or the (`doc_id`, `position`) pair where an error occured
 fn decode_from_chunk_ref<R: Read>(read: &mut R) -> Result<Listing, (usize, usize)> {
@@ -114,12 +161,5 @@ impl ByteDecodable for Vec<Posting> {
         } else {
             Err(DecodeError::MalformedInput)
         }
-    }
-}
-
-impl ByteDecodable for Posting {
-    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        //TODO:
-        Ok(Posting::new(0, vec![]))
     }
 }

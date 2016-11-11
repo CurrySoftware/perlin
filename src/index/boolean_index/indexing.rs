@@ -145,7 +145,7 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
             let uterm_id = term_id as usize;
             // Get chunk to write to or create if unknown
             let mut stor_chunk = if uterm_id < threshold {
-                storage.get_current_mut(term_id)
+                storage.get_mut(term_id)
             } else {
                 storage.new_chunk(term_id)
             };

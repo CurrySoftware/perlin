@@ -1,4 +1,5 @@
 use std::io;
+use std::marker::PhantomData;
 
 use utils::owning_iterator::SeekingIterator;
 
@@ -20,16 +21,25 @@ pub struct ChunkRef<'a> {
 
 pub struct ChunkIter<'a, T: ByteDecodable> {
     data: ChunkRef<'a>,
-    peeked: Option<T>
+    _type: PhantomData<T>
 }
 
+impl<'a, T:ByteDecodable> ChunkIter<'a, T> {
+    pub fn new(data: ChunkRef<'a>) -> Self {
+        ChunkIter{
+            data: data,
+            _type: PhantomData
+        }
+    }
+}
 
 impl<'a, T: ByteDecodable> Iterator for ChunkIter<'a, T> {
     type Item = T;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
+        //TODO: Implement delta decoding in some way
         T::decode(&mut self.data).ok()
-    }       
+    }
 }
 
 impl<'a, T: ByteDecodable + Ord> SeekingIterator for ChunkIter<'a, T> {
@@ -42,20 +52,7 @@ impl<'a, T: ByteDecodable + Ord> SeekingIterator for ChunkIter<'a, T> {
                 return Some(v);
             }
         }
-    }
-    
-    fn peek_seek(&mut self, other: &Self::Item) -> Option<&Self::Item> {
-        loop {
-            let v = try_option!(self.next());
-            if v >= *other  {
-                self.peeked = Some(v);
-                return match self.peeked {
-                    Some(ref value) => Some(value),
-                    None => None
-                };
-            }
-        }
-    }
+    }    
 }
 
 // The idea here is the abstract the inner workings of
@@ -113,15 +110,13 @@ impl<'a> io::Read for ChunkRef<'a> {
 }
 
 impl<'a> ChunkRef<'a> {
-
     pub fn new(chunk: &'a HotIndexingChunk, archive: &'a Box<Storage<IndexingChunk>>) -> Self {
         ChunkRef {
             read_ptr: 0,
             chunk: chunk,
-            archive: archive            
+            archive: archive,
         }
     }
-    
 }
 
 impl<'a> MutChunkRef<'a> {

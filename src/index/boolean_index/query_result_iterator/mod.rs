@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 
 use index::boolean_index::boolean_query::*;
-use index::boolean_index::posting::Posting;
+use index::boolean_index::posting::{PostingDecoder, Posting};
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
-use utils::owning_iterator::SeekingIterator;
-use chunked_storage::chunk_ref::ChunkIter;
+use utils::owning_iterator::{PeekableSeekable, SeekingIterator};
+use chunked_storage::chunk_ref::ChunkRef;
 
 pub mod nary_query_iterator;
 
@@ -16,7 +16,7 @@ pub mod nary_query_iterator;
 /// types
 pub enum QueryResultIterator<'a> {
     Empty,
-    Atom(usize, ChunkIter<'a, Posting>),
+    Atom(usize, PostingDecoder<ChunkRef<'a>>),
     NAry(NAryQueryIterator<'a>),
     Filter(FilterIterator<'a>),
 }
@@ -72,15 +72,6 @@ impl<'a> SeekingIterator for QueryResultIterator<'a> {
             QueryResultIterator::Filter(ref mut iter) => iter.next_seek(target),
         }
     }
-
-    fn peek_seek(&mut self, target: &Self::Item) -> Option<&Self::Item> {
-        match *self {
-            QueryResultIterator::Empty => None,
-            QueryResultIterator::Atom(_, ref mut iter) => iter.peek_seek(target),
-            QueryResultIterator::NAry(ref mut iter) => iter.peek_seek(target),
-            QueryResultIterator::Filter(ref mut iter) => iter.peek_seek(target),
-        }
-    }
 }
 
 impl<'a> QueryResultIterator<'a> {
@@ -108,42 +99,27 @@ impl<'a> QueryResultIterator<'a> {
             QueryResultIterator::Atom(rpos, _) => rpos,
             _ => 0,
         }
+    }
 
+    pub fn peekable_seekable(self) -> PeekableSeekable<Self> {
+        PeekableSeekable::new(self)
     }
 }
 
 pub struct FilterIterator<'a> {
     operator: FilterOperator,
-    sand: Box<QueryResultIterator<'a>>,
-    sieve: Box<QueryResultIterator<'a>>,
-    peeked_value: Option<Option<Posting>>,
+    sand: Box<PeekableSeekable<QueryResultIterator<'a>>>,
+    sieve: Box<PeekableSeekable<QueryResultIterator<'a>>>,
 }
 
 impl<'a> Iterator for FilterIterator<'a> {
     type Item = Posting;
 
     fn next(&mut self) -> Option<Posting> {
-        if self.peeked_value.is_none() {
-            match self.operator {
-                FilterOperator::Not => self.next_not(),
-            }
-        } else {
-           self.peeked_value.take().unwrap()
+        match self.operator {
+            FilterOperator::Not => self.next_not(),
         }
     }
-
-    // fn peek(&'a self) -> Option<&'a Posting> {
-    //     let mut peeked_value = self.peeked_value.borrow_mut();
-    //     if peeked_value.is_none() {
-    //         *peeked_value = Some(self.next().map(|p| p as *const Posting));
-    //     }
-    //     unsafe { peeked_value.unwrap().map(|p| &*p) }
-    // }
-
-
-    // fn len(&self) -> usize {
-    //     self.estimate_length()
-    // }
 }
 
 impl<'a> SeekingIterator for FilterIterator<'a> {
@@ -151,50 +127,34 @@ impl<'a> SeekingIterator for FilterIterator<'a> {
 
     // TODO: Write meaningful tests for this implementation
     fn next_seek(&mut self, target: &Self::Item) -> Option<Self::Item> {
-        // let mut peeked_value = self.peeked_value.borrow_mut();
-        // if peeked_value.is_some() {
-        //     if peeked_value.unwrap() == Some(target) {
-        //         return unsafe { peeked_value.take().unwrap().map(|p| &*p) };
-        //     }
-        //     *peeked_value = None;
-        // }
-        // self.sand.peek_seek(target);
-        // self.next()
-        //TODO:
-        None
-    }
-
-    fn peek_seek(&mut self, target: &Self::Item) -> Option<&Self::Item> {
-        //TODO:
-        
-        // let mut peeked_value = self.peeked_value.borrow_mut();
-        // if peeked_value.is_none() {
-        //     *peeked_value = Some(self.next_seek(target).map(|p| p as *const Posting));
-        // }
-        // unsafe { peeked_value.unwrap().map(|p| &*p) }
-        None
+        self.sand.peek_seek(target);
+        self.next()
     }
 }
 
 impl<'a> FilterIterator<'a> {
-    pub fn new(operator: FilterOperator, sand: Box<QueryResultIterator<'a>>, sieve: Box<QueryResultIterator<'a>>) -> Self {
+    pub fn new(operator: FilterOperator,
+               sand: Box<PeekableSeekable<QueryResultIterator<'a>>>,
+               sieve: Box<PeekableSeekable<QueryResultIterator<'a>>>)
+               -> Self {
         FilterIterator {
             operator: operator,
             sand: sand,
             sieve: sieve,
-            peeked_value: None,
         }
     }
 
 
     fn estimate_length(&self) -> usize {
-        let sand_len = self.sand.estimate_length();
-        let sieve_len = self.sieve.estimate_length();
-        if sand_len > sieve_len {
-            sand_len - sieve_len
-        } else {
-            0
-        }
+        //TODO: 
+        0
+        // let sand_len = self.sand.estimate_length();
+        // let sieve_len = self.sieve.estimate_length();
+        // if sand_len > sieve_len {
+        //     sand_len - sieve_len
+        // } else {
+        //     0
+        // }
     }
 
     fn next_not(&mut self) -> Option<Posting> {
@@ -224,7 +184,7 @@ mod tests {
     use index::boolean_index::tests::prepare_index;
 
 
-    //TODO:
+    // TODO:
     // #[test]
     // fn peek() {
     //     let index = prepare_index();
