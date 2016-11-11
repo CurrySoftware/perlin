@@ -4,7 +4,7 @@ use std::path::Path;
 
 use storage::{Storage, Result, ByteEncodable, ByteDecodable};
 use chunked_storage::indexing_chunk::HotIndexingChunk;
-use chunked_storage::chunk_ref::{ChunkIter, ChunkRef, MutChunkRef};
+use chunked_storage::chunk_ref::{ChunkRef, MutChunkRef};
 pub use chunked_storage::indexing_chunk::IndexingChunk;
 
 
@@ -78,11 +78,6 @@ impl ChunkedStorage {
     #[inline]
     pub fn get(&self, id: u64) -> ChunkRef {
         ChunkRef::new(&self.hot_chunks[id as usize], &self.archive)        
-    }
-
-    #[inline]
-    pub fn get_iter<T: ByteDecodable>(&self, id: u64) -> ChunkIter<T> {
-        ChunkIter::new(self.get(id))
     }
 
     #[inline]

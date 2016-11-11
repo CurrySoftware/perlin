@@ -110,7 +110,6 @@ fn sort_and_group_chunk(sync: Arc<AtomicUsize>,
             {
                 let mut posting = grouped_chunk[term_counter - 1].1.last_mut().unwrap();
                 // Check if last doc_id equals this doc_id
-                // TODO: the "posting.doc_id().0" is ugly. Fix it
                 if *posting.doc_id() == doc_id {
                     // If so only push the new position
                     posting.1.push(pos);
@@ -150,6 +149,7 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
                 storage.new_chunk(term_id)
             };
             let base_doc_id = stor_chunk.get_last_doc_id();
+            stor_chunk.increment_postings(listing.len());
             let last_doc_id = try!(write_listing(listing, base_doc_id, &mut stor_chunk));
             stor_chunk.set_last_doc_id(last_doc_id);
         }

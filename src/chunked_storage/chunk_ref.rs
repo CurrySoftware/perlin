@@ -19,42 +19,6 @@ pub struct ChunkRef<'a> {
     archive: &'a Box<Storage<IndexingChunk>>,
 }
 
-pub struct ChunkIter<'a, T: ByteDecodable> {
-    data: ChunkRef<'a>,
-    _type: PhantomData<T>
-}
-
-impl<'a, T:ByteDecodable> ChunkIter<'a, T> {
-    pub fn new(data: ChunkRef<'a>) -> Self {
-        ChunkIter{
-            data: data,
-            _type: PhantomData
-        }
-    }
-}
-
-impl<'a, T: ByteDecodable> Iterator for ChunkIter<'a, T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        //TODO: Implement delta decoding in some way
-        T::decode(&mut self.data).ok()
-    }
-}
-
-impl<'a, T: ByteDecodable + Ord> SeekingIterator for ChunkIter<'a, T> {
-    type Item = T;
-
-    fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
-        loop {
-            let v = try_option!(self.next());
-            if v >= *other {
-                return Some(v);
-            }
-        }
-    }    
-}
-
 // The idea here is the abstract the inner workings of
 // chunked storage and indexing chunk from the index
 // To do this, we implement Read and Write
@@ -117,6 +81,11 @@ impl<'a> ChunkRef<'a> {
             archive: archive,
         }
     }
+
+    #[inline]
+    pub fn get_total_postings(&self) -> usize {
+        self.chunk.get_total_postings()
+    }
 }
 
 impl<'a> MutChunkRef<'a> {
@@ -125,12 +94,19 @@ impl<'a> MutChunkRef<'a> {
             chunk: chunk,
             archive: archive,
         }
+    }    
+
+    #[inline]
+    pub fn increment_postings(&mut self, by: usize) {
+        self.chunk.increment_postings(by);
     }
 
+    #[inline]
     pub fn get_last_doc_id(&self) -> u64 {
         self.chunk.get_last_doc_id()
     }
 
+    #[inline]
     pub fn set_last_doc_id(&mut self, new_id: u64) {
         self.chunk.set_last_doc_id(new_id);
     }

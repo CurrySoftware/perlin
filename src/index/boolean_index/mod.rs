@@ -328,7 +328,9 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
-            QueryResultIterator::Atom(relative_position, PostingDecoder::new(self.chunked_postings.get(*result)))
+            let chunk_ref = self.chunked_postings.get(*result);
+            let len = chunk_ref.get_total_postings();
+            QueryResultIterator::Atom(relative_position, PostingDecoder::new(chunk_ref, len))
         } else {
             QueryResultIterator::Empty
         }
