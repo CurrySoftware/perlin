@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use utils::owning_iterator::{PeekableSeekable, SeekingIterator};
 
 use index::boolean_index::boolean_query::*;
