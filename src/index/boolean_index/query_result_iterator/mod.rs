@@ -75,21 +75,17 @@ impl<'a> SeekingIterator for QueryResultIterator<'a> {
 }
 
 impl<'a> QueryResultIterator<'a> {
-    pub fn next_id(&mut self) -> Option<u64> {
-        self.next().map(|p| *p.doc_id())
-    }
-
+    
     /// Used to be able to sort queries according to their estimated number of
     /// results
     /// This can be used to optimize efficiency on intersecting queries
     fn estimate_length(&self) -> usize {
-        0
-        // match *self {
-        //     QueryResultIterator::Empty => 0,
-        //     QueryResultIterator::Atom(_, ref iter) => iter.len(),
-        //     QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
-        //     QueryResultIterator::Filter(ref iter) => iter.estimate_length(),
-        // }
+        match *self {
+            QueryResultIterator::Empty => 0,
+            QueryResultIterator::Atom(_, ref iter) => iter.size_hint().0,
+            QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
+            QueryResultIterator::Filter(ref iter) => iter.estimate_length(),
+        }
     }
 
     /// Return the relative position of a query-part in the whole query
