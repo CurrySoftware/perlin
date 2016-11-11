@@ -129,39 +129,33 @@ impl<'a> NAryQueryIterator<'a> {
 
     fn next_or(&mut self) -> Option<Posting> {
         // TODO: Probably improveable
+        // Find the smallest current value of all operands
+        let min_doc_id = self.operands
+            .iter_mut()
+            .map(|op| op.peek())
+            .filter(|val| val.is_some())
+            .map(|val| *val.unwrap().doc_id())
+            .min();
 
-        //TODO:
-        None
-        // // Find the smallest current value of all operands
-        // let min_value = self.operands
-        //     .iter_mut()
-        //     .map(|op| op.peek())
-        //     .filter(|val| val.is_some())
-        //     .map(|val| val.unwrap().0)
-        //     .min();
-        // // If there is such a value
-        // if let Some(min) = min_value {
-        //     let mut tmp = None;
-        //     let mut i = 0;
-        //     // Loop over all operands. Advance the ones which currently yield that minimal
-        //     // value
-        //     // Throw the ones out which are empty. Then return the minimal value as
-        //     // reference
-        //     while i < self.operands.len() {
-        //         let v = self.operands[i].peek();
-        //         if v.is_some() {
-        //             if v.unwrap().0 == min {
-        //                 tmp = self.operands[i].next();
-        //             }
-        //             continue;
-        //         }
-        //         self.operands.swap_remove(i);
-        //         i += 1;
-        //     }
-        //     return tmp;
-        // } else {
-        //     return None;
-        // } 
+        // Walk over all operands. Advance those who emit the min value
+        // Kick out thos who emit None
+        if min_doc_id.is_some() {
+            let mut i = 0;
+            let mut tmp = None;
+            while i < self.operands.len() {
+                let v = self.operands[i].peek().map(|p| *p.doc_id());
+                if v.is_none() {
+                    self.operands.swap_remove(i);
+                    continue;
+                } else if v == min_doc_id {
+                    tmp = self.operands[i].next();
+                }
+                i += 1;
+            };
+            return tmp;
+        } else {
+            return None;
+        }
     }
 
     fn next_and(&mut self) -> Option<Posting> {
