@@ -36,7 +36,7 @@ impl<'a> SeekingIterator for NAryQueryIterator<'a> {
 
     fn next_seek(&mut self, target: &Self::Item) -> Option<Self::Item> {
         //Advance operands to `target`
-        for op in self.operands.iter_mut() {
+        for op in &mut self.operands {
             op.peek_seek(target);
         }
         self.next()
@@ -100,7 +100,7 @@ impl<'a> NAryQueryIterator<'a> {
                     // If the doc_id is equal, check positions
                     let position_offset = last_positions_iter as i64 - input.inner().relative_position() as i64;
                     focus_positions = positional_intersect(&focus_positions,
-                                                           &v.positions(),
+                                                           v.positions(),
                                                            (position_offset, position_offset))
                         .iter()
                         .map(|pos| pos.1)
@@ -150,9 +150,9 @@ impl<'a> NAryQueryIterator<'a> {
                 }
                 i += 1;
             };
-            return tmp;
+            tmp
         } else {
-            return None;
+            None
         }
     }
 
