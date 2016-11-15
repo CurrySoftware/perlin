@@ -2,8 +2,7 @@ use std::io::Read;
 use std::cmp::Ordering;
 
 use utils::owning_iterator::SeekingIterator;
-use storage::compression::{vbyte_encode, VByteDecoder};
-use storage::{ByteDecodable, ByteEncodable, DecodeResult, DecodeError};
+use storage::compression::VByteDecoder;
 
 // For each term-document pair the doc_id and the
 // positions of the term inside the document is stored
@@ -25,6 +24,7 @@ impl Posting {
         &self.0
     }
 
+    // TODO: Decode positions lazily
     pub fn positions(&self) -> &Positions {
         &self.1
     }
@@ -33,15 +33,15 @@ impl Posting {
 pub struct PostingDecoder<R: Read> {
     decoder: VByteDecoder<R>,
     last_doc_id: u64,
-    len: usize
+    len: usize,
 }
 
 impl<R: Read> PostingDecoder<R> {
     pub fn new(read: R, len: usize) -> Self {
-        PostingDecoder{
+        PostingDecoder {
             decoder: VByteDecoder::new(read),
             last_doc_id: 0,
-            len: len
+            len: len,
         }
     }
 
@@ -64,7 +64,7 @@ impl<R: Read> Iterator for PostingDecoder<R> {
         }
         self.last_doc_id += delta_doc_id;
         Some(Posting::new(self.last_doc_id, positions))
-    }    
+    }
 }
 
 impl<R: Read> SeekingIterator for PostingDecoder<R> {
@@ -77,9 +77,9 @@ impl<R: Read> SeekingIterator for PostingDecoder<R> {
                 return Some(v);
             }
         }
-    }    
+    }
 }
-        
+
 
 // When we compare postings, we usually only care about doc_ids.
 // For comparisons that consider positions have a look at
@@ -99,46 +99,5 @@ impl PartialEq for Posting {
 impl PartialOrd for Posting {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.doc_id().partial_cmp(other.doc_id())
-    }
-}
-
-
-impl ByteEncodable for Listing {
-    fn encode(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = Vec::new();
-        bytes.append(&mut vbyte_encode(self.len()));
-        for posting in self {
-            bytes.append(&mut vbyte_encode(*posting.doc_id() as usize));
-            bytes.append(&mut vbyte_encode(posting.positions().len() as usize));
-            let mut last_position = 0;
-            for position in &posting.1 {
-                bytes.append(&mut vbyte_encode((*position - last_position) as usize));
-                last_position = *position;
-            }
-        }
-        bytes
-    }
-}
-
-impl ByteDecodable for Vec<Posting> {
-    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read);
-        if let Some(postings_len) = decoder.next() {
-            let mut postings = Vec::with_capacity(postings_len);
-            for _ in 0..postings_len {
-                let doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
-                let positions_len = try!(decoder.next().ok_or(DecodeError::MalformedInput));
-                let mut positions = Vec::with_capacity(positions_len as usize);
-                let mut last_position = 0;
-                for _ in 0..positions_len {
-                    last_position += try!(decoder.next().ok_or(DecodeError::MalformedInput));
-                    positions.push(last_position as u32);
-                }
-                postings.push(Posting::new(doc_id as u64, positions));
-            }
-            Ok(postings)
-        } else {
-            Err(DecodeError::MalformedInput)
-        }
     }
 }
