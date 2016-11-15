@@ -71,6 +71,26 @@ impl<'a> io::Read for ChunkRef<'a> {
     }
 }
 
+//Heavily "inspired" by std::io::Cursor::seek
+impl<'a> io::Seek for ChunkRef<'a> {
+    fn seek(&mut self, style: io::SeekFrom) -> io::Result<u64> {
+        use std::io::SeekFrom;
+       let pos = match style {
+            SeekFrom::Start(n) => { self.read_ptr = n as usize; return Ok(n) }
+            SeekFrom::End(n) => self.bytes_len() as i64 + n,
+            SeekFrom::Current(n) => self.read_ptr as i64 + n,
+        };
+
+        if pos < 0 {
+            Err(io::Error::new(io::ErrorKind::InvalidInput,
+                           "invalid seek to a negative position"))
+        } else {
+            self.read_ptr = pos as usize;
+            Ok(self.read_ptr as u64)
+        }
+    }   
+}
+
 impl<'a> ChunkRef<'a> {
     pub fn new(chunk: &'a HotIndexingChunk, archive: &'a Box<Storage<IndexingChunk>>) -> Self {
         ChunkRef {
@@ -81,8 +101,18 @@ impl<'a> ChunkRef<'a> {
     }
 
     #[inline]
+    pub fn bytes_len(&self) -> usize {
+        (self.chunk.archived_chunks().len() + 1) * SIZE - self.chunk.capacity as usize
+    }
+
+    #[inline]
     pub fn get_total_postings(&self) -> usize {
         self.chunk.get_total_postings()
+    }
+
+    #[inline]
+    pub fn doc_id_offset(&self, doc_id: &u64) -> (u64, usize) {
+        self.chunk.doc_id_offset(doc_id)
     }
 }
 

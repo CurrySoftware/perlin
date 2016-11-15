@@ -327,9 +327,8 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
         if let Some(result) = self.term_ids.get(atom) {
-            let chunk_ref = self.chunked_postings.get(*result);
-            let len = chunk_ref.get_total_postings();
-            QueryResultIterator::Atom(relative_position, PostingDecoder::new(chunk_ref, len))
+            QueryResultIterator::Atom(relative_position,
+                                      PostingDecoder::new(self.chunked_postings.get(*result)))
         } else {
             QueryResultIterator::Empty
         }
@@ -469,31 +468,37 @@ mod tests {
     #[test]
     fn inorder_query() {
         let index = prepare_index();
+        println!("First");
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 0), QueryAtom::new(1, 1)]))
-            .collect::<Vec<_>>() == vec![0]);
+                .collect::<Vec<_>>() == vec![0]);
+                println!("First");
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(1, 0), QueryAtom::new(0, 1)]))
-            .collect::<Vec<_>>() == vec![2]);
+                .collect::<Vec<_>>() == vec![2]);
+                println!("First");
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 0), QueryAtom::new(1, 2)]))
             .collect::<Vec<_>>() == vec![1]);
-
+        println!("First");
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(2, 2),
                                                           QueryAtom::new(1, 1),
                                                           QueryAtom::new(0, 0)]))
-            .collect::<Vec<_>>() == vec![0]);
+                .collect::<Vec<_>>() == vec![0]);
+                println!("First");
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 2),
                                                           QueryAtom::new(1, 1),
                                                           QueryAtom::new(2, 0)]))
-            .collect::<Vec<_>>() == vec![2]);
+                .collect::<Vec<_>>() == vec![2]);
+                println!("First");
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 2),
                                                           QueryAtom::new(1, 1),
                                                           QueryAtom::new(3, 0)]))
-            .collect::<Vec<_>>() == vec![]);
+                .collect::<Vec<_>>() == vec![]);
+                println!("First");
     }
 
     #[test]

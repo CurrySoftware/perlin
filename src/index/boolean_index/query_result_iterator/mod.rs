@@ -14,7 +14,7 @@ pub mod nary_query_iterator;
 /// types
 pub enum QueryResultIterator<'a> {
     Empty,
-    Atom(usize, PostingDecoder<ChunkRef<'a>>),
+    Atom(usize, PostingDecoder<'a>),
     NAry(NAryQueryIterator<'a>),
     Filter(FilterIterator<'a>),
 }

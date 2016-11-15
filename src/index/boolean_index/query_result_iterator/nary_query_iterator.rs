@@ -95,6 +95,7 @@ impl<'a> NAryQueryIterator<'a> {
                     continue;
                 }
                 // Get the next doc_id >= focus for the current iterator
+                println!("Seeking {}", focus.doc_id()); 
                 let mut v = try_option!(input.next_seek(&focus));
                 if v.0 == focus.0 {
                     // If the doc_id is equal, check positions

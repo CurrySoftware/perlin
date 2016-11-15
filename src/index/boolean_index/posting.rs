@@ -1,8 +1,9 @@
-use std::io::Read;
+use std::io::{Seek, SeekFrom, Read};
 use std::cmp::Ordering;
 
 use utils::owning_iterator::SeekingIterator;
 use storage::compression::VByteDecoder;
+use chunked_storage::chunk_ref::ChunkRef;
 
 // For each term-document pair the doc_id and the
 // positions of the term inside the document is stored
@@ -30,18 +31,18 @@ impl Posting {
     }
 }
 
-pub struct PostingDecoder<R: Read> {
-    decoder: VByteDecoder<R>,
+pub struct PostingDecoder<'a> {
+    decoder: VByteDecoder<ChunkRef<'a>>,
     last_doc_id: u64,
     len: usize,
 }
 
-impl<R: Read> PostingDecoder<R> {
-    pub fn new(read: R, len: usize) -> Self {
+impl<'a> PostingDecoder<'a> {
+    pub fn new(chunk_ref: ChunkRef<'a>) -> Self {
         PostingDecoder {
-            decoder: VByteDecoder::new(read),
+            len: chunk_ref.get_total_postings(),
+            decoder: VByteDecoder::new(chunk_ref),
             last_doc_id: 0,
-            len: len,
         }
     }
 
@@ -50,7 +51,7 @@ impl<R: Read> PostingDecoder<R> {
     }
 }
 
-impl<R: Read> Iterator for PostingDecoder<R> {
+impl<'a> Iterator for PostingDecoder<'a> {
     type Item = Posting;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -67,12 +68,16 @@ impl<R: Read> Iterator for PostingDecoder<R> {
     }
 }
 
-impl<R: Read> SeekingIterator for PostingDecoder<R> {
+impl<'a> SeekingIterator for PostingDecoder<'a> {
     type Item = Posting;
 
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
+        let (doc_id, offset) = self.decoder.underlying().doc_id_offset(other.doc_id());
+        self.last_doc_id = doc_id;
+        self.decoder.seek(SeekFrom::Start(offset as u64)).unwrap();
         loop {
             let v = try_option!(self.next());
+            println!("{}", v.doc_id());
             if v >= *other {
                 return Some(v);
             }

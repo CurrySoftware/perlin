@@ -306,9 +306,9 @@ mod tests {
 
         let chunked_storage = result.join().unwrap().unwrap();
         assert_eq!(chunked_storage.len(), 100);
-        assert_eq!(PostingDecoder::new(chunked_storage.get(0), 0).collect::<Vec<_>>(),
+        assert_eq!(PostingDecoder::new(chunked_storage.get(0)).collect::<Vec<_>>(),
                    vec![Posting::new(0, vec![0u32])]);
-        assert_eq!(PostingDecoder::new(chunked_storage.get(0), 99).collect::<Vec<_>>(),
+        assert_eq!(PostingDecoder::new(chunked_storage.get(0)).collect::<Vec<_>>(),
                    vec![Posting::new(0, vec![0u32])]);
     }
 
@@ -325,7 +325,7 @@ mod tests {
 
         let chunked_storage = result.join().unwrap().unwrap();
         assert_eq!(chunked_storage.len(), 10);
-        assert_eq!(PostingDecoder::new(chunked_storage.get(0), 0).collect::<Vec<_>>(),
+        assert_eq!(PostingDecoder::new(chunked_storage.get(0)).collect::<Vec<_>>(),
                    (0..100).map(|k| Posting::new(k, (0..10).collect::<Vec<_>>())).collect::<Vec<_>>());
 
     }
@@ -344,7 +344,7 @@ mod tests {
 
         let chunked_storage = result.join().unwrap().unwrap();
         assert_eq!(chunked_storage.len(), 1);
-        assert_eq!(PostingDecoder::new(chunked_storage.get(0), 0).collect::<Vec<_>>(),
+        assert_eq!(PostingDecoder::new(chunked_storage.get(0)).collect::<Vec<_>>(),
                    (0..1).map(|k| Posting::new(k, (0..10000).collect::<Vec<_>>())).collect::<Vec<_>>());
     }
 

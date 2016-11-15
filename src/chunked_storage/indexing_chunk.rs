@@ -127,6 +127,36 @@ impl HotIndexingChunk {
         }
     }
 
+
+    // Gets the read offset for a certain doc_id
+    // The guarantee for the offset is
+    // reader.seek(chunk.doc_id_offset(DOCID));
+    // assert!(reader.decode() <= DOCID)
+    pub fn doc_id_offset(&self, doc_id: &u64) -> (u64, usize) {
+        println!("Doc Id Offset {}", doc_id);
+        if self.archived_chunks.is_empty() {
+            return (0, 0);
+        }
+        let mut index = match self.archived_chunks.binary_search_by_key(doc_id, |&(doc_id, _, _)| doc_id) {
+            Ok(index) => index,
+            Err(index) => index
+        };
+
+        let ref_doc_id = self.archived_chunks[index].0;
+        // when chunks are overflowing, first_doc_id and offset are semantically wrong
+        // Therefor we look for the first chunk that statisfis the condition
+        // self.archived_chunks.where(|c| c.doc_id <= doc).map(|c| c.doc_id).max()
+        let mut base_doc_id = 0;
+        while index > 0 {
+            base_doc_id = self.archived_chunks[index - 1].0;
+            if base_doc_id < ref_doc_id {
+                break;
+            }
+            index -= 1;
+        };
+        (base_doc_id, index * SIZE + (self.archived_chunks[index].1 as usize))        
+    }
+    
     pub fn archive(&mut self, at: u32) -> IndexingChunk {
         self.archived_chunks.push((self.first_doc_id, self.offset, at));
         let result = IndexingChunk {

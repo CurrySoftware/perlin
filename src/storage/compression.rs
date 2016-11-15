@@ -23,7 +23,7 @@
 //Clean up!
 
 use std::io;
-use std::io::{Read, Write, Error};
+use std::io::{Seek, SeekFrom, Read, Write, Error};
 
 /// Encode an usigned integer as a variable number of bytes
 pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
@@ -102,10 +102,17 @@ impl<R: Read> VByteDecoder<R> {
     /// Sometimes it is convenient to look at the original bytestream itself
     /// (e.g. when not only vbyte encoded integers are in the bytestream)
     /// This method provides access to the underlying bytestream in form of
-    /// a
-    /// mutable borrow
-    pub fn underlying_iterator(&mut self) -> &mut R {
+    /// a mutable borrow
+    pub fn underlying_mut(&mut self) -> &mut R {
         &mut self.source
+    }
+
+    /// Sometimes it is convenient to look at the original bytestream itself
+    /// (e.g. when not only vbyte encoded integers are in the bytestream)
+    /// This method provides access to the underlying bytestream in form of
+    /// a borrow
+    pub fn underlying(&self) -> &R {
+        &self.source
     }
 }
 
@@ -128,6 +135,27 @@ impl<R: Read> Read for VByteDecoder<R> {
         }
         bytes_read += try!(self.source.read(&mut buf[bytes_read..]));
         Ok(bytes_read)
+    }
+}
+
+impl<R: Seek + Read> Seek for VByteDecoder<R> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.buf = [0; 10];
+        match pos {
+            SeekFrom::Start(_) => {
+                self.filled = 0;        
+                self.source.seek(pos)
+            },
+            SeekFrom::Current(offset) => {
+                let f = self.filled as i64;
+                self.filled = 0;
+                self.source.seek(SeekFrom::Current(offset - f))
+            },
+            SeekFrom::End(_) => {
+                self.filled = 0;
+                self.source.seek(pos)
+            }
+        }
     }
 }
 
@@ -184,7 +212,10 @@ mod tests {
 
     use super::*;
     use std;
-
+    use std::io::{Seek, SeekFrom};
+    use std::io::Cursor;
+    use std::io::Read;
+    
     #[test]
     fn test_heapless_vbyte_encode() {
         assert_eq!(VByteEncoded::new(0).data[9], 0x80);
@@ -225,6 +256,54 @@ mod tests {
         assert_eq!(VByteDecoder::new(vec![0x80].as_slice()).collect::<Vec<_>>(),
                    vec![0]);
     }
+
+    #[test]
+    fn overflowing() {
+        assert_eq!(VByteDecoder::new(vec![0x81; 255].as_slice()).collect::<Vec<_>>(),
+                   vec![1; 255]);
+    }
+
+    #[test]
+    fn more_data() {
+        let data = vec![0x80, 0x01, 0x82, 0x85, 0x03, 0x7F, 0xFF, 0x80, 0x86, 0x82, 0x85, 0x84, 0x01, 0x83];
+        let mut decoder = VByteDecoder::new(data.as_slice());
+        assert_eq!(decoder.collect::<Vec<_>>(), vec![0, 130, 5, 65535, 0, 6, 2, 5, 4, 131]);
+    }
+
+    #[test]
+    fn seek_basic() {
+        let data = vec![0x80];
+        let mut decoder = VByteDecoder::new(Cursor::new(&data));
+        assert_eq!(decoder.next().unwrap(), 0);
+        assert_eq!(decoder.next(), None);
+        decoder.seek(SeekFrom::Start(0)).unwrap();
+        assert_eq!(decoder.next().unwrap(), 0);
+    }
+
+    #[test]
+    fn seek_extended() {
+        let data = vec![0x80, 0x01, 0x82, 0x85, 0x03, 0x7F, 0xFF, 0x80, 0x86, 0x82, 0x85, 0x84, 0x01, 0x83];
+        let mut decoder = VByteDecoder::new(Cursor::new(&data));
+        assert_eq!(decoder.next().unwrap(), 0);
+        assert_eq!(decoder.seek(SeekFrom::Start(0)).unwrap(), 0);
+        assert_eq!(decoder.next().unwrap(), 0);
+        assert_eq!(decoder.seek(SeekFrom::Current(2)).unwrap(), 3);
+        assert_eq!(decoder.next().unwrap(), 5);
+        assert_eq!(decoder.seek(SeekFrom::End(-2)).unwrap(), 12);
+        assert_eq!(decoder.next().unwrap(), 131);
+        assert_eq!(decoder.next(), None);
+    }
+
+    #[test]
+    fn seek_edge_case() {
+        let data = vec![0x80, 0x01, 0x82, 0x85, 0x03, 0x7F, 0xFF, 0x80, 0x86, 0x82, 0x85, 0x84, 0x01, 0x83];
+        let mut decoder = VByteDecoder::new(Cursor::new(&data));
+        assert_eq!(decoder.next(), Some(0));        
+        decoder.seek(SeekFrom::Start(50));
+        assert_eq!(decoder.next(), None);
+
+    }
+
 
     #[test]
     fn edge_cases() {
