@@ -12,6 +12,7 @@ use storage::compression::VByteEncoded;
 use index::boolean_index::{Result, Error, IndexingError};
 use index::boolean_index::posting::{Posting, Listing};
 use chunked_storage::{ChunkedStorage, IndexingChunk};
+use chunked_storage::chunk_ref::MutChunkRef;
 use storage::Storage;
 
 const SORT_THREADS: usize = 4;
@@ -149,26 +150,29 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
                 storage.new_chunk(term_id)
             };
             let base_doc_id = stor_chunk.get_last_doc_id();
-            stor_chunk.increment_postings(listing.len());
-            let last_doc_id = try!(write_listing(listing, base_doc_id, &mut stor_chunk));
-            stor_chunk.set_last_doc_id(last_doc_id);
+            try!(write_listing(listing, base_doc_id, &mut stor_chunk));
         }
     }
     Ok(storage)
 }
 
-fn write_listing<W: Write>(listing: Listing, mut base_doc_id: u64, target: &mut W) -> Result<u64> {
+fn write_listing(listing: Listing, mut base_doc_id: u64, target: &mut MutChunkRef) -> Result<u64> {
     for Posting(doc_id, positions) in listing {
+        // Instatiate buffer
+        let mut buf = Vec::with_capacity(positions.len() * 3);
+        // Delta encode
         let delta_doc_id = doc_id - base_doc_id;
+        // Update base id
         base_doc_id = doc_id;
-        try!(VByteEncoded::new(delta_doc_id as usize).write_to(target));
-        try!(VByteEncoded::new(positions.len()).write_to(target));
+        VByteEncoded::new(delta_doc_id as usize).write_to(&mut buf)?;
+        VByteEncoded::new(positions.len()).write_to(&mut buf)?;
         let mut last_position = 0;
         for position in positions {
             let delta_pos = position - last_position;
             last_position = position;
-            try!(VByteEncoded::new(delta_pos as usize).write_to(target));
+            VByteEncoded::new(delta_pos as usize).write_to(&mut buf)?;
         }
+        target.write_posting(base_doc_id, &buf)?;
     }
     Ok(base_doc_id)
 }
@@ -184,6 +188,7 @@ mod tests {
 
     use utils::persistence::Volatile;
     use storage::compression::VByteDecoder;
+    use chunked_storage::ChunkedStorage;
     use index::boolean_index::posting::{Posting, PostingDecoder};
     use storage::RamStorage;
 
@@ -346,15 +351,21 @@ mod tests {
 
     #[test]
     fn write_listing_basic() {
+        let mut storage = ChunkedStorage::new(10, Box::new(RamStorage::new()));
         let listing = vec![Posting::new(0, vec![0, 1, 2]), Posting::new(1, vec![1, 2, 3])];
-        let mut bytes = Vec::new();
-        super::write_listing(listing, 0, &mut bytes).unwrap();
-        let data = VByteDecoder::new(bytes.as_slice()).collect::<Vec<_>>();
+        {
+            let mut chunk = storage.new_chunk(0);
+            super::write_listing(listing, 0, &mut chunk).unwrap();
+        }
+        let ch = storage.get(0);
+        let data = VByteDecoder::new(ch).collect::<Vec<_>>();
         assert_eq!(data, vec![0, 3, 0, 1, 1, 1, 3, 1, 1, 1]);
     }
 
     #[test]
     fn write_listing_real_data() {
+        let mut storage = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+
         let listing = vec![Posting::new(0, vec![16]),
                            Posting::new(1, vec![12, 25]),
                            Posting::new(2, vec![14, 21, 44]),
@@ -391,9 +402,12 @@ mod tests {
                            Posting::new(47, vec![33]),
                            Posting::new(48, vec![19]),
                            Posting::new(49, vec![1])];
-        let mut bytes = Vec::new();
-        super::write_listing(listing, 0, &mut bytes).unwrap();
-        let data = VByteDecoder::new(bytes.as_slice()).collect::<Vec<_>>();
+        {
+            let mut chunk = storage.new_chunk(0);
+            super::write_listing(listing, 0, &mut chunk).unwrap();
+        }
+        let chunk = storage.get(0);
+        let data = VByteDecoder::new(chunk).collect::<Vec<_>>();
         assert_eq!(data[..12].to_vec(),
                    vec![0, 1, 16, 1, 2, 12, 13, 1, 3, 14, 7, 23]);
     }

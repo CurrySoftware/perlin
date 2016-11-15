@@ -18,6 +18,10 @@
 //! assert_eq!(3, three);
 //! ```
 
+
+//TODO: This module is full with now deprecated or obsolete stuff
+//Clean up!
+
 use std::io;
 use std::io::{Read, Write, Error};
 

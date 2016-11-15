@@ -1,4 +1,5 @@
 use std::io;
+use std::io::Write;
 
 use storage::{Storage, StorageError};
 
@@ -44,13 +45,13 @@ impl<'a> io::Write for MutChunkRef<'a> {
 }
 
 impl<'a> io::Read for ChunkRef<'a> {
-    // BULLSHIT. RETHINK THIS!
+    // TODO: Improve and comment this
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut bytes_read = 0;
         loop {
             let chunk_index = self.read_ptr / SIZE;
             if chunk_index < self.chunk.archived_chunks().len() {
-                let chunk_id = self.chunk.archived_chunks()[chunk_index];
+                let chunk_id = self.chunk.archived_chunks()[chunk_index].2;
                 let read = (&self.archive.get(chunk_id as u64).unwrap().get_bytes()[self.read_ptr % SIZE..])
                     .read(&mut buf[bytes_read..])
                     .unwrap();
@@ -91,20 +92,57 @@ impl<'a> MutChunkRef<'a> {
             chunk: chunk,
             archive: archive,
         }
-    }    
-
-    #[inline]
-    pub fn increment_postings(&mut self, by: usize) {
-        self.chunk.increment_postings(by);
     }
 
+    pub fn write_posting(&mut self, doc_id: u64, buf: &[u8]) -> io::Result<()>{
+        self.chunk.add_doc_id(doc_id);
+        self.write_all(buf)?;
+        Ok(())
+    }
+    
     #[inline]
     pub fn get_last_doc_id(&self) -> u64 {
         self.chunk.get_last_doc_id()
     }
+}
 
-    #[inline]
-    pub fn set_last_doc_id(&mut self, new_id: u64) {
-        self.chunk.set_last_doc_id(new_id);
+
+#[cfg(test)]
+mod tests {
+    use std::io::Read;
+    
+    use utils::persistence::Volatile;
+    use chunked_storage::ChunkedStorage;
+    use storage::RamStorage;
+    
+    #[test]
+    fn write_posting_basic() {
+        let mut storage = ChunkedStorage::new(0, Box::new(RamStorage::new()));
+        {
+            let mut chunk = storage.new_chunk(0);
+            let buf = vec![1; 10];
+            chunk.write_posting(0, &buf).unwrap();
+        }
+        
+        let mut buf = Vec::new();
+        let mut chunk = storage.get(0);
+        chunk.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf, vec![1; 10]);
     }
+
+    #[test]
+    fn write_posting_overflowing() {
+        let mut storage = ChunkedStorage::new(0, Box::new(RamStorage::new()));
+        {
+            let mut chunk = storage.new_chunk(0);
+            let buf = vec![1; 1000];
+            chunk.write_posting(0, &buf).unwrap();
+        }
+        
+        let mut buf = Vec::new();
+        let mut chunk = storage.get(0);
+        chunk.read_to_end(&mut buf).unwrap();
+        assert_eq!(buf, vec![1; 1000]);
+    }
+
 }

@@ -8,12 +8,17 @@ use chunked_storage::SIZE;
 
 
 
+//This struct is becoming pretty bloated.
+//TODO: Check what is necessary.
 pub struct HotIndexingChunk {
-    pub capacity: u16,
     last_doc_id: u64,
     total_postings: u64,
-    // TODO: Can we remove that indirection?
-    archived_chunks: Vec<u32>,
+    // TODO: Can we remove the indirection that Vec implies?
+    archived_chunks: Vec<(u64, u16, u32)>,
+    first_doc_id: u64,
+    pub capacity: u16,
+    offset: u16,
+    overflow: bool,
     pub data: [u8; SIZE],
 }
 
@@ -49,8 +54,8 @@ impl fmt::Debug for HotIndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f,
                     "HotIndexingChunk has {} predecessors: {:?}\n And {} spare bytes! Its last document id is {}\n",
-                    self.archived_chunks().len(),
-                    self.archived_chunks(),
+                    self.archived_chunks.len(),
+                    self.archived_chunks,
                     self.capacity,
                     self.last_doc_id));
         try!(write!(f, "Data: {:?}", self.get_bytes()));
@@ -87,6 +92,9 @@ impl HotIndexingChunk {
             capacity: SIZE as u16,
             archived_chunks: Vec::new(),
             total_postings: 0,
+            first_doc_id: 0,
+            offset: 0,
+            overflow: true,
             data: unsafe { mem::uninitialized() },
         }
     }
@@ -97,26 +105,35 @@ impl HotIndexingChunk {
     }
 
     #[inline]
-    pub fn set_last_doc_id(&mut self, new_id: u64) {
-        self.last_doc_id = new_id;
-    }
-
-    #[inline]
-    pub fn increment_postings(&mut self, by: usize) {
-        self.total_postings += by as u64;
-    }
-
-    #[inline]
     pub fn get_total_postings(&self) -> usize {
         self.total_postings as usize
     }
 
+    #[inline]
+    pub fn add_doc_id(&mut self, doc_id: u64) {
+        //Increment last doc id
+        self.last_doc_id = doc_id;
+        //Increment #postings
+        self.total_postings += 1;
+        //If last operation was an archive or new
+        if self.overflow {
+            //set the offset and the first doc id of this chunk
+            //Used to be able to
+            // 1. decode doc_ids faster
+            // 2. be able to remove certain postings
+            self.offset = SIZE as u16 - self.capacity;
+            self.first_doc_id = doc_id;
+            self.overflow = false;
+        }
+    }
+
     pub fn archive(&mut self, at: u32) -> IndexingChunk {
-        self.archived_chunks.push(at);
+        self.archived_chunks.push((self.first_doc_id, self.offset, at));
         let result = IndexingChunk {
             capacity: self.capacity,
             data: self.data,
         };
+        self.overflow = true;
         self.capacity = SIZE as u16;
         result
     }
@@ -125,9 +142,10 @@ impl HotIndexingChunk {
         &self.data[0..SIZE - self.capacity as usize] as &[u8]
     }
 
-    pub fn archived_chunks(&self) -> &Vec<u32> {
+    pub fn archived_chunks(&self) -> &Vec<(u64, u16, u32)> {
         &self.archived_chunks
-    }   
+    }
+    
 }
 
 impl ByteDecodable for IndexingChunk {
@@ -166,16 +184,25 @@ impl ByteDecodable for HotIndexingChunk {
             let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let last_doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let total_postings = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            let first_doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            let offset = try!(decoder.next().ok_or(DecodeError::MalformedInput));
+            let overflow = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let archived_chunks_len = try!(decoder.next().ok_or(DecodeError::MalformedInput));
             let mut archived_chunks = Vec::with_capacity(archived_chunks_len);
             for _ in 0..archived_chunks_len {
-                archived_chunks.push(try!(decoder.next().ok_or(DecodeError::MalformedInput)) as u32);
+                let doc_id = try!(decoder.next().ok_or(DecodeError::MalformedInput)) as u64;
+                let offset = try!(decoder.next().ok_or(DecodeError::MalformedInput)) as u16;
+                let chunk_id = decoder.next().ok_or(DecodeError::MalformedInput)? as u32;
+                archived_chunks.push((doc_id, offset, chunk_id));
             }
             result = HotIndexingChunk {
                 capacity: capacity as u16,
                 last_doc_id: last_doc_id as u64,
                 total_postings: total_postings as u64,
                 archived_chunks: archived_chunks,
+                first_doc_id: first_doc_id as u64,
+                offset: offset as u16,
+                overflow: overflow == 0,
                 data: unsafe { mem::uninitialized() },
             };
         }
@@ -192,9 +219,14 @@ impl ByteEncodable for HotIndexingChunk {
             VByteEncoded::new(self.capacity as usize).write_to(write_ptr).unwrap();
             VByteEncoded::new(self.last_doc_id as usize).write_to(write_ptr).unwrap();
             VByteEncoded::new(self.total_postings as usize).write_to(write_ptr).unwrap();
+            VByteEncoded::new(self.first_doc_id as usize).write_to(write_ptr).unwrap();
+            VByteEncoded::new(self.offset as usize).write_to(write_ptr).unwrap();
+            VByteEncoded::new(self.overflow as usize).write_to(write_ptr).unwrap();
             VByteEncoded::new(self.archived_chunks.len()).write_to(write_ptr).unwrap();
-            for i in &self.archived_chunks {
-                VByteEncoded::new(*i as usize).write_to(write_ptr).unwrap();
+            for &(doc_id, offset, chunk_id) in &self.archived_chunks {
+                VByteEncoded::new(doc_id as usize).write_to(write_ptr).unwrap();
+                VByteEncoded::new(offset as usize).write_to(write_ptr).unwrap();
+                VByteEncoded::new(chunk_id as usize).write_to(write_ptr).unwrap();                
             }
         }
         result.extend_from_slice(&self.data);
@@ -207,8 +239,9 @@ mod tests{
 
     mod hot_indexing_chunk {
         use super::super::*;
-        use storage::{ByteDecodable, ByteEncodable};
-        use chunked_storage::SIZE;
+        use utils::persistence::Volatile;
+        use storage::{ByteDecodable, ByteEncodable, RamStorage};
+        use chunked_storage::{ChunkedStorage, SIZE};        
         
         #[test]
         fn encoding_basic() {
@@ -258,8 +291,47 @@ mod tests{
         fn last_doc_id() {
             let mut chunk = HotIndexingChunk::new();
             assert_eq!(chunk.get_last_doc_id(), 0);
-            chunk.set_last_doc_id(100);
+            chunk.add_doc_id(100);
             assert_eq!(chunk.get_last_doc_id(), 100);
+        }
+
+        #[test]
+        fn add_doc_id_basic() {
+            let mut chunk = HotIndexingChunk::new();
+            assert_eq!(chunk.get_last_doc_id(), 0);
+            assert_eq!(chunk.first_doc_id, 0);
+            assert_eq!(chunk.offset, 0);
+            assert_eq!(chunk.overflow, true);
+            chunk.add_doc_id(100);
+            assert_eq!(chunk.get_last_doc_id(), 100);
+            assert_eq!(chunk.first_doc_id, 100);
+            assert_eq!(chunk.offset, 0);
+            assert_eq!(chunk.overflow, false);
+            chunk.add_doc_id(101);
+            assert_eq!(chunk.get_last_doc_id(), 101);
+            assert_eq!(chunk.first_doc_id, 100);
+            assert_eq!(chunk.offset, 0);
+            assert_eq!(chunk.overflow, false);
+        }
+
+        #[test]
+        fn add_doc_id_extended() {
+            let mut chunk = HotIndexingChunk::new();
+            assert_eq!(chunk.get_last_doc_id(), 0);
+            assert_eq!(chunk.first_doc_id, 0);
+            assert_eq!(chunk.offset, 0);
+            assert_eq!(chunk.overflow, true);
+            chunk.add_doc_id(100);
+            assert_eq!(chunk.get_last_doc_id(), 100);
+            assert_eq!(chunk.first_doc_id, 100);
+            assert_eq!(chunk.offset, 0);
+            assert_eq!(chunk.overflow, false);
+            chunk.overflow = true;
+            chunk.add_doc_id(101);
+            assert_eq!(chunk.get_last_doc_id(), 101);
+            assert_eq!(chunk.first_doc_id, 101);
+            assert_eq!(chunk.offset, 0);
+            assert_eq!(chunk.overflow, false);
         }
     }
 
