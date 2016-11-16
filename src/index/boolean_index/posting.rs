@@ -71,13 +71,25 @@ impl<'a> Iterator for PostingDecoder<'a> {
 impl<'a> SeekingIterator for PostingDecoder<'a> {
     type Item = Posting;
 
+    //TODO: Rethink and explain this method
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
+        println!("NEXTSEEK {:?}", other);
+        if self.last_doc_id >= *other.doc_id() {
+            return self.next();
+        }
+        println!("Seeking");
         let (doc_id, offset) = self.decoder.underlying().doc_id_offset(other.doc_id());
-        self.last_doc_id = doc_id;
         self.decoder.seek(SeekFrom::Start(offset as u64)).unwrap();
+        println!("{},{}", doc_id, offset);
+        let mut v = try_option!(self.next());
+        println!("{:?}", v);
+        v.0 = doc_id;
+        self.last_doc_id = doc_id;        
+        if v >= *other {
+            return Some(v);
+        }
         loop {
             let v = try_option!(self.next());
-            println!("{}", v.doc_id());
             if v >= *other {
                 return Some(v);
             }
@@ -105,4 +117,60 @@ impl PartialOrd for Posting {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.doc_id().partial_cmp(other.doc_id())
     }
+}
+
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+        
+    use utils::persistence::Volatile;
+    use utils::owning_iterator::SeekingIterator;
+    use chunked_storage::ChunkedStorage;
+    use storage::RamStorage;
+
+    #[test]
+    fn decoder() {
+        let mut storage = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        {
+            let mut chunk = storage.new_chunk(0);
+            let data = vec![0x81, 0x81, 0x80];
+            for i in 1..1000 {
+                chunk.write_posting(i, &data).unwrap();
+            }
+        }
+        {
+            let decoder = PostingDecoder::new(storage.get(0));
+            assert_eq!(decoder.collect::<Vec<_>>(), (1..1000).map(|i| Posting::new(i, vec![0])).collect::<Vec<_>>());
+        }
+    }
+    
+    #[test]
+    fn seek_decoding() {
+        let mut storage = ChunkedStorage::new(10, Box::new(RamStorage::new()));
+        {
+            let mut chunk = storage.new_chunk(0);
+            let data = vec![0x81, 0x81, 0x80];
+            for i in 1..1000 {
+                chunk.write_posting(i, &data).unwrap();
+            }
+        }
+        {
+            let mut decoder = PostingDecoder::new(storage.get(0));
+            assert_eq!(decoder.next_seek(&Posting::new(5, vec![0])), Some(Posting::new(5, vec![0])));
+            assert_eq!(decoder.next_seek(&Posting::new(10, vec![0])), Some(Posting::new(10, vec![0])));
+            assert_eq!(decoder.next_seek(&Posting::new(100, vec![0])).unwrap(), Posting::new(100, vec![0]));
+            assert_eq!(decoder.next().unwrap(), Posting::new(101, vec![0]));
+            assert_eq!(decoder.next_seek(&Posting::new(200, vec![0])).unwrap(), Posting::new(200, vec![0]));
+            assert_eq!(decoder.next().unwrap(), Posting::new(201, vec![0]));
+            assert_eq!(decoder.next_seek(&Posting::new(800, vec![0])).unwrap(), Posting::new(800, vec![0]));
+            assert_eq!(decoder.next().unwrap(), Posting::new(801, vec![0]));
+            assert_eq!(decoder.next_seek(&Posting::new(997, vec![0])).unwrap(), Posting::new(997, vec![0]));
+            assert_eq!(decoder.next().unwrap(), Posting::new(998, vec![0]));
+            assert_eq!(decoder.next().unwrap(), Posting::new(999, vec![0]));
+            assert_eq!(decoder.next(), None);
+        }
+        
+    }
+
 }

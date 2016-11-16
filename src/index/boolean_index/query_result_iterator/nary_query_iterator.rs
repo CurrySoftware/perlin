@@ -95,7 +95,6 @@ impl<'a> NAryQueryIterator<'a> {
                     continue;
                 }
                 // Get the next doc_id >= focus for the current iterator
-                println!("Seeking {}", focus.doc_id()); 
                 let mut v = try_option!(input.next_seek(&focus));
                 if v.0 == focus.0 {
                     // If the doc_id is equal, check positions
@@ -159,6 +158,7 @@ impl<'a> NAryQueryIterator<'a> {
 
     fn next_and(&mut self) -> Option<Posting> {
         let mut focus = try_option!(self.operands[0].next()); //Acts as temporary to be compared against
+        println!("Focus: {:?}", focus);
         let mut last_iter = 0; //The iterator that last set 'focus'
         'possible_documents: loop {
             // For every term
@@ -168,12 +168,15 @@ impl<'a> NAryQueryIterator<'a> {
                 if last_iter == i {
                     continue;
                 }
+                
                 let v = try_option!(input.next_seek(&focus));
+                println!("V: {:?}", v);
                 if v.0 > focus.0 {
                     // If it is larger, we are now looking at a different focus.
                     // Reset focus and last_iter. Then start from the beginning
                     focus = v;
                     last_iter = i;
+                    println!("Focus: {:?}", focus);
                     continue 'possible_documents;
                 }
             }

@@ -128,33 +128,30 @@ impl HotIndexingChunk {
     }
 
 
-    // Gets the read offset for a certain doc_id
-    // The guarantee for the offset is
-    // reader.seek(chunk.doc_id_offset(DOCID));
-    // assert!(reader.decode() <= DOCID)
+
+    //TODO: Explain and rethink method
     pub fn doc_id_offset(&self, doc_id: &u64) -> (u64, usize) {
-        println!("Doc Id Offset {}", doc_id);
         if self.archived_chunks.is_empty() {
-            return (0, 0);
+            return (self.first_doc_id, 0);
         }
+        
         let mut index = match self.archived_chunks.binary_search_by_key(doc_id, |&(doc_id, _, _)| doc_id) {
             Ok(index) => index,
-            Err(index) => index,
+            Err(index) => index - 1,
         };
 
+        
         let ref_doc_id = self.archived_chunks[index].0;
         // when chunks are overflowing, first_doc_id and offset are semantically wrong
         // Therefor we look for the first chunk that statisfis the condition
         // self.archived_chunks.where(|c| c.doc_id <= doc).map(|c| c.doc_id).max()
-        let mut base_doc_id = 0;
         while index > 0 {
-            base_doc_id = self.archived_chunks[index - 1].0;
-            if base_doc_id < ref_doc_id {
+            if self.archived_chunks[index - 1].0 < ref_doc_id {
                 break;
             }
             index -= 1;
         }
-        (base_doc_id, index * SIZE + (self.archived_chunks[index].1 as usize))
+        (ref_doc_id, index * SIZE + (self.archived_chunks[index].1 as usize))
     }
 
     pub fn archive(&mut self, at: u32) -> IndexingChunk {
@@ -365,6 +362,21 @@ mod tests {
             assert_eq!(chunk.first_doc_id, 101);
             assert_eq!(chunk.offset, 0);
             assert_eq!(chunk.overflow, false);
+        }
+
+        #[test]
+        fn doc_id_offset() {
+            let mut chunk = HotIndexingChunk::new();
+            chunk.archived_chunks = vec![(0, 0, 1), (24, 3, 2), (56, 15, 3), (77, 8, 13)];
+            assert_eq!(chunk.doc_id_offset(&0), (0, 0));
+            assert_eq!(chunk.doc_id_offset(&1), (0, 0));
+            assert_eq!(chunk.doc_id_offset(&23), (0, 0));
+            assert_eq!(chunk.doc_id_offset(&24), (24, SIZE + 3));
+            assert_eq!(chunk.doc_id_offset(&25), (24, SIZE + 3));
+            assert_eq!(chunk.doc_id_offset(&55), (24, SIZE + 3));
+            assert_eq!(chunk.doc_id_offset(&56), (56, SIZE * 2 + 15));
+            assert_eq!(chunk.doc_id_offset(&77), (77, SIZE * 3 + 8));
+            assert_eq!(chunk.doc_id_offset(&78), (77, SIZE * 3 + 8));
         }
     }
 
