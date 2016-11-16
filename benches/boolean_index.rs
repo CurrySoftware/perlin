@@ -1,5 +1,5 @@
-//These benchmarks should currently not be considered complete, extensive or significant.
-//Also indexing is currently too slow. So using them is not really fun.
+// These benchmarks should currently not be considered complete, extensive or significant.
+// Also indexing is currently too slow. So using them is not really fun.
 #![feature(test)]
 extern crate rand;
 extern crate test;
@@ -84,8 +84,15 @@ macro_rules! build_bench {
 
 }
 
-build_bench!(and_seldom_seldom, &QueryBuilder::and(QueryBuilder::atoms(vec![4000, 4002])).build());
-build_bench!(and_frequent_seldom, &QueryBuilder::and(QueryBuilder::atoms(vec![4, 4002])).build());
-build_bench!(and_frequent_frequent, &QueryBuilder::and(QueryBuilder::atoms(vec![4, 5])).build());
+build_bench!(in_order_seldom,
+             &QueryBuilder::in_order(vec![Some(4000), Some(4001), Some(4002)]).build());
+build_bench!(in_order_frequent,
+             &QueryBuilder::in_order(vec![Some(4), Some(5), Some(6)]).build());
+build_bench!(and_seldom_seldom,
+             &QueryBuilder::and(QueryBuilder::atoms(vec![4000, 4002])).build());
+build_bench!(and_frequent_seldom,
+             &QueryBuilder::and(QueryBuilder::atoms(vec![4, 4002])).build());
+build_bench!(and_frequent_frequent,
+             &QueryBuilder::and(QueryBuilder::atoms(vec![4, 5])).build());
 build_bench!(atom_frequent, &QueryBuilder::atom(4).build());
 build_bench!(atom_seldom, &QueryBuilder::atom(4000).build());
