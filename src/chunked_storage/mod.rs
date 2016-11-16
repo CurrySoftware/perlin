@@ -225,5 +225,5 @@ mod tests {
                            (i * 10..i * 10 + 10).map(|i| (i % 255) as u8).collect::<Vec<_>>());
             }
         }
-    }
+    }    
 }

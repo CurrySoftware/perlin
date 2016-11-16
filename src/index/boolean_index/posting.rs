@@ -1,4 +1,4 @@
-use std::io::{Seek, SeekFrom, Read};
+use std::io::{Seek, SeekFrom};
 use std::cmp::Ordering;
 
 use utils::owning_iterator::SeekingIterator;

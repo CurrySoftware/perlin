@@ -1,5 +1,4 @@
 use std::thread;
-use std::io::Write;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicUsize};

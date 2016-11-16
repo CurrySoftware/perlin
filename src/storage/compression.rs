@@ -212,9 +212,7 @@ mod tests {
 
     use super::*;
     use std;
-    use std::io::{Seek, SeekFrom};
-    use std::io::Cursor;
-    use std::io::Read;
+    use std::io::{Cursor, Seek, SeekFrom};
     
     #[test]
     fn test_heapless_vbyte_encode() {
@@ -266,7 +264,7 @@ mod tests {
     #[test]
     fn more_data() {
         let data = vec![0x80, 0x01, 0x82, 0x85, 0x03, 0x7F, 0xFF, 0x80, 0x86, 0x82, 0x85, 0x84, 0x01, 0x83];
-        let mut decoder = VByteDecoder::new(data.as_slice());
+        let decoder = VByteDecoder::new(data.as_slice());
         assert_eq!(decoder.collect::<Vec<_>>(), vec![0, 130, 5, 65535, 0, 6, 2, 5, 4, 131]);
     }
 
@@ -299,9 +297,8 @@ mod tests {
         let data = vec![0x80, 0x01, 0x82, 0x85, 0x03, 0x7F, 0xFF, 0x80, 0x86, 0x82, 0x85, 0x84, 0x01, 0x83];
         let mut decoder = VByteDecoder::new(Cursor::new(&data));
         assert_eq!(decoder.next(), Some(0));        
-        decoder.seek(SeekFrom::Start(50));
+        decoder.seek(SeekFrom::Start(50)).unwrap();
         assert_eq!(decoder.next(), None);
-
     }
 
 

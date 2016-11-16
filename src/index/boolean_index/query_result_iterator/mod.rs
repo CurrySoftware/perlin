@@ -2,7 +2,6 @@ use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::{PostingDecoder, Posting};
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use utils::owning_iterator::{PeekableSeekable, SeekingIterator};
-use chunked_storage::chunk_ref::ChunkRef;
 
 pub mod nary_query_iterator;
 
