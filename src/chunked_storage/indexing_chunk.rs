@@ -137,7 +137,8 @@ impl HotIndexingChunk {
         
         let mut index = match self.archived_chunks.binary_search_by_key(doc_id, |&(doc_id, _, _)| doc_id) {
             Ok(index) => index,
-            Err(index) => index - 1,
+            Err(index) if index > 0 => index - 1,
+            Err(index) => index,
         };
 
         
@@ -377,6 +378,13 @@ mod tests {
             assert_eq!(chunk.doc_id_offset(&56), (56, SIZE * 2 + 15));
             assert_eq!(chunk.doc_id_offset(&77), (77, SIZE * 3 + 8));
             assert_eq!(chunk.doc_id_offset(&78), (77, SIZE * 3 + 8));
+        }
+
+        #[test]
+        fn doc_id_offset_overflow() {
+            let mut chunk = HotIndexingChunk::new();
+            chunk.archived_chunks = vec![(10, 0, 1), (124, 3, 2), (156, 15, 3), (177, 8, 13)];
+            assert_eq!(chunk.doc_id_offset(&0), (10, 0));
         }
     }
 

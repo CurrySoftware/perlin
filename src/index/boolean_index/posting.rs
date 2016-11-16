@@ -73,16 +73,12 @@ impl<'a> SeekingIterator for PostingDecoder<'a> {
 
     //TODO: Rethink and explain this method
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
-        println!("NEXTSEEK {:?}", other);
         if self.last_doc_id >= *other.doc_id() {
             return self.next();
         }
-        println!("Seeking");
         let (doc_id, offset) = self.decoder.underlying().doc_id_offset(other.doc_id());
         self.decoder.seek(SeekFrom::Start(offset as u64)).unwrap();
-        println!("{},{}", doc_id, offset);
         let mut v = try_option!(self.next());
-        println!("{:?}", v);
         v.0 = doc_id;
         self.last_doc_id = doc_id;        
         if v >= *other {
