@@ -1,34 +1,29 @@
-//! This module provides the trait `OwningIterator`.
+//! This module provides the trait `SeekingIterator`.
 //!
-//! An `OwningIterator`, as the name suggests, can both iterate over and own a
-//! collection.
+//! A `SeekingIterator`, as the name suggests, can seek to a certain position.
 //!
-//! The difference to for example `std::vec::IntoIter` is, that it returns
-//! references rather than values.
-//! This is achieved by changing the interface of the `next` function to
-//! include the lifetime of the `OwningIterator` and making it non mutable.
-//! Implementors of this trait need to either use interior mutability (e.g.
-//! `Cell` or `RefCell`) or rely themselves on `OwningIterator`s.
-//!
-//! `OwningIterator`s are used for example in
-//! `perlin::index::boolean_index::query_result_iterator::QueryResultIterator` .
+//! `SeekingIterator`s are implemented for example in
+//! `perlin::index::boolean_index::query_result_iterator::QueryResultIterator`
+//! or `perlin::index::boolean_index::posting::PostingDecoder`
 
 use std::option::Option;
 
+/// Trait that defines an iterator type that allow seeking access.
+/// This is especially usefull for query evaluation.
 pub trait SeekingIterator {
     type Item;
-    // TODO: Define how peek_seek and next_seek should work in terms of iterator progression
-    // Especially in combination with OwningIterator::next, OwningIterator::peek and
-    // QueryResultIterator::peek implementations
-    // For now. Assume next_seek is not called after peek and peek_seek advances the iterator so
-    // that assert_eq!(it.peek_seek(t); it.next(), it.next_seek(t))
+
+    /// Yields an Item that is >= the passed argument or None if no such element exists
     fn next_seek(&mut self, &Self::Item) -> Option<Self::Item>;
 }
 
+/// Wraps an iterator and provides peeking abilities to it.
+/// Very similar to `std::iter::Peekable`
 pub struct PeekableSeekable<I: Iterator> {
     iter: I,
     peeked: Option<I::Item>,
 }
+
 
 
 impl<I> SeekingIterator for PeekableSeekable<I>
@@ -39,6 +34,7 @@ impl<I> SeekingIterator for PeekableSeekable<I>
 
     #[inline]
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
+        //Check if a peeked value exists that matches. Otherwise just forward the request.
         let peeked = self.peeked.take();
         if peeked.is_some() {
             let val = peeked.unwrap();

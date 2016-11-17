@@ -2,5 +2,5 @@
 #[macro_use]
 pub mod try_option;
 
-pub mod owning_iterator;
+pub mod seeking_iterator;
 pub mod persistence;
