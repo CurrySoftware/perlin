@@ -18,10 +18,6 @@
 //! assert_eq!(3, three);
 //! ```
 
-
-//TODO: This module is full with now deprecated or obsolete stuff
-//Clean up!
-
 use std::io;
 use std::io::{Seek, SeekFrom, Read, Write, Error};
 
@@ -55,6 +51,12 @@ impl VByteEncoded {
     /// Return how many bytes are used to encode the number. Min: 1 Max: 10
     pub fn bytes_used(&self) -> u8 {
         self.data[10]
+    }
+
+    /// Access to the written data as slice
+    /// Currently only used in tests
+    pub fn data_buf(&self) -> &[u8] {
+        &self.data[(10 - self.bytes_used()) as usize..10]
     }
 
     /// Writes the given VByteEncoded number to a target.
@@ -127,14 +129,14 @@ impl<R: Seek + Read> Seek for VByteDecoder<R> {
         self.buf = [0; 10];
         match pos {
             SeekFrom::Start(_) => {
-                self.filled = 0;        
+                self.filled = 0;
                 self.source.seek(pos)
-            },
+            }
             SeekFrom::Current(offset) => {
                 let f = self.filled as i64;
                 self.filled = 0;
                 self.source.seek(SeekFrom::Current(offset - f))
-            },
+            }
             SeekFrom::End(_) => {
                 self.filled = 0;
                 self.source.seek(pos)
@@ -165,9 +167,9 @@ impl<R: Read> Iterator for VByteDecoder<R> {
         if (self.filled == 0 && read == 0) || ptr == 10 {
             return None;
         }
-        //Specialcase where 10 bytes are read
-        //In this case the first byte can be maximally 1
-        //Else its corrupt data
+        // Specialcase where 10 bytes are read
+        // In this case the first byte can be maximally 1
+        // Else its corrupt data
         if self.buf[0] > 1 && ptr == 9 {
             return None;
         }
@@ -197,7 +199,7 @@ mod tests {
     use super::*;
     use std;
     use std::io::{Cursor, Seek, SeekFrom};
-    
+
     #[test]
     fn test_heapless_vbyte_encode() {
         assert_eq!(VByteEncoded::new(0).data[9], 0x80);
@@ -209,18 +211,6 @@ mod tests {
         assert_eq!(VByteEncoded::new(0xFFFF).bytes_used(), 3);
         assert_eq!(VByteEncoded::new(std::u64::MAX as usize).data,
                    [1, 127, 127, 127, 127, 127, 127, 127, 127, 255, 10]);
-    }
-
-    #[test]
-    fn test_vbyte_encode() {
-        assert_eq!(vbyte_encode(0), vec![0x80]);
-        assert_eq!(vbyte_encode(5), vec![0x85]);
-        assert_eq!(vbyte_encode(127), vec![0xFF]);
-        assert_eq!(vbyte_encode(128), vec![0x01, 0x80]);
-        assert_eq!(vbyte_encode(130), vec![0x01, 0x82]);
-        assert_eq!(vbyte_encode(255), vec![0x01, 0xFF]);
-        assert_eq!(vbyte_encode(20_000), vec![0x01, 0x1C, 0xA0]);
-        assert_eq!(vbyte_encode(0xFFFF), vec![0x03, 0x7F, 0xFF]);
     }
 
     #[test]
@@ -249,7 +239,8 @@ mod tests {
     fn more_data() {
         let data = vec![0x80, 0x01, 0x82, 0x85, 0x03, 0x7F, 0xFF, 0x80, 0x86, 0x82, 0x85, 0x84, 0x01, 0x83];
         let decoder = VByteDecoder::new(data.as_slice());
-        assert_eq!(decoder.collect::<Vec<_>>(), vec![0, 130, 5, 65535, 0, 6, 2, 5, 4, 131]);
+        assert_eq!(decoder.collect::<Vec<_>>(),
+                   vec![0, 130, 5, 65535, 0, 6, 2, 5, 4, 131]);
     }
 
     #[test]
@@ -280,7 +271,7 @@ mod tests {
     fn seek_edge_case() {
         let data = vec![0x80, 0x01, 0x82, 0x85, 0x03, 0x7F, 0xFF, 0x80, 0x86, 0x82, 0x85, 0x84, 0x01, 0x83];
         let mut decoder = VByteDecoder::new(Cursor::new(&data));
-        assert_eq!(decoder.next(), Some(0));        
+        assert_eq!(decoder.next(), Some(0));
         decoder.seek(SeekFrom::Start(50)).unwrap();
         assert_eq!(decoder.next(), None);
     }
@@ -289,19 +280,24 @@ mod tests {
     #[test]
     fn edge_cases() {
         // 0
-        assert_eq!(VByteDecoder::new(vbyte_encode(0).as_slice()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new(VByteEncoded::new(0).data_buf()).collect::<Vec<_>>(),
                    vec![0]);
 
         // MAX
-        assert_eq!(VByteDecoder::new(vbyte_encode(usize::max_value()).as_slice()).collect::<Vec<_>>(),
+        assert_eq!(VByteDecoder::new(VByteEncoded::new(usize::max_value()).data_buf()).collect::<Vec<_>>(),
                    vec![usize::max_value()]);
 
         // too many bytes = corrupted data
-        assert_eq!(VByteDecoder::new(vec![127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 255].as_slice()).collect::<Vec<_>>(), vec![]);
+        assert_eq!(VByteDecoder::new(vec![127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 255].as_slice())
+                       .collect::<Vec<_>>(),
+                   vec![]);
         // MAX + n = corrupted data
-        assert_eq!(VByteDecoder::new(vec![2, 127, 127, 127, 127, 127, 127, 127, 127, 255].as_slice()).collect::<Vec<_>>(), vec![]);
+        assert_eq!(VByteDecoder::new(vec![2, 127, 127, 127, 127, 127, 127, 127, 127, 255].as_slice())
+                       .collect::<Vec<_>>(),
+                   vec![]);
         // zero-bytes
-        assert_eq!(VByteDecoder::new(vec![0; 100].as_slice()).collect::<Vec<_>>(), vec![]);
+        assert_eq!(VByteDecoder::new(vec![0; 100].as_slice()).collect::<Vec<_>>(),
+                   vec![]);
     }
 
 }
