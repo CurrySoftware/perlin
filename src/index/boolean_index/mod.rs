@@ -20,7 +20,7 @@ use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::posting::PostingDecoder;
 
-use storage::compression::{vbyte_encode, VByteDecoder};
+use storage::compression::{VByteEncoded, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
 use utils::persistence::Persistent;
 
@@ -161,13 +161,11 @@ impl<TTerm> BooleanIndex<TTerm>
             for vocab_entry in &self.term_ids {
                 // Encode term and number of its bytes
                 let term_bytes = vocab_entry.0.encode();
-                let term_length_bytes = vbyte_encode(term_bytes.len());
+                let term_length_bytes = VByteEncoded::new(term_bytes.len());
                 // Encode id
-                let id_bytes = vbyte_encode(*vocab_entry.1 as usize);
-
-                // Append id, term length and term to byte_buffer
-                byte_buffer.extend_from_slice(&id_bytes);
-                byte_buffer.extend_from_slice(&term_length_bytes);
+                VByteEncoded::new(*vocab_entry.1 as usize).write_to(&mut byte_buffer)?;
+                term_length_bytes.write_to(&mut byte_buffer)?;
+                // Append term to byte_buffer
                 byte_buffer.extend_from_slice(&term_bytes);
 
                 // Write if buffer is full
@@ -218,7 +216,7 @@ impl<TTerm> BooleanIndex<TTerm>
                 .create(true)
                 .truncate(true)
                 .open(filename));
-            try!(statistics_file.write(&vbyte_encode(self.document_count)));
+            VByteEncoded::new(self.document_count).write_to(&mut statistics_file)?;
             Ok(())
         } else {
             Err(Error::PersistPathNotSpecified)
@@ -422,21 +420,24 @@ mod tests {
         //                                             BooleanQuery::Atom(QueryAtom::new(0, 12))]))
         //     .collect::<Vec<_>>(), vec![]);
         assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
-                                               vec![BooleanQuery::Atom(QueryAtom::new(0, 14)),
-                                                    BooleanQuery::Atom(QueryAtom::new(0, 12))]))
-            .collect::<Vec<_>>(), vec![1]);
+                                                          vec![BooleanQuery::Atom(QueryAtom::new(0, 14)),
+                                                               BooleanQuery::Atom(QueryAtom::new(0, 12))]))
+                       .collect::<Vec<_>>(),
+                   vec![1]);
         assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
-                                               vec![BooleanQuery::NAry(BooleanOperator::And,
+                                                          vec![BooleanQuery::NAry(BooleanOperator::And,
                                                                        vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                         BooleanQuery::Atom(QueryAtom::new(0, 9))]),
                                                     BooleanQuery::Atom(QueryAtom::new(0, 12))]))
-            .collect::<Vec<_>>(), vec![]);
+                       .collect::<Vec<_>>(),
+                   vec![]);
         assert_eq!(index.execute_query(&BooleanQuery::NAry(BooleanOperator::And,
-                                               vec![BooleanQuery::NAry(BooleanOperator::And,
+                                                          vec![BooleanQuery::NAry(BooleanOperator::And,
                                                                        vec![BooleanQuery::Atom(QueryAtom::new(0, 2)),
                         BooleanQuery::Atom(QueryAtom::new(0, 4))]),
                                                     BooleanQuery::Atom(QueryAtom::new(0, 16))]))
-            .collect::<Vec<_>>(), vec![1]);
+                       .collect::<Vec<_>>(),
+                   vec![1]);
     }
 
     #[test]
@@ -467,10 +468,10 @@ mod tests {
         let index = prepare_index();
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 0), QueryAtom::new(1, 1)]))
-                .collect::<Vec<_>>() == vec![0]);
+            .collect::<Vec<_>>() == vec![0]);
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(1, 0), QueryAtom::new(0, 1)]))
-                .collect::<Vec<_>>() == vec![2]);
+            .collect::<Vec<_>>() == vec![2]);
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 0), QueryAtom::new(1, 2)]))
             .collect::<Vec<_>>() == vec![1]);
@@ -478,17 +479,17 @@ mod tests {
                                                      vec![QueryAtom::new(2, 2),
                                                           QueryAtom::new(1, 1),
                                                           QueryAtom::new(0, 0)]))
-                .collect::<Vec<_>>() == vec![0]);
+            .collect::<Vec<_>>() == vec![0]);
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 2),
                                                           QueryAtom::new(1, 1),
                                                           QueryAtom::new(2, 0)]))
-                .collect::<Vec<_>>() == vec![2]);
+            .collect::<Vec<_>>() == vec![2]);
         assert!(index.execute_query(&BooleanQuery::Positional(PositionalOperator::InOrder,
                                                      vec![QueryAtom::new(0, 2),
                                                           QueryAtom::new(1, 1),
                                                           QueryAtom::new(3, 0)]))
-                .collect::<Vec<_>>() == vec![]);
+            .collect::<Vec<_>>() == vec![]);
     }
 
     #[test]

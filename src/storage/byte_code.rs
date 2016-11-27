@@ -10,20 +10,20 @@ use std::io;
 use std::io::Read;
 use std::result;
 
-use storage::compression::{vbyte_encode, VByteDecoder};
+use storage::compression::VByteDecoder;
 
 /// Wraps the Result of a decoding operation
 pub type DecodeResult<T> = result::Result<T, DecodeError>;
 
 #[derive(Debug)]
 /// Error kinds that can occur during a decoding operation
-pub enum DecodeError{
+pub enum DecodeError {
     /// Error occured during an IO operation
     IO(io::Error),
     /// Some error occured
     Other(Box<Error + Send>),
     /// Error occured due to malformed input
-    MalformedInput
+    MalformedInput,
 }
 
 impl From<io::Error> for DecodeError {
@@ -36,8 +36,8 @@ impl From<io::Error> for DecodeError {
 /// of bytes
 pub trait ByteEncodable {
     /// Encodes the object as a vector of bytes
-    //TODO:
-    //Most probably wrong and should use Write instead of returning a vector of bytes.
+    // TODO:
+    // Most probably wrong and should use Write instead of returning a vector of bytes.
     fn encode(&self) -> Vec<u8>;
 }
 
@@ -133,4 +133,20 @@ impl ByteDecodable for u16 {
             Err(DecodeError::MalformedInput)
         }
     }
+}
+
+/// Encode an usigned integer as a variable number of bytes
+fn vbyte_encode(mut number: usize) -> Vec<u8> {
+    let mut result = Vec::new();
+    loop {
+        result.insert(0, (number % 128) as u8);
+        if number < 128 {
+            break;
+        } else {
+            number /= 128;
+        }
+    }
+    let len = result.len();
+    result[len - 1] += 128;
+    result
 }

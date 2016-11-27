@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::marker::PhantomData;
 
-use storage::compression::{vbyte_encode, VByteDecoder};
+use storage::compression::{VByteEncoded, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable};
 use utils::persistence::Persistent;
 
@@ -125,7 +125,7 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsSt
         // And save the offset and the number of bytes written for later recovery
         self.entries.insert(id, (self.current_offset, bytes.len() as u32));
         // Also write the id, offset and number of bytes written to file for persistence
-        let entry_bytes = encode_entry(self.current_id, id, bytes.len() as u32);
+        let entry_bytes = encode_entry(self.current_id, id, bytes.len() as u32)?;
         if let Err(e) = self.persistent_entries.write_all(&entry_bytes) {
             return Err(StorageError::WriteError(Some(e)));
         }
@@ -137,11 +137,12 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsSt
     }
 }
 
-fn encode_entry(current_id: u64, id: u64, length: u32) -> Vec<u8> {
+
+fn encode_entry(current_id: u64, id: u64, length: u32) -> Result<Vec<u8>> {
     let mut bytes: Vec<u8> = Vec::new();
-    bytes.append(&mut vbyte_encode((id - current_id) as usize));
-    bytes.append(&mut vbyte_encode(length as usize));
-    bytes
+    VByteEncoded::new((id-current_id) as usize).write_to(&mut bytes)?;
+    VByteEncoded::new(length as usize).write_to(&mut bytes)?;
+    Ok(bytes)
 }
 
 fn decode_entry<R: Read>(decoder: &mut VByteDecoder<R>) -> Option<(u32, u32)> {

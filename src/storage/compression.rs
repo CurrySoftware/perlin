@@ -25,22 +25,6 @@
 use std::io;
 use std::io::{Seek, SeekFrom, Read, Write, Error};
 
-/// Encode an usigned integer as a variable number of bytes
-pub fn vbyte_encode(mut number: usize) -> Vec<u8> {
-    let mut result = Vec::new();
-    loop {
-        result.insert(0, (number % 128) as u8);
-        if number < 128 {
-            break;
-        } else {
-            number /= 128;
-        }
-    }
-    let len = result.len();
-    result[len - 1] += 128;
-    result
-}
-
 /// Stores the result of a vbyte encode operation without indirection that a `Vec<u8>` would introduce.
 /// Can thus be used to `vbyte_encode` on the stack
 pub struct VByteEncoded {
