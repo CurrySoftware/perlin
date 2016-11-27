@@ -129,30 +129,44 @@ impl HotIndexingChunk {
 
 
 
-    //TODO: Explain and rethink method
+    /// Get the byte-offset for a certain doc_id when regarding all chunk buffers as one single consecutive buffer.
+    /// We can't always get the correct offset; we can only get the correct chunk.
+    /// In this chunk, the first postigs starts at a certain offset.
+    /// So, we return the chunks index * SIZE + the offset of its first posting + the doc_id of this posting
+    /// This is necessary because doc_ids are delta encoded and dont make sense without decoding prior postings first.
+    /// The whole idea of this process is explained in detail at https://www.perlin-ir.org/post/dont-decode-everything/
+    /// Also, have a look at `index::boolean_index::posting::PostingDecoder::next_seek`
     pub fn doc_id_offset(&self, doc_id: &u64) -> (u64, usize) {
+        // If there are no archived chunks,
+        // return the offset of the first posting in HotIndexingChunk (== 0) + its doc_id
         if self.archived_chunks.is_empty() {
             return (self.first_doc_id, 0);
         }
-        
+
+        // Binary search for the index of the seeked chunk.
         let mut index = match self.archived_chunks.binary_search_by_key(doc_id, |&(doc_id, _, _)| doc_id) {
-            Ok(index) => index,
+            Ok(index) => index,//If we have a chunk that starts with the seeked doc_id its great!
+            // Otherwise, we want one chunk prior
+            // Example: Lets look for 9 in [4, 8, 10, 14]. We want chunk that starts with 8.
+            // Binary search returns index 3, so go one to the left to get the correct chunk
             Err(index) if index > 0 => index - 1,
+            // But not if we are pointing at the leftmost chunk (obviously)
             Err(index) => index,
         };
 
-        
-        let ref_doc_id = self.archived_chunks[index].0;
+        // Get the first doc_id of that chunk
+        let chunk_first_doc_id = self.archived_chunks[index].0;
         // when chunks are overflowing, first_doc_id and offset are semantically wrong
         // Therefor we look for the first chunk that statisfis the condition
         // self.archived_chunks.where(|c| c.doc_id <= doc).map(|c| c.doc_id).max()
         while index > 0 {
-            if self.archived_chunks[index - 1].0 < ref_doc_id {
+            if self.archived_chunks[index - 1].0 < chunk_first_doc_id {
                 break;
             }
             index -= 1;
         }
-        (ref_doc_id, index * SIZE + (self.archived_chunks[index].1 as usize))
+
+        (chunk_first_doc_id, index * SIZE + (self.archived_chunks[index].1 as usize))
     }
 
     pub fn archive(&mut self, at: u32) -> IndexingChunk {
