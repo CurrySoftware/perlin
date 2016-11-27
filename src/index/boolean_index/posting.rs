@@ -1,7 +1,7 @@
 use std::io::{Seek, SeekFrom};
 use std::cmp::Ordering;
 
-use utils::owning_iterator::SeekingIterator;
+use utils::seeking_iterator::SeekingIterator;
 use storage::compression::VByteDecoder;
 use chunked_storage::chunk_ref::ChunkRef;
 
@@ -19,18 +19,23 @@ impl Posting {
         Posting(doc_id, positions)
     }
 
-    // TODO: Does it have an impact if we declare the
-    // #[inline]-attribute on these kinds of functions?
+    #[inline]
     pub fn doc_id(&self) -> &DocId {
         &self.0
     }
 
     // TODO: Decode positions lazily
+    #[inline]
     pub fn positions(&self) -> &Positions {
         &self.1
     }
 }
 
+
+/// This struct abstracts the complexity of decoding postings away from query execution
+/// It allows iterator-like access but also seeking access to postings.
+/// That means, that not all postings have to be decoded for every query term.
+/// To understand more about that have a look at the blog post (TODO: Write Blog Post)
 pub struct PostingDecoder<'a> {
     decoder: VByteDecoder<ChunkRef<'a>>,
     last_doc_id: u64,
@@ -71,19 +76,27 @@ impl<'a> Iterator for PostingDecoder<'a> {
 impl<'a> SeekingIterator for PostingDecoder<'a> {
     type Item = Posting;
 
-    //TODO: Rethink and explain this method
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
+        // Check if the iterator is already too far advanced.        
         if self.last_doc_id >= *other.doc_id() {
             return self.next();
         }
+        // Get the doc_id and offset for the next sensible searching position
         let (doc_id, offset) = self.decoder.underlying().doc_id_offset(other.doc_id());
+        // Seek to the offset
         self.decoder.seek(SeekFrom::Start(offset as u64)).unwrap();
+        // Decode the next posting
         let mut v = try_option!(self.next());
+        // DocId is corrupt, because delta encoding is obviously not compatible with seeking
+        // So overwrite it with the doc_id given to us
         v.0 = doc_id;
-        self.last_doc_id = doc_id;        
+        // Store it for further decoding
+        self.last_doc_id = doc_id;
+        // If this seek already yielded the relevant result, return it
         if v >= *other {
             return Some(v);
         }
+        // Otherwise continue to decode 
         loop {
             let v = try_option!(self.next());
             if v >= *other {
@@ -121,7 +134,7 @@ mod tests{
     use super::*;
         
     use utils::persistence::Volatile;
-    use utils::owning_iterator::SeekingIterator;
+    use utils::seeking_iterator::SeekingIterator;
     use chunked_storage::ChunkedStorage;
     use storage::RamStorage;
 

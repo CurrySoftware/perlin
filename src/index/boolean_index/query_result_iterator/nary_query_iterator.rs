@@ -1,4 +1,4 @@
-use utils::owning_iterator::{PeekableSeekable, SeekingIterator};
+use utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::Posting;
