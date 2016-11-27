@@ -34,8 +34,9 @@
     CLOSED: [2016-10-13 Thu 08:58]
 
 
-** [0/3] pre 0.2
-*** TODO Improve Query performance by lazily decoding IndexingChunks
+** [1/3] pre 0.2
+*** DONE Improve Query performance by lazily decoding IndexingChunks
+    CLOSED: [2016-11-27 Sun 16:36]
 *** TODO Implement mutable indices. Adding and Removing Documents should be possible
 *** TODO Rewrite IndexBuilder to be more ergonomic
 

@@ -77,24 +77,23 @@ impl<'a> SeekingIterator for PostingDecoder<'a> {
     type Item = Posting;
 
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
-        // Check if the iterator is already too far advanced.
-        if self.last_doc_id >= *other.doc_id() {
-            return self.next();
-        }
         // Get the doc_id and offset for the next sensible searching position
         let (doc_id, offset) = self.decoder.underlying().doc_id_offset(other.doc_id());
-        // Seek to the offset
-        self.decoder.seek(SeekFrom::Start(offset as u64)).unwrap();
-        // Decode the next posting
-        let mut v = try_option!(self.next());
-        // DocId is corrupt, because delta encoding is obviously not compatible with seeking
-        // So overwrite it with the doc_id given to us
-        v.0 = doc_id;
-        // Store it for further decoding
-        self.last_doc_id = doc_id;
-        // If this seek already yielded the relevant result, return it
-        if v >= *other {
-            return Some(v);
+        // Check if the iterator is already further advanced then the reference doc_id
+        if self.last_doc_id < doc_id {
+            // Seek to the offset
+            self.decoder.seek(SeekFrom::Start(offset as u64)).unwrap();
+            // Decode the next posting
+            let mut v = try_option!(self.next());
+            // DocId is corrupt, because delta encoding is obviously not compatible with seeking
+            // So overwrite it with the doc_id given to us
+            v.0 = doc_id;
+            // Store it for further decoding
+            self.last_doc_id = doc_id;
+            // If this seek already yielded the relevant result, return it
+            if v >= *other {
+                return Some(v);
+            }
         }
         // Otherwise continue to decode
         loop {
