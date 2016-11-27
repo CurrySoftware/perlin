@@ -35,7 +35,7 @@ impl Posting {
 /// This struct abstracts the complexity of decoding postings away from query execution
 /// It allows iterator-like access but also seeking access to postings.
 /// That means, that not all postings have to be decoded for every query term.
-/// To understand more about that have a look at the blog post (TODO: Write Blog Post)
+/// To understand more about that have a look at the blog post (https://www.perlin-ir.org/post/dont-decode-everything/)
 pub struct PostingDecoder<'a> {
     decoder: VByteDecoder<ChunkRef<'a>>,
     last_doc_id: u64,
@@ -77,7 +77,7 @@ impl<'a> SeekingIterator for PostingDecoder<'a> {
     type Item = Posting;
 
     fn next_seek(&mut self, other: &Self::Item) -> Option<Self::Item> {
-        // Check if the iterator is already too far advanced.        
+        // Check if the iterator is already too far advanced.
         if self.last_doc_id >= *other.doc_id() {
             return self.next();
         }
@@ -96,7 +96,7 @@ impl<'a> SeekingIterator for PostingDecoder<'a> {
         if v >= *other {
             return Some(v);
         }
-        // Otherwise continue to decode 
+        // Otherwise continue to decode
         loop {
             let v = try_option!(self.next());
             if v >= *other {
@@ -130,9 +130,9 @@ impl PartialOrd for Posting {
 
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
-        
+
     use utils::persistence::Volatile;
     use utils::seeking_iterator::SeekingIterator;
     use chunked_storage::ChunkedStorage;
@@ -150,10 +150,11 @@ mod tests{
         }
         {
             let decoder = PostingDecoder::new(storage.get(0));
-            assert_eq!(decoder.collect::<Vec<_>>(), (1..1000).map(|i| Posting::new(i, vec![0])).collect::<Vec<_>>());
+            assert_eq!(decoder.collect::<Vec<_>>(),
+                       (1..1000).map(|i| Posting::new(i, vec![0])).collect::<Vec<_>>());
         }
     }
-    
+
     #[test]
     fn seek_decoding() {
         let mut storage = ChunkedStorage::new(10, Box::new(RamStorage::new()));
@@ -166,20 +167,26 @@ mod tests{
         }
         {
             let mut decoder = PostingDecoder::new(storage.get(0));
-            assert_eq!(decoder.next_seek(&Posting::new(5, vec![0])), Some(Posting::new(5, vec![0])));
-            assert_eq!(decoder.next_seek(&Posting::new(10, vec![0])), Some(Posting::new(10, vec![0])));
-            assert_eq!(decoder.next_seek(&Posting::new(100, vec![0])).unwrap(), Posting::new(100, vec![0]));
+            assert_eq!(decoder.next_seek(&Posting::new(5, vec![0])),
+                       Some(Posting::new(5, vec![0])));
+            assert_eq!(decoder.next_seek(&Posting::new(10, vec![0])),
+                       Some(Posting::new(10, vec![0])));
+            assert_eq!(decoder.next_seek(&Posting::new(100, vec![0])).unwrap(),
+                       Posting::new(100, vec![0]));
             assert_eq!(decoder.next().unwrap(), Posting::new(101, vec![0]));
-            assert_eq!(decoder.next_seek(&Posting::new(200, vec![0])).unwrap(), Posting::new(200, vec![0]));
+            assert_eq!(decoder.next_seek(&Posting::new(200, vec![0])).unwrap(),
+                       Posting::new(200, vec![0]));
             assert_eq!(decoder.next().unwrap(), Posting::new(201, vec![0]));
-            assert_eq!(decoder.next_seek(&Posting::new(800, vec![0])).unwrap(), Posting::new(800, vec![0]));
+            assert_eq!(decoder.next_seek(&Posting::new(800, vec![0])).unwrap(),
+                       Posting::new(800, vec![0]));
             assert_eq!(decoder.next().unwrap(), Posting::new(801, vec![0]));
-            assert_eq!(decoder.next_seek(&Posting::new(997, vec![0])).unwrap(), Posting::new(997, vec![0]));
+            assert_eq!(decoder.next_seek(&Posting::new(997, vec![0])).unwrap(),
+                       Posting::new(997, vec![0]));
             assert_eq!(decoder.next().unwrap(), Posting::new(998, vec![0]));
             assert_eq!(decoder.next().unwrap(), Posting::new(999, vec![0]));
             assert_eq!(decoder.next(), None);
         }
-        
+
     }
 
 }

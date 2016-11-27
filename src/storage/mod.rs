@@ -11,6 +11,8 @@
 //! completely in RAM and `FsStorage` which writes and reads data from disk and
 //! thus allows the handling of much larger collections.
 use std;
+use std::io;
+use std::fmt;
 use std::error::Error;
 use std::sync::Arc;
 
@@ -34,22 +36,35 @@ pub enum StorageError {
     /// The key which should be retrieved could not be found
     KeyNotFound,
     /// General IO error
-    IO(std::io::Error),
+    IO(io::Error),
     /// Error occured during read operation
-    ReadError(Option<std::io::Error>),
+    ReadError(Option<io::Error>),
     /// Error occured during write operation
-    WriteError(Option<std::io::Error>),
+    WriteError(Option<io::Error>),
 }
 
-impl std::fmt::Display for StorageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+
+
+impl fmt::Display for StorageError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl From<std::io::Error> for StorageError {
-    fn from(err: std::io::Error) -> Self {
+impl From<io::Error> for StorageError {
+    fn from(err: io::Error) -> Self {
         StorageError::IO(err)
+    }
+}
+
+impl From<StorageError> for io::Error {
+    fn from(err: StorageError) -> io::Error {
+        return match err {
+            StorageError::IO(e) => e,
+            StorageError::ReadError(Some(e)) => e,
+            StorageError::WriteError(Some(e)) => e,
+            _ => io::Error::new(io::ErrorKind::Other, format!("{}", err))
+        }
     }
 }
 

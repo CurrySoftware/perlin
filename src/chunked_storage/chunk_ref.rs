@@ -44,51 +44,64 @@ impl<'a> io::Write for MutChunkRef<'a> {
     }
 }
 
+/// This implements read for `HotIndexingChunk` and potential archived chunks.
+/// It will read from the first archived chunk, then the second and so on and then read from
+/// HotIndexingChunk.
 impl<'a> io::Read for ChunkRef<'a> {
-    // TODO: Improve and comment this
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {        
         let mut bytes_read = 0;
         loop {
+            // Find the chunk we are currently reading from
             let chunk_index = self.read_ptr / SIZE;
+            // If its an archived chunk
             if chunk_index < self.chunk.archived_chunks().len() {
+                // Get the chunk id
                 let chunk_id = self.chunk.archived_chunks()[chunk_index].2;
-                let read = (&self.archive.get(chunk_id as u64).unwrap().get_bytes()[self.read_ptr % SIZE..])
-                    .read(&mut buf[bytes_read..])
-                    .unwrap();
-                if read == 0 {
+                // Get chunk
+                let chunk = self.archive.get(chunk_id as u64)?;
+                // read from its buffer and determine how many bytes were read
+                let n_read = (&chunk.get_bytes()[self.read_ptr % SIZE..]).read(&mut buf[bytes_read..])?;
+                if n_read == 0 {
+                    // If no bytes were read, the target-buffer is full.
                     return Ok(bytes_read);
                 }
-                bytes_read += read;
-                self.read_ptr += read;
+                // Otherwise count up counters and continue
+                bytes_read += n_read;
+                self.read_ptr += n_read;
             } else {
                 break;
             }
         }
-        let read = (&self.chunk.get_bytes()[self.read_ptr % SIZE..]).read(&mut buf[bytes_read..]).unwrap();
+        //Read all archived chunks. Read from `HotIndexingChunk` now.
+        let read = (&self.chunk.get_bytes()[self.read_ptr % SIZE..])
+            .read(&mut buf[bytes_read..])?;
         bytes_read += read;
         self.read_ptr += read;
         Ok(bytes_read)
     }
 }
 
-//Heavily "inspired" by std::io::Cursor::seek
+// Heavily "inspired" by std::io::Cursor::seek
 impl<'a> io::Seek for ChunkRef<'a> {
     fn seek(&mut self, style: io::SeekFrom) -> io::Result<u64> {
         use std::io::SeekFrom;
-       let pos = match style {
-            SeekFrom::Start(n) => { self.read_ptr = n as usize; return Ok(n) }
+        let pos = match style {
+            SeekFrom::Start(n) => {
+                self.read_ptr = n as usize;
+                return Ok(n);
+            }
             SeekFrom::End(n) => self.bytes_len() as i64 + n,
             SeekFrom::Current(n) => self.read_ptr as i64 + n,
         };
 
         if pos < 0 {
             Err(io::Error::new(io::ErrorKind::InvalidInput,
-                           "invalid seek to a negative position"))
+                               "invalid seek to a negative position"))
         } else {
             self.read_ptr = pos as usize;
             Ok(self.read_ptr as u64)
         }
-    }   
+    }
 }
 
 impl<'a> ChunkRef<'a> {
@@ -124,12 +137,12 @@ impl<'a> MutChunkRef<'a> {
         }
     }
 
-    pub fn write_posting(&mut self, doc_id: u64, buf: &[u8]) -> io::Result<()>{
+    pub fn write_posting(&mut self, doc_id: u64, buf: &[u8]) -> io::Result<()> {
         self.chunk.add_doc_id(doc_id);
         self.write_all(buf)?;
         Ok(())
     }
-    
+
     #[inline]
     pub fn get_last_doc_id(&self) -> u64 {
         self.chunk.get_last_doc_id()
@@ -140,11 +153,11 @@ impl<'a> MutChunkRef<'a> {
 #[cfg(test)]
 mod tests {
     use std::io::Read;
-    
+
     use utils::persistence::Volatile;
     use chunked_storage::ChunkedStorage;
     use storage::RamStorage;
-    
+
     #[test]
     fn write_posting_basic() {
         let mut storage = ChunkedStorage::new(0, Box::new(RamStorage::new()));
@@ -153,7 +166,7 @@ mod tests {
             let buf = vec![1; 10];
             chunk.write_posting(0, &buf).unwrap();
         }
-        
+
         let mut buf = Vec::new();
         let mut chunk = storage.get(0);
         chunk.read_to_end(&mut buf).unwrap();
@@ -168,7 +181,7 @@ mod tests {
             let buf = vec![1; 1000];
             chunk.write_posting(0, &buf).unwrap();
         }
-        
+
         let mut buf = Vec::new();
         let mut chunk = storage.get(0);
         chunk.read_to_end(&mut buf).unwrap();
