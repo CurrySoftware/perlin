@@ -1,4 +1,5 @@
 use std::io;
+use std::fmt;
 use std::io::Write;
 
 use storage::{Storage, StorageError};
@@ -15,6 +16,12 @@ pub struct ChunkRef<'a> {
     read_ptr: usize,
     chunk: &'a HotIndexingChunk,
     archive: &'a Box<Storage<IndexingChunk>>,
+}
+
+impl<'a> fmt::Debug for ChunkRef<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "read_ptr: {}, chunk: {:?}", self.read_ptr, self.chunk)
+    }
 }
 
 // The idea here is the abstract the inner workings of

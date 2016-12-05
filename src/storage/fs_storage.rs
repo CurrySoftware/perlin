@@ -53,10 +53,11 @@ impl<TItem> Persistent for FsStorage<TItem> {
 
     /// Reads a FsStorage from an previously populated folder.
     fn load(path: &Path) -> Result<Self> {
+        //TODO: Check for files
         // Read from entry file to BTreeMap.
         let mut entries = BTreeMap::new();
         // 1. Open file and pass it to the decoder
-        let entries_file = try!(OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME)));
+        let entries_file = OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME))?;
         let mut decoder = VByteDecoder::new(entries_file);
         // 2. Decode entries and write them to BTreeMap
         let mut current_id: u64 = 0;
@@ -74,10 +75,10 @@ impl<TItem> Persistent for FsStorage<TItem> {
             persistent_entries: try!(OpenOptions::new()
                 .append(true)
                 .open(path.join(ENTRIES_FILENAME))),
-            data: try!(OpenOptions::new()
+            data: OpenOptions::new()
                 .read(true)
                 .append(true)
-                .open(path.join(DATA_FILENAME))),
+                .open(path.join(DATA_FILENAME))?,
             _item_type: PhantomData,
         })
     }

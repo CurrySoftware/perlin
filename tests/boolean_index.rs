@@ -80,6 +80,10 @@ fn build_and_query_volatile_index() {
     let and_query = QueryBuilder::and(QueryBuilder::atoms(vec![Color::Green, Color::Blue])).build();
     assert_eq!(index.execute_query(&and_query).collect::<Vec<_>>(), vec![1]);
 
+    let atom_query = QueryBuilder::atom(Color::Blue).build();
+    assert_eq!(index.execute_query(&atom_query).collect::<Vec<_>>(),
+               vec![0, 1, 2]);
+
     let or_query = QueryBuilder::or(QueryBuilder::atoms(vec![Color::Green, Color::Blue])).build();
     assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
                vec![0, 1, 2]);

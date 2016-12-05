@@ -1,6 +1,3 @@
-use storage::Storage;
-
-use index::boolean_index::DocumentTerms;
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::{PostingDecoder, Posting};
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
@@ -35,7 +32,7 @@ impl<'a> Iterator for QueryResultIterator<'a> {
             QueryResultIterator::Atom(ref mut iter) => iter.next(),
             QueryResultIterator::NAry(ref mut iter) => iter.next(),
             QueryResultIterator::Filter(ref mut iter) => iter.next(),
-            QueryResultIterator::Positional(_) => None
+            QueryResultIterator::Positional(ref mut iter) => iter.next()
         }
     }
 }
@@ -49,7 +46,7 @@ impl<'a> SeekingIterator for QueryResultIterator<'a> {
             QueryResultIterator::Atom(ref mut iter) => iter.next_seek(target),
             QueryResultIterator::NAry(ref mut iter) => iter.next_seek(target),
             QueryResultIterator::Filter(ref mut iter) => iter.next_seek(target),
-            QueryResultIterator::Positional(_) => None,
+            QueryResultIterator::Positional(ref mut iter) => iter.next_seek(target),
         }
     }
 }
@@ -145,7 +142,7 @@ mod tests {
     #[test]
     fn peek() {
         let index = prepare_index();
-        let mut qri = index.run_atom(0, &0).peekable_seekable();
+        let mut qri = index.run_atom(&0).peekable_seekable();
         let doc_id_1 = qri.peek().map(|p| *p.doc_id());
         let doc_id_2 = qri.peek().map(|p| *p.doc_id());
         assert_eq!(doc_id_1, doc_id_2);
@@ -160,9 +157,9 @@ mod tests {
     #[test]
     fn estimate_length() {
         let index = prepare_index();
-        assert!(index.run_atom(0, &0).estimate_length() == 3);
-        assert!(index.run_atom(0, &3).estimate_length() == 2);
-        assert!(index.run_atom(0, &16).estimate_length() == 1);
+        assert!(index.run_atom(&0).estimate_length() == 3);
+        assert!(index.run_atom(&3).estimate_length() == 2);
+        assert!(index.run_atom(&16).estimate_length() == 1);
         assert!(index.run_nary_query(&BooleanOperator::And,
                             &vec![BooleanQuery::Atom(QueryAtom::new(0, 3)),
                                   BooleanQuery::Atom(QueryAtom::new(0, 16))])

@@ -83,10 +83,10 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
               TDocIterator: Iterator<Item = TTerm>
     {
         let path = try!(self.check_persist_path(false));
-        fs::create_dir(&path.join("index"))?;
-        fs::create_dir(&path.join("doc"))?;
-        let index_store = TStorage::create(&path.join("index"))?;
-        let doc_store = TDocStorage::create(&path.join("doc"))?;        
+        fs::create_dir_all(&path.join(boolean_index::DOCUMENTS_PATH))?;
+        fs::create_dir_all(&path.join(boolean_index::INV_INDEX_PATH))?;
+        let index_store = TStorage::create(&path.join(boolean_index::INV_INDEX_PATH))?;
+        let doc_store = TDocStorage::create(&path.join(boolean_index::DOCUMENTS_PATH))?;        
         BooleanIndex::new_persistent(documents, index_store, doc_store, path)
     }
 
@@ -106,7 +106,7 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
                 if !check_for_existing_files {
                     return Ok(path);
                 }
-                let mut required_files = Self::required_files();
+                let mut required_files = REQUIRED_FILES.clone().to_vec();
                 for path in paths.filter(|p| p.is_ok()).map(|p| p.unwrap()) {
                     if let Some(pos) = required_files.iter().position(|f| (**f) == path.file_name()) {
                         required_files.swap_remove(pos);
@@ -126,9 +126,7 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
     }
 
     fn required_files() -> Vec<&'static str> {
-        let mut required_files = REQUIRED_FILES.to_vec();
-        required_files.extend_from_slice(TStorage::associated_files());
-        required_files.extend_from_slice(ChunkedStorage::associated_files());
+        let required_files = REQUIRED_FILES.to_vec();
         required_files
     }
 }

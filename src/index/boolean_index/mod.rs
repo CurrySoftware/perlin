@@ -38,6 +38,8 @@ mod indexing;
 
 const VOCAB_FILENAME: &'static str = "vocabulary.bin";
 const STATISTICS_FILENAME: &'static str = "statistics.bin";
+const DOCUMENTS_PATH: &'static str = "docs";
+const INV_INDEX_PATH: &'static str = "index";
 const CHUNKSIZE: usize = 1_000_000;
 
 /// A specialized `Result` type for operations related to `BooleanIndex`
@@ -136,37 +138,34 @@ impl<TTerm> BooleanIndex<TTerm>
         where TStorage: Storage<IndexingChunk> + Persistent + 'static,
               TDocStorage: Storage<DocumentTerms> + Persistent + 'static
     {
-        let storage = try!(TStorage::load(path));
+        let storage = try!(TStorage::load(&path.join(INV_INDEX_PATH)));
         let vocab = try!(Self::load_vocabulary(path));
         let doc_count = try!(Self::load_statistics(path));
         let chunked_storage = ChunkedStorage::load(path, Box::new(storage)).unwrap();
-        let doc_storage = TDocStorage::load(path).unwrap();
+        let doc_storage = TDocStorage::load(&path.join(DOCUMENTS_PATH)).unwrap();
         BooleanIndex::from_parts(chunked_storage, vocab, Box::new(doc_storage), doc_count)
     }
 
     /// Creates a new `BooleanIndex` instance which is written to the passed
     /// path
     /// Not intended for public use. Please use the `IndexBuilder` instead
-    fn new_persistent<TDocsIterator, TDocIterator, TStorage, TDocStorage>(
-        documents: TDocsIterator,
-        storage: TStorage,
-        doc_storage: TDocStorage,
-        path: &Path)
-                                                             -> Result<Self>
+    fn new_persistent<TDocsIterator, TDocIterator, TStorage, TDocStorage>(documents: TDocsIterator,
+                                                                          storage: TStorage,
+                                                                          doc_storage: TDocStorage,
+                                                                          path: &Path)
+                                                                          -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
-              TDocIterator: Iterator<Item = TTerm>,    
+              TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<IndexingChunk> + Persistent + 'static,
               TDocStorage: Storage<DocumentTerms> + Persistent + 'static
-        
     {
-        let (document_count, chunked_postings, doc_store, term_ids) =
-            index_documents(documents, storage, doc_storage)?;
+        let (document_count, chunked_postings, doc_store, term_ids) = index_documents(documents, storage, doc_storage)?;
         let index = BooleanIndex {
             document_count: document_count,
             term_ids: term_ids,
-            persist_path: Some(path.to_path_buf()),           
+            persist_path: Some(path.to_path_buf()),
             chunked_postings: chunked_postings,
-            documents: Box::new(doc_store)
+            documents: Box::new(doc_store),
         };
         try!(index.save_vocabulary());
         try!(index.save_statistics());
@@ -267,19 +266,23 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     /// Creates a new volatile `BooleanIndex`. Not intended for public use.
     /// Please use `IndexBuilder` instead
-    fn new<TDocsIterator, TDocIterator, TStorage, TDocStorage>(documents: TDocsIterator, storage: TStorage, doc_storage: TDocStorage) -> Result<Self>
+    fn new<TDocsIterator, TDocIterator, TStorage, TDocStorage>(documents: TDocsIterator,
+                                                               storage: TStorage,
+                                                               doc_storage: TDocStorage)
+                                                               -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>,
               TStorage: Storage<IndexingChunk> + 'static,
-    TDocStorage: Storage<DocumentTerms> + 'static,
+              TDocStorage: Storage<DocumentTerms> + 'static
     {
-        let (document_count, chunked_postings, doc_storage, term_ids) = try!(index_documents(documents, storage, doc_storage));
+        let (document_count, chunked_postings, doc_storage, term_ids) =
+            try!(index_documents(documents, storage, doc_storage));
         let index = BooleanIndex {
             document_count: document_count,
             term_ids: term_ids,
             persist_path: None,
             chunked_postings: chunked_postings,
-            documents: Box::new(doc_storage)
+            documents: Box::new(doc_storage),
         };
         Ok(index)
     }
@@ -297,7 +300,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
             term_ids: vocabulary,
             chunked_postings: inverted_index,
             documents: doc_storage,
-            persist_path: None
+            persist_path: None,
         })
     }
 
@@ -336,14 +339,22 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
         let mut pattern = Vec::with_capacity(operands.len());
         for operand in operands {
             if let Some(id) = self.resolve_term(&operand.query_term) {
-                ops.push(QueryResultIterator::Atom(PostingDecoder::new(self.chunked_postings.get(id))).peekable_seekable());
+                ops.push(QueryResultIterator::Atom(PostingDecoder::new(self.chunked_postings.get(id)))
+                    .peekable_seekable());
                 pattern.push((operand.relative_position as u32, id));
             } else {
                 return QueryResultIterator::Empty;
-            }   
+            }
         }
-        QueryResultIterator::Positional(PositionalQueryIterator::new(
-            QueryResultIterator::NAry(NAryQueryIterator::new(BooleanOperator::And, ops)).peekable_seekable(), pattern, self.documents.as_ref()))
+        QueryResultIterator::Positional(
+            PositionalQueryIterator::new(*operator,
+                                         QueryResultIterator::NAry(
+                                             NAryQueryIterator::new(
+                                                 BooleanOperator::And, ops)
+                                         )
+                                         .peekable_seekable(),
+                                         pattern,
+                                         self.documents.as_ref()))
 
     }
 
@@ -360,7 +371,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn run_atom(&self, atom: &TTerm) -> QueryResultIterator {
         if let Some(id) = self.resolve_term(atom) {
-           QueryResultIterator::Atom(PostingDecoder::new(self.chunked_postings.get(id)))
+            QueryResultIterator::Atom(PostingDecoder::new(self.chunked_postings.get(id)))
         } else {
             QueryResultIterator::Empty
         }
@@ -369,7 +380,6 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     fn resolve_term(&self, atom: &TTerm) -> Option<u64> {
         self.term_ids.get(atom).map(|id| *id)
     }
-                                       
 }
 
 
@@ -389,13 +399,14 @@ mod tests {
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {
-        let index = IndexBuilder::<_, RamStorage<_>, RamStorage<_>>::new().create(vec![(0..10).collect::<Vec<_>>().into_iter(),
-                                                                        (0..10)
-                                                                            .map(|i| i * 2)
-                                                                            .collect::<Vec<_>>()
-                                                                            .into_iter(),
-                                                                        vec![5, 4, 3, 2, 1, 0].into_iter()]
-            .into_iter());
+        let index = IndexBuilder::<_, RamStorage<_>, RamStorage<_>>::new()
+            .create(vec![(0..10).collect::<Vec<_>>().into_iter(),
+                         (0..10)
+                             .map(|i| i * 2)
+                             .collect::<Vec<_>>()
+                             .into_iter(),
+                         vec![5, 4, 3, 2, 1, 0].into_iter()]
+                .into_iter());
         index.unwrap()
     }
 

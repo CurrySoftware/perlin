@@ -5,8 +5,7 @@ use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::*;
 
 pub struct NAryQueryIterator<'a> {
-    pos_operator: Option<PositionalOperator>,
-    bool_operator: Option<BooleanOperator>,
+    bool_operator: BooleanOperator,
     operands: Vec<PeekableSeekable<QueryResultIterator<'a>>>,
 }
 
@@ -17,16 +16,8 @@ impl<'a> Iterator for NAryQueryIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.bool_operator {
-            Some(BooleanOperator::And) => self.next_and(),
-            Some(BooleanOperator::Or) => self.next_or(),
-            None => {
-                match self.pos_operator {
-                    Some(PositionalOperator::InOrder) => self.next_inorder(),
-                    None => {
-                        unreachable!(false);
-                    }
-                }
-            }
+            BooleanOperator::And => self.next_and(),
+            BooleanOperator::Or => self.next_or()
         }
     }
 }
@@ -44,21 +35,11 @@ impl<'a> SeekingIterator for NAryQueryIterator<'a> {
 }
 
 impl<'a> NAryQueryIterator<'a> {
-    pub fn new_positional(operator: PositionalOperator, operands: Vec<PeekableSeekable<QueryResultIterator>>) -> NAryQueryIterator {
-        let mut result = NAryQueryIterator {
-            pos_operator: Some(operator),
-            bool_operator: None,
-            operands: operands       
-        };
-        result.operands.sort_by_key(|op| op.inner().estimate_length());
-        result
-    }
 
 
     pub fn new(operator: BooleanOperator, operands: Vec<PeekableSeekable<QueryResultIterator>>) -> NAryQueryIterator {
         let mut result = NAryQueryIterator {
-            pos_operator: None,
-            bool_operator: Some(operator),
+            bool_operator: operator,
             operands: operands
         };
         result.operands.sort_by_key(|op| op.inner().estimate_length());
@@ -67,25 +48,13 @@ impl<'a> NAryQueryIterator<'a> {
 
     pub fn estimate_length(&self) -> usize {
         match self.bool_operator {
-            Some(BooleanOperator::And) => self.operands[0].inner().estimate_length(),
-            Some(BooleanOperator::Or) => self.operands[self.operands.len() - 1].inner().estimate_length(),
-            None => {
-                match self.pos_operator {
-                    Some(PositionalOperator::InOrder) => self.operands[0].inner().estimate_length(),
-                    None => {
-                        unreachable!();
-                    }
-                }
-            }
+            BooleanOperator::And => self.operands[0].inner().estimate_length(),
+            BooleanOperator::Or => self.operands[self.operands.len() - 1].inner().estimate_length(),
         }
     }
 
-    //TODO: This has to be completely rewritten
-    fn next_inorder(&mut self) -> Option<Posting> {
-        None
-    }
-
     fn next_or(&mut self) -> Option<Posting> {
+        
         // TODO: Probably improveable
         // Find the smallest current value of all operands
         let min_doc_id = self.operands
@@ -109,7 +78,7 @@ impl<'a> NAryQueryIterator<'a> {
                     tmp = self.operands[i].next();
                 }
                 i += 1;
-            };
+            };            
             tmp
         } else {
             None
