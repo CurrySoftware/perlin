@@ -93,6 +93,7 @@ pub struct BooleanIndex<TTerm: Ord + Hash> {
     document_count: usize,
     term_ids: HashMap<TTerm, u64>,
     chunked_postings: ChunkedStorage,
+    chunked_documents: ChunkedStorage,
     persist_path: Option<PathBuf>,
 }
 
