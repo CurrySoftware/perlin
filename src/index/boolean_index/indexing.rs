@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use storage::compression::VByteEncoded;
 
-use index::boolean_index::{Result, Error, IndexingError};
+use index::boolean_index::{Result, Error, IndexingError, DocumentTerms};
 use index::boolean_index::posting::{Posting, Listing};
 use chunked_storage::{ChunkedStorage, IndexingChunk};
 use chunked_storage::chunk_ref::MutChunkRef;
@@ -18,16 +18,21 @@ const SORT_THREADS: usize = 4;
 
 /// Indexes a document collection for later retrieval
 /// Returns the number of documents indexed
-pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TTerm>
+pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TDocStorage, TTerm>
     (documents: TDocsIterator,
-     storage: TStorage)
-     -> Result<(usize, ChunkedStorage, ChunkedStorage, HashMap<TTerm, u64>)>
+     storage: TStorage,
+     doc_storage: TDocStorage)
+     -> Result<(usize, ChunkedStorage, TDocStorage, HashMap<TTerm, u64>)>
     where TDocsIterator: Iterator<Item = TDocIterator>,
           TDocIterator: Iterator<Item = TTerm>,
           TStorage: Storage<IndexingChunk> + 'static,
+          TDocStorage: Storage<DocumentTerms> + 'static,
           TTerm: Ord + Hash
 {
+    // Channel for sorting-thread <-> inverting-thread communication
     let (merged_tx, merged_rx) = mpsc::sync_channel(64);
+    // Channel for index-thread <-> document-storage-thread
+    let (doc_store_tx, doc_store_rx) = mpsc::channel();
     let mut document_count = 0;
     let thread_sync = Arc::new(AtomicUsize::new(0));
     // Initialize and start sorting threads
@@ -42,21 +47,26 @@ pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TTerm>
     }
     drop(merged_tx);
     let inv_index = thread::spawn(|| invert_index(merged_rx, storage));
-    let mut term_ids = HashMap::new();
+    let doc_store = thread::spawn(|| store_documents(doc_storage, doc_store_rx));
+    let mut term_ids: HashMap<TTerm, u64> = HashMap::new();
     let mut buffer = Vec::with_capacity(213400);
     let mut term_count = 0;
-    // For every document in the collection
+    
+    //Start Work: For every document in the collection
     let mut chunk_count = 0;
     for (doc_id, document) in documents.enumerate() {
+        let mut doc_terms = Vec::with_capacity(1000);
         // Enumerate over its terms        
         for (_, term) in document.into_iter().enumerate() {
             // Has term already been seen? Is it already in the vocabulary?
             if let Some(term_id) = term_ids.get(&term) {
                 buffer.push((*term_id, doc_id as u64));
+                doc_terms.push(*term_id);
                 continue;
             }
             term_ids.insert(term, term_count as u64);
             buffer.push((term_count as u64, doc_id as u64));
+            doc_terms.push(term_count as u64);
             term_count += 1;
         }
         // Term was not yet indexed. Add it
@@ -68,9 +78,11 @@ pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TTerm>
             buffer = Vec::with_capacity(old_len + old_len / 10);
             chunk_count += 1;
         }
+        doc_store_tx.send((doc_id as u64, doc_terms));
     }
     try!(chunk_tx[chunk_count % SORT_THREADS].send((chunk_count, buffer)));
     drop(chunk_tx);
+    drop(doc_store_tx);
     // Join sort threads
     if sort_threads.into_iter().any(|thread| thread.join().is_err()) {
         return Err(Error::Indexing(IndexingError::ThreadPanic));
@@ -80,8 +92,25 @@ pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TTerm>
         Ok(res) => try!(res),
         Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic)),
     };
+    
+    let doc_storage = match doc_store.join() {
+        Ok(res) => res?,
+        Err(_) => return Err(Error::Indexing(IndexingError::ThreadPanic))
+    };
 
-    Ok((document_count, chunked_postings, term_ids))
+    Ok((document_count, chunked_postings, doc_storage, term_ids))
+}
+
+fn store_documents<TDocStorage>(mut doc_storage: TDocStorage, documents: mpsc::Receiver<(u64, Vec<u64>)>) -> Result<TDocStorage>
+    where TDocStorage: Storage<DocumentTerms> {
+    while let Ok((doc_id, terms)) = documents.recv() {
+        let mut bytes = Vec::with_capacity(terms.len()*4);
+        for term in terms {
+            VByteEncoded::new(term as usize).write_to(&mut bytes)?;
+        }
+        doc_storage.store(doc_id, bytes);
+    }
+    Ok(doc_storage)
 }
 
 /// Receives chunks of (`term_id`, `doc_id`, `position`) tripels
@@ -143,12 +172,6 @@ fn invert_index<TStorage>(grouped_chunks: mpsc::Receiver<Vec<(u64, Listing)>>,
         }
     }
     Ok(storage)
-}
-
-fn store_documents<TStorage>(docs: mpsc::Receiver<Vec<u64>>, storage: TStorage) -> Result<ChunkedStorage>
-    where TStorage: Storage<IndexingChunk> + 'static
-{
-    
 }
 
 fn write_listing(listing: Listing, mut base_doc_id: u64, target: &mut MutChunkRef) -> Result<u64> {

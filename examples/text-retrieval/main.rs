@@ -45,7 +45,7 @@ fn main() {
     // which can not be inferred and has to be specified
     // In our case the collection is tiny. So we can simply keep it in RAM
     // Have a look at perlin::index::storage::FsStorage for a compressed storage on the file system
-    <_, RamStorage<_>>::new()
+    <_, RamStorage<_>, RamStorage<_>>::new()
     // Calling the create method will index the passed collection
     // It expects an iterator that iterates over the terms of each document.
     // Currently we only have a Vec<String>

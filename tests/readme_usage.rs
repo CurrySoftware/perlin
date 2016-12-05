@@ -17,7 +17,7 @@ fn main() {
                           "And keeps in the dark and sleeps in the light."];
 
     // Create the index in RAM
-    let index = IndexBuilder::<_, RamStorage<_>>::new()
+    let index = IndexBuilder::<_, RamStorage<_>, RamStorage<_>>::new()
         .create(collection.iter().map(|doc| basic_analyzer(doc).into_iter()))
         .unwrap();
 

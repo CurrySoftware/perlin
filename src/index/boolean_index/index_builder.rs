@@ -10,20 +10,23 @@ use utils::persistence::{Volatile, Persistent};
 
 
 use index::boolean_index;
+use index::boolean_index::DocumentTerms;
 use index::boolean_index::{Result, Error, BooleanIndex};
 
 const REQUIRED_FILES: [&'static str; 2] = [boolean_index::VOCAB_FILENAME, boolean_index::STATISTICS_FILENAME];
 
 /// `IndexBuilder` is used to build `BooleanIndex` instances
-pub struct IndexBuilder<TTerm, TStorage> {
+pub struct IndexBuilder<TTerm, TStorage, TDocStorage> {
     persistence: Option<PathBuf>,
     _storage: PhantomData<TStorage>,
+    _doc_storage: PhantomData<TDocStorage>,
     _term: PhantomData<TTerm>,
 }
 
-impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
+impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
     where TTerm: Ord,
-          TStorage: Storage<IndexingChunk>
+          TStorage: Storage<IndexingChunk>,
+          TDocStorage: Storage<DocumentTerms>
 {
     /// Creates a new instance of `IndexBuilder`
     pub fn new() -> Self {
@@ -31,13 +34,16 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
             persistence: None,
             _storage: PhantomData,
             _term: PhantomData,
+            _doc_storage: PhantomData
         }
     }
 }
 
-impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
+impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
     where TTerm: Ord + Hash,
-          TStorage: Storage<IndexingChunk> + Volatile + 'static
+          TStorage: Storage<IndexingChunk> + Volatile + 'static,
+          TDocStorage: Storage<DocumentTerms> + Volatile + 'static
+
 {
     /// Creates a volatile instance of `BooleanIndex`
     /// At the moment `BooleanIndex` does not support adding or removing
@@ -47,13 +53,14 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
         where TCollection: Iterator<Item = TDoc>,
               TDoc: Iterator<Item = TTerm>
     {
-        BooleanIndex::new(TStorage::new(), documents)
+        BooleanIndex::new(documents, TStorage::new(), TDocStorage::new())
     }
 }
 
-impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
+impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
     where TTerm: Ord + ByteDecodable + ByteEncodable + Hash,
-          TStorage: Storage<IndexingChunk> + Persistent + 'static
+          TStorage: Storage<IndexingChunk> + Persistent + 'static,
+          TDocStorage: Storage<DocumentTerms> + Persistent + 'static
 {
     /// Enables a persistent index at the passed path.
     /// `at` must be either a prefilled directory if the `load` method is to be
@@ -76,7 +83,11 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
               TDocIterator: Iterator<Item = TTerm>
     {
         let path = try!(self.check_persist_path(false));
-        BooleanIndex::new_persistent(TStorage::create(path).unwrap(), documents, path)
+        fs::create_dir(&path.join("index"))?;
+        fs::create_dir(&path.join("doc"))?;
+        let index_store = TStorage::create(&path.join("index"))?;
+        let doc_store = TDocStorage::create(&path.join("doc"))?;        
+        BooleanIndex::new_persistent(documents, index_store, doc_store, path)
     }
 
     /// Loads an index from a previously filled directory.
@@ -84,7 +95,7 @@ impl<TTerm, TStorage> IndexBuilder<TTerm, TStorage>
     /// valid data
     pub fn load(&self) -> Result<BooleanIndex<TTerm>> {
         let path = try!(self.check_persist_path(true));
-        BooleanIndex::load::<TStorage>(path)
+        BooleanIndex::load::<TStorage, TDocStorage>(path)
     }
 
     fn check_persist_path(&self, check_for_existing_files: bool) -> Result<&Path> {
@@ -135,7 +146,7 @@ mod tests {
     fn empty_folder() {
         let path = &create_test_dir("empty_dir");
 
-        let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
+        let result = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new().persist(path).load();
         // That is not really beautiful or anything.
         assert!(if let Err(Error::MissingIndexFiles(_)) = result {
             true
@@ -148,7 +159,7 @@ mod tests {
     fn index_dir_is_file() {
         let path = &test_dir().join("index_dir_is_file.bin");
         fs::File::create(path).unwrap();
-        let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
+        let result = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new().persist(path).load();
         assert!(if let Err(Error::PersistPathIsFile) = result {
             true
         } else {
@@ -159,11 +170,11 @@ mod tests {
     #[test]
     fn corrupt_file() {
         let path = &create_test_dir("corrupted_files");
-        for file in IndexBuilder::<usize, FsStorage<_>>::required_files() {
+        for file in IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::required_files() {
             fs::File::create(path.join(file)).unwrap();
         }
 
-        let result = IndexBuilder::<usize, FsStorage<_>>::new().persist(path).load();
+        let result = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new().persist(path).load();
         assert!(if let Err(Error::CorruptedIndexFile(_)) = result {
             true
         } else {
@@ -175,7 +186,7 @@ mod tests {
     fn required_files_correct() {
         let path = &create_test_dir("required_files_correct");
         fs::create_dir_all(path).unwrap();
-        IndexBuilder::<_, FsStorage<_>>::new()
+        IndexBuilder::<_, FsStorage<_>, FsStorage<_>>::new()
             .persist(path)
             .create_persistent(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                     (0..10)
@@ -186,6 +197,6 @@ mod tests {
                 .into_iter())
             .unwrap();
         assert_eq!(fs::read_dir(path).unwrap().count(),
-                   IndexBuilder::<usize, FsStorage<_>>::required_files().len());
+                   IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::required_files().len());
     }
 }

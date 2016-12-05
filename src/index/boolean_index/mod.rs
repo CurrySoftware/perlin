@@ -13,6 +13,7 @@ use std::sync::mpsc;
 
 use index::Index;
 use storage::{Storage, StorageError};
+use storage::DecodeResult;
 use chunked_storage::{ChunkedStorage, IndexingChunk};
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::indexing::index_documents;
@@ -40,6 +41,22 @@ const CHUNKSIZE: usize = 1_000_000;
 
 /// A specialized `Result` type for operations related to `BooleanIndex`
 pub type Result<T> = std::result::Result<T, Error>;
+
+type DocumentTerms = Vec<u8>;
+
+impl ByteEncodable for DocumentTerms {
+    fn encode(&self) -> Vec<u8> {
+        self.clone()
+    }
+}
+
+impl ByteDecodable for DocumentTerms {
+    fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
+        let mut result = Vec::new();
+        read.read_to_end(&mut result)?;
+        Ok(result)
+    }
+}
 
 #[derive(Debug)]
 /// Error kinds that can occure during indexing operations
@@ -93,7 +110,7 @@ pub struct BooleanIndex<TTerm: Ord + Hash> {
     document_count: usize,
     term_ids: HashMap<TTerm, u64>,
     chunked_postings: ChunkedStorage,
-    chunked_documents: ChunkedStorage,
+    documents: Box<Storage<DocumentTerms>>,
     persist_path: Option<PathBuf>,
 }
 
@@ -114,34 +131,41 @@ impl<TTerm> BooleanIndex<TTerm>
 {
     /// Load a `BooleanIndex` from a previously populated folder
     /// Not intended for public use. Please use the `IndexBuilder` instead
-    fn load<TStorage>(path: &Path) -> Result<Self>
-        where TStorage: Storage<IndexingChunk> + Persistent + 'static
+    fn load<TStorage, TDocStorage>(path: &Path) -> Result<Self>
+        where TStorage: Storage<IndexingChunk> + Persistent + 'static,
+              TDocStorage: Storage<DocumentTerms> + Persistent + 'static
     {
         let storage = try!(TStorage::load(path));
         let vocab = try!(Self::load_vocabulary(path));
         let doc_count = try!(Self::load_statistics(path));
         let chunked_storage = ChunkedStorage::load(path, Box::new(storage)).unwrap();
-        BooleanIndex::from_parts(chunked_storage, vocab, doc_count)
+        let doc_storage = TDocStorage::load(path).unwrap();
+        BooleanIndex::from_parts(chunked_storage, vocab, Box::new(doc_storage), doc_count)
     }
 
     /// Creates a new `BooleanIndex` instance which is written to the passed
     /// path
     /// Not intended for public use. Please use the `IndexBuilder` instead
-    fn new_persistent<TDocsIterator, TDocIterator, TStorage>(storage: TStorage,
-                                                             documents: TDocsIterator,
-                                                             path: &Path)
+    fn new_persistent<TDocsIterator, TDocIterator, TStorage, TDocStorage>(
+        documents: TDocsIterator,
+        storage: TStorage,
+        doc_storage: TDocStorage,
+        path: &Path)
                                                              -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
-              TDocIterator: Iterator<Item = TTerm>,
-              TStorage: Storage<IndexingChunk> + Persistent + 'static
+              TDocIterator: Iterator<Item = TTerm>,    
+              TStorage: Storage<IndexingChunk> + Persistent + 'static,
+              TDocStorage: Storage<DocumentTerms> + Persistent + 'static
+        
     {
-        let (document_count, chunked_postings, term_ids) = try!(index_documents(documents, storage));
+        let (document_count, chunked_postings, doc_store, term_ids) =
+            index_documents(documents, storage, doc_storage)?;
         let index = BooleanIndex {
             document_count: document_count,
             term_ids: term_ids,
-            persist_path: Some(path.to_path_buf()),
-            // Initialized by index_documents
+            persist_path: Some(path.to_path_buf()),           
             chunked_postings: chunked_postings,
+            documents: Box::new(doc_store)
         };
         try!(index.save_vocabulary());
         try!(index.save_statistics());
@@ -242,17 +266,19 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     /// Creates a new volatile `BooleanIndex`. Not intended for public use.
     /// Please use `IndexBuilder` instead
-    fn new<TDocsIterator, TDocIterator, TStorage>(storage: TStorage, documents: TDocsIterator) -> Result<Self>
+    fn new<TDocsIterator, TDocIterator, TStorage, TDocStorage>(documents: TDocsIterator, storage: TStorage, doc_storage: TDocStorage) -> Result<Self>
         where TDocsIterator: Iterator<Item = TDocIterator>,
               TDocIterator: Iterator<Item = TTerm>,
-              TStorage: Storage<IndexingChunk> + 'static
+              TStorage: Storage<IndexingChunk> + 'static,
+    TDocStorage: Storage<DocumentTerms> + 'static,
     {
-        let (document_count, chunked_postings, term_ids) = try!(index_documents(documents, storage));
+        let (document_count, chunked_postings, doc_storage, term_ids) = try!(index_documents(documents, storage, doc_storage));
         let index = BooleanIndex {
             document_count: document_count,
             term_ids: term_ids,
             persist_path: None,
             chunked_postings: chunked_postings,
+            documents: Box::new(doc_storage)
         };
         Ok(index)
     }
@@ -262,13 +288,15 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn from_parts(inverted_index: ChunkedStorage,
                   vocabulary: HashMap<TTerm, u64>,
+                  doc_storage: Box<Storage<DocumentTerms>>,
                   document_count: usize)
                   -> Result<Self> {
         Ok(BooleanIndex {
             document_count: document_count,
             term_ids: vocabulary,
             chunked_postings: inverted_index,
-            persist_path: None,
+            documents: doc_storage,
+            persist_path: None
         })
     }
 
@@ -348,7 +376,7 @@ mod tests {
 
 
     pub fn prepare_index() -> BooleanIndex<usize> {
-        let index = IndexBuilder::<_, RamStorage<_>>::new().create(vec![(0..10).collect::<Vec<_>>().into_iter(),
+        let index = IndexBuilder::<_, RamStorage<_>, RamStorage<_>>::new().create(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                                                         (0..10)
                                                                             .map(|i| i * 2)
                                                                             .collect::<Vec<_>>()
@@ -511,7 +539,7 @@ mod tests {
     fn persistence() {
         let path = &create_test_dir("persistent_index");
         {
-            let index = IndexBuilder::<u32, FsStorage<_>>::new()
+            let index = IndexBuilder::<u32, FsStorage<_>, FsStorage<_>>::new()
                 .persist(path)
                 .create_persistent(vec![(0..10).collect::<Vec<_>>().into_iter(),
                                         (0..10).map(|i| i * 2).collect::<Vec<_>>().into_iter(),
@@ -530,7 +558,7 @@ mod tests {
         }
 
         {
-            let index = IndexBuilder::<usize, FsStorage<_>>::new()
+            let index = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new()
                 .persist(path)
                 .load()
                 .unwrap();

@@ -67,7 +67,6 @@ impl VByteEncoded {
 }
 
 
-
 /// Iterator that decodes a bytestream to unsigned integers
 pub struct VByteDecoder<R> {
     source: R,

@@ -17,7 +17,7 @@ fn build_and_query_persistent_index() {
 
     assert!(std::fs::create_dir_all(folder.as_path()).is_ok());
 
-    let index = IndexBuilder::<u32, FsStorage<_>>::new()
+    let index = IndexBuilder::<u32, FsStorage<_>, FsStorage<_>>::new()
         .persist(folder.as_path())
         .create_persistent(vec![doc1.into_iter(), doc2.into_iter(), doc3.into_iter(), doc4.into_iter()].into_iter())
         .unwrap();
@@ -36,7 +36,7 @@ fn build_and_query_persistent_index() {
     assert_eq!(index.execute_query(&or_query).collect::<Vec<_>>(),
                vec![0, 1, 2, 3]);
 
-    let index = IndexBuilder::<usize, FsStorage<_>>::new().persist(folder.as_path()).load().unwrap();
+    let index = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new().persist(folder.as_path()).load().unwrap();
 
     let pos_query = QueryBuilder::in_order(vec![Some(10), Some(20)]).build();
     assert_eq!(index.execute_query(&pos_query).collect::<Vec<_>>(), vec![]);
@@ -66,7 +66,7 @@ fn build_and_query_volatile_index() {
     let doc2 = vec![Color::Green, Color::Red, Color::Blue];
     let doc3 = vec![Color::Blue, Color::Blue, Color::Blue];
 
-    let index = IndexBuilder::<_, RamStorage<_>>::new()
+    let index = IndexBuilder::<_, RamStorage<_>, RamStorage<_>>::new()
         .create(vec![doc1.into_iter(), doc2.into_iter(), doc3.into_iter()].into_iter())
         .unwrap();
 

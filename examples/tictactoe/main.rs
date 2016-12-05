@@ -195,7 +195,7 @@ fn load_or_create_index(games: Vec<TicTacToeGame>) -> BooleanIndex<BoardLayout> 
     if index_dir.is_dir() {
         // The directory of the index exists. We assume we can load from that
         // directory. If not... no worries. We will just get an error back
-        if let Ok(index) = IndexBuilder::<_, FsStorage<_>>::new().persist(&*index_dir).load() {
+        if let Ok(index) = IndexBuilder::<_, FsStorage<_>, FsStorage<_>>::new().persist(&*index_dir).load() {
             println!("Index successfully loaded!");
             return index;
         }
@@ -204,7 +204,7 @@ fn load_or_create_index(games: Vec<TicTacToeGame>) -> BooleanIndex<BoardLayout> 
     // Create directory
     std::fs::create_dir_all(&index_dir).unwrap();
     // Build index
-    IndexBuilder::<_, FsStorage<_>>::new()
+    IndexBuilder::<_, FsStorage<_>, FsStorage<_>>::new()
         .persist(&*index_dir)
         .create_persistent(games.into_iter().map(TicTacToeStateIterator::new))
         .unwrap()
