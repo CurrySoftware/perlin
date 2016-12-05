@@ -19,6 +19,7 @@ use index::boolean_index::boolean_query::*;
 use index::boolean_index::indexing::index_documents;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
+use index::boolean_index::query_result_iterator::positional_query_iterator::*;
 use index::boolean_index::posting::PostingDecoder;
 
 use storage::compression::{VByteEncoded, VByteDecoder};
@@ -305,7 +306,7 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
 
     fn run_query<'a>(&'a self, query: &BooleanQuery<TTerm>) -> QueryResultIterator<'a> {
         match *query {
-            BooleanQuery::Atom(ref atom) => self.run_atom(atom.relative_position, &atom.query_term),
+            BooleanQuery::Atom(ref atom) => self.run_atom(&atom.query_term),
             BooleanQuery::NAry(ref operator, ref operands) => self.run_nary_query(operator, operands),
             BooleanQuery::Positional(ref operator, ref operands) => self.run_positional_query(operator, operands),
             BooleanQuery::Filter(ref operator, ref sand, ref sieve) => {
@@ -331,11 +332,19 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
                             operator: &PositionalOperator,
                             operands: &[QueryAtom<TTerm>])
                             -> QueryResultIterator {
-        let mut ops = Vec::new();
+        let mut ops = Vec::with_capacity(operands.len());
+        let mut pattern = Vec::with_capacity(operands.len());
         for operand in operands {
-            ops.push(self.run_atom(operand.relative_position, &operand.query_term).peekable_seekable());
+            if let Some(id) = self.resolve_term(&operand.query_term) {
+                ops.push(QueryResultIterator::Atom(PostingDecoder::new(self.chunked_postings.get(id))).peekable_seekable());
+                pattern.push((operand.relative_position as u32, id));
+            } else {
+                return QueryResultIterator::Empty;
+            }   
         }
-        QueryResultIterator::NAry(NAryQueryIterator::new_positional(*operator, ops))
+        QueryResultIterator::Positional(PositionalQueryIterator::new(
+            QueryResultIterator::NAry(NAryQueryIterator::new(BooleanOperator::And, ops)).peekable_seekable(), pattern, self.documents.as_ref()))
+
     }
 
     fn run_filter<'a>(&'a self,
@@ -349,14 +358,18 @@ impl<TTerm: Ord + Hash> BooleanIndex<TTerm> {
     }
 
 
-    fn run_atom(&self, relative_position: usize, atom: &TTerm) -> QueryResultIterator {
-        if let Some(result) = self.term_ids.get(atom) {
-            QueryResultIterator::Atom(relative_position,
-                                      PostingDecoder::new(self.chunked_postings.get(*result)))
+    fn run_atom(&self, atom: &TTerm) -> QueryResultIterator {
+        if let Some(id) = self.resolve_term(atom) {
+           QueryResultIterator::Atom(PostingDecoder::new(self.chunked_postings.get(id)))
         } else {
             QueryResultIterator::Empty
         }
     }
+
+    fn resolve_term(&self, atom: &TTerm) -> Option<u64> {
+        self.term_ids.get(atom).map(|id| *id)
+    }
+                                       
 }
 
 

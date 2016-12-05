@@ -1,9 +1,14 @@
+use storage::Storage;
+
+use index::boolean_index::DocumentTerms;
 use index::boolean_index::boolean_query::*;
 use index::boolean_index::posting::{PostingDecoder, Posting};
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;
+use index::boolean_index::query_result_iterator::positional_query_iterator::*;
 use utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 
 pub mod nary_query_iterator;
+pub mod positional_query_iterator;
 
 // The BooleanIndex implementation works with query iterators only. Why?
 // 1. It is faster (no stack or heap allocation)
@@ -13,8 +18,9 @@ pub mod nary_query_iterator;
 /// types
 pub enum QueryResultIterator<'a> {
     Empty,
-    Atom(usize, PostingDecoder<'a>),
+    Atom(PostingDecoder<'a>),
     NAry(NAryQueryIterator<'a>),
+    Positional(PositionalQueryIterator<'a>),
     Filter(FilterIterator<'a>),
 }
 
@@ -26,9 +32,10 @@ impl<'a> Iterator for QueryResultIterator<'a> {
     fn next(&mut self) -> Option<Posting> {
         match *self {
             QueryResultIterator::Empty => None,
-            QueryResultIterator::Atom(_, ref mut iter) => iter.next(),
+            QueryResultIterator::Atom(ref mut iter) => iter.next(),
             QueryResultIterator::NAry(ref mut iter) => iter.next(),
             QueryResultIterator::Filter(ref mut iter) => iter.next(),
+            QueryResultIterator::Positional(_) => None
         }
     }
 }
@@ -39,9 +46,10 @@ impl<'a> SeekingIterator for QueryResultIterator<'a> {
     fn next_seek(&mut self, target: &Self::Item) -> Option<Self::Item> {
         match *self {
             QueryResultIterator::Empty => None,
-            QueryResultIterator::Atom(_, ref mut iter) => iter.next_seek(target),
+            QueryResultIterator::Atom(ref mut iter) => iter.next_seek(target),
             QueryResultIterator::NAry(ref mut iter) => iter.next_seek(target),
             QueryResultIterator::Filter(ref mut iter) => iter.next_seek(target),
+            QueryResultIterator::Positional(_) => None,
         }
     }
 }
@@ -53,18 +61,10 @@ impl<'a> QueryResultIterator<'a> {
     fn estimate_length(&self) -> usize {
         match *self {
             QueryResultIterator::Empty => 0,
-            QueryResultIterator::Atom(_, ref iter) => iter.len(),
+            QueryResultIterator::Atom(ref iter) => iter.len(),
             QueryResultIterator::NAry(ref iter) => iter.estimate_length(),
             QueryResultIterator::Filter(ref iter) => iter.estimate_length(),
-        }
-    }
-
-    /// Return the relative position of a query-part in the whole query
-    /// Necessary for positional queries
-    fn relative_position(&self) -> usize {
-        match *self {
-            QueryResultIterator::Atom(rpos, _) => rpos,
-            _ => 0,
+            QueryResultIterator::Positional(ref iter) => iter.estimate_length()
         }
     }
 
