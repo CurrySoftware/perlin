@@ -25,14 +25,14 @@ lazy_static!{
 #[bench]
 fn index_100mb(b: &mut Bencher) {
     b.iter(|| {
-        test::black_box(&IndexBuilder::<_, RamStorage<_>>::new().create(COLLECTIONS[3].iter().map(|i| i.iter())));
+        test::black_box(&IndexBuilder::<_, RamStorage<_>, RamStorage<_>>::new().create(COLLECTIONS[3].iter().map(|i| i.iter())));
     });
 }
 
 #[bench]
 fn index_10mb(b: &mut Bencher) {
     b.iter(|| {
-        test::black_box(&IndexBuilder::<_, RamStorage<_>>::new().create(COLLECTIONS[2].iter().map(|i| i.iter())));
+        test::black_box(&IndexBuilder::<_, RamStorage<_>, RamStorage<_>>::new().create(COLLECTIONS[2].iter().map(|i| i.iter())));
     });
 }
 
@@ -40,7 +40,7 @@ fn index_10mb(b: &mut Bencher) {
 #[bench]
 fn index_1mb(b: &mut Bencher) {
     b.iter(|| {
-        test::black_box(&IndexBuilder::<usize, RamStorage<_>>::new()
+        test::black_box(&IndexBuilder::<usize, RamStorage<_>, RamStorage<_>>::new()
             .create(COLLECTIONS[1].iter().map(|i| i.iter().cloned())));
     });
 }
@@ -48,7 +48,7 @@ fn index_1mb(b: &mut Bencher) {
 #[bench]
 fn index_100kb(b: &mut Bencher) {
     b.iter(|| {
-        test::black_box(&IndexBuilder::<usize, RamStorage<_>>::new()
+        test::black_box(&IndexBuilder::<usize, RamStorage<_>, RamStorage<_>>::new()
             .create(COLLECTIONS[0].iter().map(|i| i.iter().cloned())));
 
     });
