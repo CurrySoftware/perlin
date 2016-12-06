@@ -103,33 +103,19 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
     fn check_persist_path(&self, check_for_existing_files: bool) -> Result<&Path> {
         if let Some(ref path) = self.persistence {
             if path.is_dir() {
-                let paths = try!(fs::read_dir(path));
-                // Path is a directory and seems to exist. Lets see if all the files are present
                 if !check_for_existing_files {
                     return Ok(path);
-                }
-                let mut required_files = REQUIRED_FILES.clone().to_vec();
-                for path in paths.filter(|p| p.is_ok()).map(|p| p.unwrap()) {
-                    if let Some(pos) = required_files.iter().position(|f| (**f) == path.file_name()) {
-                        required_files.swap_remove(pos);
-                    }
-                }
-                if required_files.is_empty() {
-                    Ok(path)
-                } else {
-                    Err(Error::Persistence(PersistenceError::MissingFiles(required_files)))
-                }
+                }                
+                // Path is a directory and seems to exist. Lets see if all the files are present
+                PersistenceError::missing_files(path, &REQUIRED_FILES)?;
+                
+                Ok(path)
             } else {
                 Err(Error::Persistence(PersistenceError::PersistPathIsFile))
             }
         } else {
             Err(Error::Persistence(PersistenceError::PersistPathNotSpecified))
         }
-    }
-
-    fn required_files() -> Vec<&'static str> {
-        let required_files = REQUIRED_FILES.to_vec();
-        required_files
     }
 }
 
@@ -183,6 +169,6 @@ mod tests {
                 .into_iter())
             .unwrap();
         assert_eq!(fs::read_dir(path).unwrap().count(),
-                   IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::required_files().len());
+                   super::REQUIRED_FILES.len());
     }
 }

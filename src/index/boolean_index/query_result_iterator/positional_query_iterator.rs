@@ -52,7 +52,9 @@ impl<'a> Iterator for PositionalQueryIterator<'a> {
     type Item = Posting;
 
     fn next(&mut self) -> Option<Posting> {
-        self.next_positional()
+        match self.operator {
+            PositionalOperator::InOrder => self.next_positional(),
+        }
     }
 }
 
@@ -87,7 +89,7 @@ fn match_pattern(data: Vec<usize>, pattern: &Vec<(u32, u64)>) -> bool {
             if pos == pattern.len() {
                 return true;
             }
-            //hmmm. does not look so cool...
+            // hmmm. does not look so cool...
             ptr = (ptr as isize + (pattern[pos].0 as isize - curr as isize) as isize) as usize;
         } else {
             // Else reset pattern and advance in document
@@ -104,7 +106,7 @@ fn match_pattern(data: Vec<usize>, pattern: &Vec<(u32, u64)>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::match_pattern;
-    
+
     #[test]
     fn match_pattern_basic() {
         assert!(match_pattern(vec![1, 2, 3, 4, 5, 6, 7], &vec![(0, 4), (1, 5)]));
@@ -113,7 +115,8 @@ mod tests {
 
     #[test]
     fn match_pattern_rec() {
-        assert!(match_pattern(vec![1, 2, 1, 2, 1, 4], &vec![(0, 1), (1, 2), (2, 1), (3, 4)]));
+        assert!(match_pattern(vec![1, 2, 1, 2, 1, 4],
+                              &vec![(0, 1), (1, 2), (2, 1), (3, 4)]));
     }
 
 }

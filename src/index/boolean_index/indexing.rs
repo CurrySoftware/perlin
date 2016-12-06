@@ -78,7 +78,7 @@ pub fn index_documents<TDocsIterator, TDocIterator, TStorage, TDocStorage, TTerm
             buffer = Vec::with_capacity(old_len + old_len / 10);
             chunk_count += 1;
         }
-        doc_store_tx.send((doc_id as u64, doc_terms));
+        doc_store_tx.send((doc_id as u64, doc_terms))?;
     }
     try!(chunk_tx[chunk_count % SORT_THREADS].send((chunk_count, buffer)));
     drop(chunk_tx);
@@ -108,7 +108,7 @@ fn store_documents<TDocStorage>(mut doc_storage: TDocStorage, documents: mpsc::R
         for term in terms {
             VByteEncoded::new(term as usize).write_to(&mut bytes)?;
         }
-        doc_storage.store(doc_id, bytes);
+        doc_storage.store(doc_id, bytes)?;
     }
     Ok(doc_storage)
 }
