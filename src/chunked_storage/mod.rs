@@ -2,7 +2,8 @@ use std::io::Write;
 use std::fs::OpenOptions;
 use std::path::Path;
 
-use storage::{Storage, Result, ByteEncodable, ByteDecodable};
+use storage::{Storage, ByteEncodable, ByteDecodable};
+use storage::persistence::{Result, PersistenceError};
 use chunked_storage::indexing_chunk::HotIndexingChunk;
 use chunked_storage::chunk_ref::{ChunkRef, MutChunkRef};
 pub use chunked_storage::indexing_chunk::IndexingChunk;
@@ -44,8 +45,13 @@ impl ChunkedStorage {
     }
 
     pub fn load(source: &Path, archive: Box<Storage<IndexingChunk>>) -> Result<Self> {
-        let mut file = try!(OpenOptions::new().read(true).open(source.join(HOTCHUNKS_FILENAME)));
+
+        //Check for missing files
+        PersistenceError::missing_files(source, Self::associated_files())?;
+        
+        let mut file = OpenOptions::new().read(true).open(source.join(HOTCHUNKS_FILENAME))?;
         let mut hot_chunks = Vec::new();
+
         while let Ok(decoded_chunk) = HotIndexingChunk::decode(&mut file) {
             hot_chunks.push(decoded_chunk);
         }

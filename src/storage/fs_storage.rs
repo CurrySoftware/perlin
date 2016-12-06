@@ -58,11 +58,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
     fn load(path: &Path) -> Result<Self> {
 
         // Check for missing files
-        let files =
-            Self::associated_files().clone().iter().map(|f| *f).filter(|f| !path.join(f).exists()).collect::<Vec<_>>();
-        if files.len() > 0 {
-            return Err(PersistenceError::MissingFiles(files));
-        }
+        PersistenceError::missing_files(path, FsStorage::<usize>::associated_files())?;
 
         // Read from entry file to BTreeMap.
         let mut entries = BTreeMap::new();

@@ -41,6 +41,17 @@ pub enum PersistenceError {
     /// An error occured during an IO operation
     IO(io::Error),
 }
+impl PersistenceError {
+    /// Small helper function
+    /// Expects a path and a number of expected files and returns the files which are not in that path!
+    pub fn missing_files(path: &Path, expected_files: &[&'static str]) -> Result<()> {
+        let files = expected_files.iter().map(|f| *f).filter(|f| !path.join(f).exists()).collect::<Vec<_>>();
+        if files.is_empty() {
+            return Ok(());
+        }
+        Err(PersistenceError::MissingFiles(files))
+    }
+}
 
 impl From<io::Error> for PersistenceError {
     fn from(err: io::Error) -> Self {
