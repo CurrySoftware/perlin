@@ -197,7 +197,7 @@ mod tests {
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
 
-    use utils::persistence::Volatile;
+    use storage::persistence::Volatile;
     use storage::compression::VByteDecoder;
     use chunked_storage::ChunkedStorage;
     use index::boolean_index::posting::{Posting, PostingDecoder};

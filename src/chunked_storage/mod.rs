@@ -95,7 +95,7 @@ impl ChunkedStorage {
 mod tests {
     use super::*;
     use std::io::{Read, Write};
-    use utils::persistence::Volatile;
+    use storage::persistence::Volatile;
     use storage::RamStorage;
 
     #[test]

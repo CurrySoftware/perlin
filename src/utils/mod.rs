@@ -3,4 +3,3 @@
 pub mod try_option;
 
 pub mod seeking_iterator;
-pub mod persistence;

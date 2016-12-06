@@ -24,7 +24,7 @@ use index::boolean_index::posting::PostingDecoder;
 
 use storage::compression::{VByteEncoded, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
-use utils::persistence::Persistent;
+use storage::persistence::{Persistent, PersistenceError};
 
 pub use index::boolean_index::query_builder::QueryBuilder;
 pub use index::boolean_index::index_builder::IndexBuilder;
@@ -73,21 +73,15 @@ pub enum IndexingError {
 #[derive(Debug)]
 /// Error kinds that can occur during operations related to `BooleanIndex`
 pub enum Error {
-    /// A persistent `BooleanIndex` should be build but no path where to persist it was specified
-    /// Call the `IndexBuilder::persist()`
-    PersistPathNotSpecified,
-    /// A `BooleanIndex` should be loaded from a directory but the specified directory is empty
-    MissingIndexFiles(Vec<&'static str>),
-    /// A `BooleanIndex` attempted to beeing loaded from a file, not a directory
-    PersistPathIsFile,
-    /// Tried to load a `BooleanIndex` from a corrupted file
-    CorruptedIndexFile(Option<DecodeError>),
+    Persistence(PersistenceError),
     /// An IO-Error occured
     IO(io::Error),
     /// A Storage-Error occured
     Storage(StorageError),
     /// An error occured during indexing
     Indexing(IndexingError),
+    /// Tried to load a `BooleanIndex` from a corrupted file
+    CorruptedIndexFile(Option<DecodeError>),
 }
 
 impl From<io::Error> for Error {
@@ -99,6 +93,12 @@ impl From<io::Error> for Error {
 impl From<StorageError> for Error {
     fn from(err: StorageError) -> Self {
         Error::Storage(err)
+    }
+}
+
+impl From<PersistenceError> for Error {
+    fn from(err: PersistenceError) -> Self {
+        Error::Persistence(err)
     }
 }
 
@@ -141,7 +141,7 @@ impl<TTerm> BooleanIndex<TTerm>
         let storage = try!(TStorage::load(&path.join(INV_INDEX_PATH)));
         let vocab = try!(Self::load_vocabulary(path));
         let doc_count = try!(Self::load_statistics(path));
-        let chunked_storage = ChunkedStorage::load(path, Box::new(storage)).unwrap();
+        let chunked_storage = ChunkedStorage::load(&path.join(INV_INDEX_PATH), Box::new(storage)).unwrap();
         let doc_storage = TDocStorage::load(&path.join(DOCUMENTS_PATH)).unwrap();
         BooleanIndex::from_parts(chunked_storage, vocab, Box::new(doc_storage), doc_count)
     }
@@ -169,7 +169,7 @@ impl<TTerm> BooleanIndex<TTerm>
         };
         try!(index.save_vocabulary());
         try!(index.save_statistics());
-        try!(index.chunked_postings.persist(path));
+        try!(index.chunked_postings.persist(&path.join(INV_INDEX_PATH)));
         Ok(index)
     }
 
@@ -205,7 +205,7 @@ impl<TTerm> BooleanIndex<TTerm>
             }
             Ok(())
         } else {
-            Err(Error::PersistPathNotSpecified)
+            Err(Error::Persistence(PersistenceError::PersistPathNotSpecified))
         }
     }
 
@@ -244,7 +244,7 @@ impl<TTerm> BooleanIndex<TTerm>
             VByteEncoded::new(self.document_count).write_to(&mut statistics_file)?;
             Ok(())
         } else {
-            Err(Error::PersistPathNotSpecified)
+            Err(Error::Persistence(PersistenceError::PersistPathNotSpecified))
         }
     }
 

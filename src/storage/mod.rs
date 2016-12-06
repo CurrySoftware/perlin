@@ -16,11 +16,14 @@ use std::fmt;
 use std::error::Error;
 use std::sync::Arc;
 
+use storage::persistence::PersistenceError;
+
 pub use storage::fs_storage::FsStorage;
 pub use storage::ram_storage::RamStorage;
 pub use storage::byte_code::{ByteDecodable, ByteEncodable, DecodeError, DecodeResult};
 
 pub mod compression;
+pub mod persistence;
 mod fs_storage;
 mod ram_storage;
 mod byte_code;
@@ -41,6 +44,8 @@ pub enum StorageError {
     ReadError(Option<io::Error>),
     /// Error occured during write operation
     WriteError(Option<io::Error>),
+    /// Error concerning percistence
+    Persitence(PersistenceError)
 }
 
 
@@ -75,6 +80,7 @@ impl Error for StorageError {
             StorageError::IO(_) => "An error occured during an IO-operation!",
             StorageError::ReadError(_) => "An error occured while trying to read from storage!",
             StorageError::WriteError(_) => "An error occured while trying to write to storage!",
+            StorageError::Persitence(_) => "An error occured concerning the persistence of this storage!",
         }
     }
 
@@ -82,6 +88,8 @@ impl Error for StorageError {
         match *self {
             StorageError::ReadError(Some(ref cause)) |
             StorageError::WriteError(Some(ref cause)) => Some(cause),
+            StorageError::IO(ref cause) => Some(cause),
+            StorageError::Persitence(ref cause) => Some(cause),
             _ => None,
         }
     }

@@ -161,7 +161,7 @@ impl<'a> MutChunkRef<'a> {
 mod tests {
     use std::io::Read;
 
-    use utils::persistence::Volatile;
+    use storage::persistence::Volatile;
     use chunked_storage::ChunkedStorage;
     use storage::RamStorage;
 

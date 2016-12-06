@@ -5,15 +5,18 @@ use std::hash::Hash;
 
 use storage::Storage;
 use storage::{ByteEncodable, ByteDecodable};
-use chunked_storage::{ChunkedStorage, IndexingChunk};
-use utils::persistence::{Volatile, Persistent};
+use storage::persistence::{Volatile, Persistent, PersistenceError};
+use chunked_storage::IndexingChunk;
 
 
 use index::boolean_index;
 use index::boolean_index::DocumentTerms;
 use index::boolean_index::{Result, Error, BooleanIndex};
 
-const REQUIRED_FILES: [&'static str; 2] = [boolean_index::VOCAB_FILENAME, boolean_index::STATISTICS_FILENAME];
+const REQUIRED_FILES: [&'static str; 4] = [boolean_index::VOCAB_FILENAME,
+                                           boolean_index::STATISTICS_FILENAME,
+                                           boolean_index::INV_INDEX_PATH,
+                                           boolean_index::DOCUMENTS_PATH];
 
 /// `IndexBuilder` is used to build `BooleanIndex` instances
 pub struct IndexBuilder<TTerm, TStorage, TDocStorage> {
@@ -34,7 +37,7 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
             persistence: None,
             _storage: PhantomData,
             _term: PhantomData,
-            _doc_storage: PhantomData
+            _doc_storage: PhantomData,
         }
     }
 }
@@ -43,7 +46,6 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
     where TTerm: Ord + Hash,
           TStorage: Storage<IndexingChunk> + Volatile + 'static,
           TDocStorage: Storage<DocumentTerms> + Volatile + 'static
-
 {
     /// Creates a volatile instance of `BooleanIndex`
     /// At the moment `BooleanIndex` does not support adding or removing
@@ -86,7 +88,7 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
         fs::create_dir_all(&path.join(boolean_index::DOCUMENTS_PATH))?;
         fs::create_dir_all(&path.join(boolean_index::INV_INDEX_PATH))?;
         let index_store = TStorage::create(&path.join(boolean_index::INV_INDEX_PATH))?;
-        let doc_store = TDocStorage::create(&path.join(boolean_index::DOCUMENTS_PATH))?;        
+        let doc_store = TDocStorage::create(&path.join(boolean_index::DOCUMENTS_PATH))?;
         BooleanIndex::new_persistent(documents, index_store, doc_store, path)
     }
 
@@ -115,13 +117,13 @@ impl<TTerm, TStorage, TDocStorage> IndexBuilder<TTerm, TStorage, TDocStorage>
                 if required_files.is_empty() {
                     Ok(path)
                 } else {
-                    Err(Error::MissingIndexFiles(required_files))
+                    Err(Error::Persistence(PersistenceError::MissingFiles(required_files)))
                 }
             } else {
-                Err(Error::PersistPathIsFile)
+                Err(Error::Persistence(PersistenceError::PersistPathIsFile))
             }
         } else {
-            Err(Error::PersistPathNotSpecified)
+            Err(Error::Persistence(PersistenceError::PersistPathNotSpecified))
         }
     }
 
@@ -137,6 +139,7 @@ mod tests {
     use super::*;
     use test_utils::{test_dir, create_test_dir};
     use index::boolean_index::Error;
+    use storage::persistence::PersistenceError;
     use storage::FsStorage;
     use std::fs;
 
@@ -146,7 +149,7 @@ mod tests {
 
         let result = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new().persist(path).load();
         // That is not really beautiful or anything.
-        assert!(if let Err(Error::MissingIndexFiles(_)) = result {
+        assert!(if let Err(Error::Persistence(PersistenceError::MissingFiles(_))) = result {
             true
         } else {
             false
@@ -158,22 +161,7 @@ mod tests {
         let path = &test_dir().join("index_dir_is_file.bin");
         fs::File::create(path).unwrap();
         let result = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new().persist(path).load();
-        assert!(if let Err(Error::PersistPathIsFile) = result {
-            true
-        } else {
-            false
-        });
-    }
-
-    #[test]
-    fn corrupt_file() {
-        let path = &create_test_dir("corrupted_files");
-        for file in IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::required_files() {
-            fs::File::create(path.join(file)).unwrap();
-        }
-
-        let result = IndexBuilder::<usize, FsStorage<_>, FsStorage<_>>::new().persist(path).load();
-        assert!(if let Err(Error::CorruptedIndexFile(_)) = result {
+        assert!(if let Err(Error::Persistence(PersistenceError::PersistPathIsFile)) = result {
             true
         } else {
             false

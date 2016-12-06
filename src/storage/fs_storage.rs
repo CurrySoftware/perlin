@@ -5,15 +5,18 @@ use std::path::Path;
 use std::sync::Arc;
 use std::marker::PhantomData;
 
+use storage;
 use storage::compression::{VByteEncoded, VByteDecoder};
 use storage::{ByteEncodable, ByteDecodable};
-use utils::persistence::Persistent;
+use storage::persistence::{Result, Persistent, PersistenceError};
+use storage::{StorageError, Storage};
 
-use storage::{Result, StorageError, Storage};
 
 const ENTRIES_FILENAME: &'static str = "entries.bin";
 const DATA_FILENAME: &'static str = "data.bin";
 const ASSOCIATED_FILES: &'static [&'static str; 2] = &[ENTRIES_FILENAME, DATA_FILENAME];
+
+const ENTRIES_DATA_MISMATCH: &'static str = "entries did not match data!";
 
 /// Writes datastructures to a filesystem. Compressed and retrievable.
 pub struct FsStorage<TItem> {
@@ -53,7 +56,14 @@ impl<TItem> Persistent for FsStorage<TItem> {
 
     /// Reads a FsStorage from an previously populated folder.
     fn load(path: &Path) -> Result<Self> {
-        //TODO: Check for files
+
+        // Check for missing files
+        let files =
+            Self::associated_files().clone().iter().map(|f| *f).filter(|f| !path.join(f).exists()).collect::<Vec<_>>();
+        if files.len() > 0 {
+            return Err(PersistenceError::MissingFiles(files));
+        }
+
         // Read from entry file to BTreeMap.
         let mut entries = BTreeMap::new();
         // 1. Open file and pass it to the decoder
@@ -68,6 +78,10 @@ impl<TItem> Persistent for FsStorage<TItem> {
             current_offset += len as u64;
         }
 
+        if path.join(DATA_FILENAME).metadata()?.len() != current_offset {
+            return Err(PersistenceError::CorruptData(Some(ENTRIES_DATA_MISMATCH)));
+        }
+        
         Ok(FsStorage {
             current_id: current_id,
             current_offset: current_offset,
@@ -75,8 +89,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
             persistent_entries: try!(OpenOptions::new()
                 .append(true)
                 .open(path.join(ENTRIES_FILENAME))),
-            data: OpenOptions::new()
-                .read(true)
+            data: OpenOptions::new().read(true)
                 .append(true)
                 .open(path.join(DATA_FILENAME))?,
             _item_type: PhantomData,
@@ -92,12 +105,11 @@ impl<TItem> Persistent for FsStorage<TItem> {
 
 
 impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsStorage<TItem> {
-
     fn len(&self) -> usize {
         self.entries.len()
     }
-    
-    fn get(&self, id: u64) -> Result<Arc<TItem>> {
+
+    fn get(&self, id: u64) -> storage::Result<Arc<TItem>> {
         // TODO: Think through this once more. Now with the new Read approach in ByteDecodable
         if let Some(item_position) = self.entries.get(&id) {
             // Get filehandle
@@ -115,7 +127,7 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsSt
         }
     }
 
-    fn store(&mut self, id: u64, data: TItem) -> Result<()> {
+    fn store(&mut self, id: u64, data: TItem) -> storage::Result<()> {
 
         // Encode the data
         let bytes = data.encode();
@@ -139,9 +151,9 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsSt
 }
 
 
-fn encode_entry(current_id: u64, id: u64, length: u32) -> Result<Vec<u8>> {
+fn encode_entry(current_id: u64, id: u64, length: u32) -> storage::Result<Vec<u8>> {
     let mut bytes: Vec<u8> = Vec::new();
-    VByteEncoded::new((id-current_id) as usize).write_to(&mut bytes)?;
+    VByteEncoded::new((id - current_id) as usize).write_to(&mut bytes)?;
     VByteEncoded::new(length as usize).write_to(&mut bytes)?;
     Ok(bytes)
 }
@@ -159,12 +171,15 @@ fn decode_entry<R: Read>(decoder: &mut VByteDecoder<R>) -> Option<(u32, u32)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::fs;
+    use std::io::Write;
     
     use test_utils::create_test_dir;
-    use utils::persistence::Persistent;
+
+    use storage::persistence::{Persistent, PersistenceError};
     use storage::{Storage, StorageError};
-    
-    
+
     #[test]
     fn basic() {
         let item1: u32 = 15;
@@ -220,5 +235,37 @@ mod tests {
             assert_eq!(prov3.get(1).unwrap().as_ref(), &item2);
             assert_eq!(prov3.get(2).unwrap().as_ref(), &item3);
         }
+    }
+
+    #[test]
+    fn associated_files_correct() {
+        let path = &create_test_dir("fs_storage_associated_files");
+        FsStorage::<usize>::create(path).unwrap();
+        assert_eq!(fs::read_dir(path).unwrap().count(),
+                   FsStorage::<usize>::associated_files().len());
+        let mut required = FsStorage::<usize>::associated_files().clone().to_vec();
+        for entry in fs::read_dir(path).unwrap() {
+            let os = entry.unwrap().file_name();
+            let file_name = os.to_str().unwrap();
+            required.retain(|f| *f != file_name);
+        }
+        assert_eq!(required.len(), 0);
+    }
+
+    #[test]
+    fn corrupt_file() {
+        let path = &create_test_dir("corrupted_files");
+        for file in FsStorage::<usize>::associated_files() {
+            let mut f = fs::File::create(path.join(file)).unwrap();
+            f.write(&[0, 0, 0, 0, 0]).unwrap();
+        }
+
+        let result = FsStorage::<usize>::load(path);
+
+        assert!(if let Err(PersistenceError::CorruptData(_)) = result {
+            true
+        } else {
+            false
+        });
     }
 }

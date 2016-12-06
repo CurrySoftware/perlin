@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use utils::persistence::Volatile;
+use storage::persistence::Volatile;
 use storage::{StorageError, Result, Storage};
 
 /// Stores anything in a `Vector`.
@@ -38,7 +38,7 @@ impl<T: Sync + Send> Storage<T> for RamStorage<T> {
 mod tests {
     use super::*;
 
-    use utils::persistence::Volatile;
+    use storage::persistence::Volatile;
     use storage::Storage;
 
     #[test]

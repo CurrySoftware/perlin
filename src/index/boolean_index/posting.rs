@@ -120,7 +120,7 @@ impl PartialOrd for Posting {
 mod tests {
     use super::*;
 
-    use utils::persistence::Volatile;
+    use storage::persistence::Volatile;
     use utils::seeking_iterator::SeekingIterator;
     use chunked_storage::ChunkedStorage;
     use storage::RamStorage;
