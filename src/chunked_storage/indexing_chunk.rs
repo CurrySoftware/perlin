@@ -38,7 +38,8 @@ impl Eq for IndexingChunk {}
 impl PartialEq for HotIndexingChunk {
     fn eq(&self, other: &HotIndexingChunk) -> bool {
         self.capacity == other.capacity && self.last_doc_id == other.last_doc_id &&
-        self.archived_chunks == other.archived_chunks && self.get_bytes() == other.get_bytes()
+        self.archived_chunks == other.archived_chunks &&
+        self.get_bytes() == other.get_bytes()
     }
 }
 
@@ -53,7 +54,8 @@ impl fmt::Debug for IndexingChunk {
 impl fmt::Debug for HotIndexingChunk {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         try!(write!(f,
-                    "HotIndexingChunk has {} predecessors: {:?}\n And {} spare bytes! Its last document id is {}\n",
+                    "HotIndexingChunk has {} predecessors: {:?}\n And {} spare bytes! Its last \
+                     document id is {}\n",
                     self.archived_chunks.len(),
                     self.archived_chunks,
                     self.capacity,
@@ -129,30 +131,40 @@ impl HotIndexingChunk {
 
 
 
-    /// Get the byte-offset for a certain doc_id when regarding all chunk buffers as one single consecutive buffer.
-    /// We can't always get the correct offset; we can only get the correct chunk.
+    /// Get the byte-offset for a certain doc_id when regarding all chunk
+    /// buffers as one single consecutive buffer.
+    /// We can't always get the correct offset; we can only get the correct
+    /// chunk.
     /// In this chunk, the first postigs starts at a certain offset.
-    /// So, we return the chunks index * SIZE + the offset of its first posting + the doc_id of this posting
-    /// This is necessary because doc_ids are delta encoded and dont make sense without decoding prior postings first.
-    /// The whole idea of this process is explained in detail at https://www.perlin-ir.org/post/dont-decode-everything/
-    /// Also, have a look at `index::boolean_index::posting::PostingDecoder::next_seek`
+    /// So, we return the chunks index * SIZE + the offset of its first posting
+    /// + the doc_id of this posting
+    /// This is necessary because doc_ids are delta encoded and dont make sense
+    /// without decoding prior postings first.
+    /// The whole idea of this process is explained in detail at
+    /// https://www.perlin-ir.org/post/dont-decode-everything/
+    /// Also, have a look at
+    /// `index::boolean_index::posting::PostingDecoder::next_seek`
     pub fn doc_id_offset(&self, doc_id: &u64) -> (u64, usize) {
         // If there are no archived chunks,
-        // return the offset of the first posting in HotIndexingChunk (== 0) + its doc_id
+        // return the offset of the first posting in HotIndexingChunk (== 0) + its
+        // doc_id
         if self.archived_chunks.is_empty() {
             return (self.first_doc_id, 0);
         }
 
         // Binary search for the index of the seeked chunk.
-        let mut index = match self.archived_chunks.binary_search_by_key(doc_id, |&(doc_id, _, _)| doc_id) {
-            Ok(index) => index,//If we have a chunk that starts with the seeked doc_id its great!
-            // Otherwise, we want one chunk prior
-            // Example: Lets look for 9 in [4, 8, 10, 14]. We want chunk that starts with 8.
-            // Binary search returns index 3, so go one to the left to get the correct chunk
-            Err(index) if index > 0 => index - 1,
-            // But not if we are pointing at the leftmost chunk (obviously)
-            Err(index) => index,
-        };
+        let mut index =
+            match self.archived_chunks
+                .binary_search_by_key(doc_id, |&(doc_id, _, _)| doc_id) {
+                Ok(index) => index,
+                // If we have a chunk that starts with the seeked doc_id its great!
+                // Otherwise, we want one chunk prior
+                // Example: Lets look for 9 in [4, 8, 10, 14]. We want chunk that starts with 8.
+                // Binary search returns index 3, so go one to the left to get the correct chunk
+                Err(index) if index > 0 => index - 1,
+                // But not if we are pointing at the leftmost chunk (obviously)
+                Err(index) => index,
+            };
 
         // Get the first doc_id of that chunk
         let chunk_first_doc_id = self.archived_chunks[index].0;
@@ -317,7 +329,10 @@ mod tests {
             let bytes = chunk.encode();
             assert!(HotIndexingChunk::decode(&mut (&bytes[5..] as &[u8])).is_err());
             assert!(HotIndexingChunk::decode(&mut (&bytes[..100] as &[u8])).is_err());
-            assert!(HotIndexingChunk::decode(&mut (&bytes.iter().map(|i| i % 2 * 128).collect::<Vec<_>>() as &[u8]))
+            assert!(
+                HotIndexingChunk::decode(
+                    &mut (&bytes.iter().
+                          map(|i| i % 2 * 128).collect::<Vec<_>>() as &[u8]))
                 .is_err());
         }
 

@@ -17,12 +17,38 @@
 //! let three = VByteDecoder::new(bytes.into_iter()).next().unwrap();
 //! assert_eq!(3, three);
 //! ```
-
 use std::mem;
 use std::io;
 use std::io::{Seek, SeekFrom, Read, Write, Error};
 
 const BUFSIZE: usize = 32;
+
+pub trait EncodingScheme<W: Write> {
+    
+    fn encode_to_stream(number: usize, target: &mut W) -> Result<usize, Error>;
+
+}
+pub trait DecodingScheme<R: Read> {
+    type ResultIter;
+    fn decode_from_stream(source: R) -> Result<Self::ResultIter, Error>;
+}
+
+    
+pub struct VByteCode;
+
+impl<W: Write> EncodingScheme<W> for VByteCode{
+    fn encode_to_stream(number: usize, target: &mut W) -> Result<usize, Error> {
+        VByteEncoded::new(number).write_to(target)
+    }
+}
+impl<R: Read> DecodingScheme<R> for VByteCode {
+
+    type ResultIter = VByteDecoder<R>;
+    
+    fn decode_from_stream(source: R) -> Result<VByteDecoder<R>, Error>{
+        Ok(VByteDecoder::new(source))
+    }
+}
 
 /// Stores the result of a vbyte encode operation without indirection that a `Vec<u8>` would introduce.
 /// Can thus be used to `vbyte_encode` on the stack
@@ -52,20 +78,20 @@ impl VByteEncoded {
     }
 
     /// Return how many bytes are used to encode the number. Min: 1 Max: 10
-    pub fn bytes_used(&self) -> u8 {
-        self.data[10]
+    pub fn bytes_used(&self) -> usize {
+        self.data[10] as usize
     }
 
     /// Access to the written data as slice
     /// Currently only used in tests
     pub fn data_buf(&self) -> &[u8] {
-        &self.data[(10 - self.bytes_used()) as usize..10]
+        &self.data[(10 - self.bytes_used())..10]
     }
 
     /// Writes the given VByteEncoded number to a target.
     /// Returns the number of bytes written (equal to `bytes_used`) or an `io::Error`
-    pub fn write_to<W: Write>(&self, target: &mut W) -> Result<u8, Error> {
-        target.write_all(&self.data[(10 - self.bytes_used()) as usize..10]).map(|()| self.bytes_used())
+    pub fn write_to<W: Write>(&self, target: &mut W) -> Result<usize, Error> {
+        target.write_all(&self.data[(10 - self.bytes_used())..10]).map(|()| self.bytes_used())
     }
 }
 

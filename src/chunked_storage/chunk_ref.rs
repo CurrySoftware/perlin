@@ -30,7 +30,8 @@ impl<'a> fmt::Debug for ChunkRef<'a> {
 impl<'a> io::Write for MutChunkRef<'a> {
     // Fill the HotIndexingChunk
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let bytes_written = try!((&mut self.chunk.data[SIZE - self.chunk.capacity as usize..]).write(buf));
+        let bytes_written = try!((&mut self.chunk.data[SIZE - self.chunk.capacity as usize..])
+            .write(buf));
         self.chunk.capacity -= bytes_written as u16;
         if self.chunk.capacity == 0 {
             let id = self.archive.len();
@@ -55,7 +56,7 @@ impl<'a> io::Write for MutChunkRef<'a> {
 /// It will read from the first archived chunk, then the second and so on and then read from
 /// HotIndexingChunk.
 impl<'a> io::Read for ChunkRef<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {        
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut bytes_read = 0;
         loop {
             // Find the chunk we are currently reading from
@@ -67,7 +68,8 @@ impl<'a> io::Read for ChunkRef<'a> {
                 // Get chunk
                 let chunk = self.archive.get(chunk_id as u64)?;
                 // read from its buffer and determine how many bytes were read
-                let n_read = (&chunk.get_bytes()[self.read_ptr % SIZE..]).read(&mut buf[bytes_read..])?;
+                let n_read =
+                    (&chunk.get_bytes()[self.read_ptr % SIZE..]).read(&mut buf[bytes_read..])?;
                 if n_read == 0 {
                     // If no bytes were read, the target-buffer is full.
                     return Ok(bytes_read);
@@ -79,9 +81,8 @@ impl<'a> io::Read for ChunkRef<'a> {
                 break;
             }
         }
-        //Read all archived chunks. Read from `HotIndexingChunk` now.
-        let read = (&self.chunk.get_bytes()[self.read_ptr % SIZE..])
-            .read(&mut buf[bytes_read..])?;
+        // Read all archived chunks. Read from `HotIndexingChunk` now.
+        let read = (&self.chunk.get_bytes()[self.read_ptr % SIZE..]).read(&mut buf[bytes_read..])?;
         bytes_read += read;
         self.read_ptr += read;
         Ok(bytes_read)
@@ -137,13 +138,15 @@ impl<'a> ChunkRef<'a> {
 }
 
 impl<'a> MutChunkRef<'a> {
-    pub fn new(chunk: &'a mut HotIndexingChunk, archive: &'a mut Box<Storage<IndexingChunk>>) -> Self {
+    pub fn new(chunk: &'a mut HotIndexingChunk,
+               archive: &'a mut Box<Storage<IndexingChunk>>)
+               -> Self {
         MutChunkRef {
             chunk: chunk,
             archive: archive,
         }
     }
-
+   
     pub fn write_posting(&mut self, doc_id: u64, buf: &[u8]) -> io::Result<()> {
         self.chunk.add_doc_id(doc_id);
         self.write_all(buf)?;

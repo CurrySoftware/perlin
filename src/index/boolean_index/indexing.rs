@@ -6,7 +6,7 @@ use std::hash::Hash;
 use std::collections::HashMap;
 
 
-use storage::compression::VByteEncoded;
+use storage::compression::{EncodingScheme, VByteCode};
 
 use index::boolean_index::{Result, Error, IndexingError, DocumentTerms};
 use index::boolean_index::posting::{Posting, Listing};
@@ -106,7 +106,7 @@ fn store_documents<TDocStorage>(mut doc_storage: TDocStorage, documents: mpsc::R
     while let Ok((doc_id, terms)) = documents.recv() {
         let mut bytes = Vec::with_capacity(terms.len()*4);
         for term in terms {
-            VByteEncoded::new(term as usize).write_to(&mut bytes)?;
+            VByteCode::encode_to_stream(term as usize, &mut bytes)?;
         }
         doc_storage.store(doc_id, bytes)?;
     }
@@ -181,9 +181,10 @@ fn write_listing(listing: Listing, mut base_doc_id: u64, target: &mut MutChunkRe
         let delta_doc_id = doc_id - base_doc_id;
         // Update base id
         base_doc_id = doc_id;
-        let data = VByteEncoded::new(delta_doc_id as usize);
+        let mut data = Vec::new();
+        VByteCode::encode_to_stream(delta_doc_id as usize, &mut data)?;
 
-        target.write_posting(base_doc_id, data.data_buf())?;
+        target.write_posting(base_doc_id, data.as_slice())?;
     }
     Ok(base_doc_id)
 }
