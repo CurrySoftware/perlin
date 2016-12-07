@@ -3,7 +3,7 @@ use std::mem;
 use std::io::Read;
 
 use storage::{ByteEncodable, ByteDecodable, DecodeResult, DecodeError};
-use storage::compression::{VByteDecoder, VByteEncoded};
+use storage::compression::{EncodingScheme, DecodingScheme, VByteCode};
 use chunked_storage::SIZE;
 
 
@@ -203,7 +203,7 @@ impl HotIndexingChunk {
 
 impl ByteDecodable for IndexingChunk {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read);
+        let mut decoder = VByteCode::decode_from_stream(read);
         let mut result: IndexingChunk;
         {
             let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
@@ -222,7 +222,7 @@ impl ByteEncodable for IndexingChunk {
         let mut result = Vec::with_capacity(SIZE + 24);
         {
             let mut write_ptr = &mut result;
-            VByteEncoded::new(self.capacity as usize).write_to(write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.capacity as usize, write_ptr).unwrap();
         }
         result.extend_from_slice(&self.data);
         result
@@ -231,7 +231,7 @@ impl ByteEncodable for IndexingChunk {
 
 impl ByteDecodable for HotIndexingChunk {
     fn decode<R: Read>(read: &mut R) -> DecodeResult<Self> {
-        let mut decoder = VByteDecoder::new(read);
+        let mut decoder = VByteCode::decode_from_stream(read);
         let mut result: HotIndexingChunk;
         {
             let capacity = try!(decoder.next().ok_or(DecodeError::MalformedInput));
@@ -269,17 +269,17 @@ impl ByteEncodable for HotIndexingChunk {
         let mut result = Vec::with_capacity(SIZE + 24);
         {
             let mut write_ptr = &mut result;
-            VByteEncoded::new(self.capacity as usize).write_to(write_ptr).unwrap();
-            VByteEncoded::new(self.last_doc_id as usize).write_to(write_ptr).unwrap();
-            VByteEncoded::new(self.total_postings as usize).write_to(write_ptr).unwrap();
-            VByteEncoded::new(self.first_doc_id as usize).write_to(write_ptr).unwrap();
-            VByteEncoded::new(self.offset as usize).write_to(write_ptr).unwrap();
-            VByteEncoded::new(self.overflow as usize).write_to(write_ptr).unwrap();
-            VByteEncoded::new(self.archived_chunks.len()).write_to(write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.capacity as usize, write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.last_doc_id as usize, write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.total_postings as usize, write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.first_doc_id as usize, write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.offset as usize, write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.overflow as usize, write_ptr).unwrap();
+            VByteCode::encode_to_stream(self.archived_chunks.len(), write_ptr).unwrap();
             for &(doc_id, offset, chunk_id) in &self.archived_chunks {
-                VByteEncoded::new(doc_id as usize).write_to(write_ptr).unwrap();
-                VByteEncoded::new(offset as usize).write_to(write_ptr).unwrap();
-                VByteEncoded::new(chunk_id as usize).write_to(write_ptr).unwrap();
+                VByteCode::encode_to_stream(doc_id as usize, write_ptr).unwrap();
+                VByteCode::encode_to_stream(offset as usize, write_ptr).unwrap();
+                VByteCode::encode_to_stream(chunk_id as usize, write_ptr).unwrap();
             }
         }
         result.extend_from_slice(&self.data);

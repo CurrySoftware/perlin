@@ -2,7 +2,7 @@ use utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 
 use storage::Storage;
 
-use storage::compression::VByteDecoder;
+use storage::compression::{DecodingScheme, VByteCode};
 
 use index::boolean_index::DocumentTerms;
 use index::boolean_index::boolean_query::PositionalOperator;
@@ -40,7 +40,7 @@ impl<'a> PositionalQueryIterator<'a> {
         loop {
             let posting = try_option!(self.possible_documents.next());
             let enc_docterms = self.doc_store.get(*posting.doc_id()).unwrap();
-            let docterms = VByteDecoder::new(enc_docterms.as_slice()).collect::<Vec<_>>();
+            let docterms = VByteCode::decode_from_stream(enc_docterms.as_slice()).collect::<Vec<_>>();
             if match_pattern(docterms, &self.pattern) {
                 return Some(posting);
             }

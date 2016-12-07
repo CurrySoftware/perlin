@@ -6,7 +6,8 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 
 use storage;
-use storage::compression::{VByteEncoded, VByteDecoder};
+use storage::compression::{EncodingScheme, DecodingScheme, VByteCode};
+use storage::compression::vbyte::VByteDecoder;
 use storage::{ByteEncodable, ByteDecodable};
 use storage::persistence::{Result, Persistent, PersistenceError};
 use storage::{StorageError, Storage};
@@ -64,7 +65,7 @@ impl<TItem> Persistent for FsStorage<TItem> {
         let mut entries = BTreeMap::new();
         // 1. Open file and pass it to the decoder
         let entries_file = OpenOptions::new().read(true).open(path.join(ENTRIES_FILENAME))?;
-        let mut decoder = VByteDecoder::new(entries_file);
+        let mut decoder = VByteCode::decode_from_stream(entries_file);
         // 2. Decode entries and write them to BTreeMap
         let mut current_id: u64 = 0;
         let mut current_offset: u64 = 0;
@@ -149,8 +150,8 @@ impl<TItem: ByteDecodable + ByteEncodable + Sync + Send> Storage<TItem> for FsSt
 
 fn encode_entry(current_id: u64, id: u64, length: u32) -> storage::Result<Vec<u8>> {
     let mut bytes: Vec<u8> = Vec::new();
-    VByteEncoded::new((id - current_id) as usize).write_to(&mut bytes)?;
-    VByteEncoded::new(length as usize).write_to(&mut bytes)?;
+    VByteCode::encode_to_stream((id - current_id) as usize, &mut bytes)?;
+    VByteCode::encode_to_stream(length as usize, &mut bytes)?;
     Ok(bytes)
 }
 

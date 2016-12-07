@@ -22,7 +22,7 @@ use index::boolean_index::query_result_iterator::nary_query_iterator::*;
 use index::boolean_index::query_result_iterator::positional_query_iterator::*;
 use index::boolean_index::posting::PostingDecoder;
 
-use storage::compression::{VByteEncoded, VByteDecoder};
+use storage::compression::{EncodingScheme, DecodingScheme, VByteCode};
 use storage::{ByteEncodable, ByteDecodable, DecodeError};
 use storage::persistence::{Persistent, PersistenceError};
 
@@ -186,10 +186,9 @@ impl<TTerm> BooleanIndex<TTerm>
             for vocab_entry in &self.term_ids {
                 // Encode term and number of its bytes
                 let term_bytes = vocab_entry.0.encode();
-                let term_length_bytes = VByteEncoded::new(term_bytes.len());
                 // Encode id
-                VByteEncoded::new(*vocab_entry.1 as usize).write_to(&mut byte_buffer)?;
-                term_length_bytes.write_to(&mut byte_buffer)?;
+                VByteCode::encode_to_stream(*vocab_entry.1 as usize, &mut byte_buffer)?;
+                VByteCode::encode_to_stream(term_bytes.len(), &mut byte_buffer);
                 // Append term to byte_buffer
                 byte_buffer.extend_from_slice(&term_bytes);
 
@@ -213,7 +212,7 @@ impl<TTerm> BooleanIndex<TTerm>
         // Open file
         let vocab_file = try!(OpenOptions::new().read(true).open(path.join(VOCAB_FILENAME)));
         // Create a decoder from that vector
-        let mut decoder = VByteDecoder::new(vocab_file);
+        let mut decoder = VByteCode::decode_from_stream(vocab_file);
         let mut result = HashMap::new();
         // Get the id
         while let Some(id) = decoder.next() {
@@ -241,7 +240,7 @@ impl<TTerm> BooleanIndex<TTerm>
                 .create(true)
                 .truncate(true)
                 .open(filename));
-            VByteEncoded::new(self.document_count).write_to(&mut statistics_file)?;
+            VByteCode::encode_to_stream(self.document_count, &mut statistics_file)?;
             Ok(())
         } else {
             Err(Error::Persistence(PersistenceError::PersistPathNotSpecified))
@@ -250,7 +249,7 @@ impl<TTerm> BooleanIndex<TTerm>
 
     fn load_statistics(path: &Path) -> Result<usize> {
         let statistics_file = try!(OpenOptions::new().read(true).open(path.join(STATISTICS_FILENAME)));
-        if let Some(doc_count) = VByteDecoder::new(statistics_file).next() {
+        if let Some(doc_count) = VByteCode::decode_from_stream(statistics_file).next() {
             Ok(doc_count)
         } else {
             Err(Error::CorruptedIndexFile(None))

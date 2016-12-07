@@ -2,7 +2,8 @@ use std::io::{Seek, SeekFrom};
 use std::cmp::Ordering;
 
 use utils::seeking_iterator::SeekingIterator;
-use storage::compression::VByteDecoder;
+use storage::compression::{DecodingScheme, VByteCode};
+use storage::compression::vbyte::VByteDecoder;
 use chunked_storage::chunk_ref::ChunkRef;
 
 // For each term-document pair the doc_id and the

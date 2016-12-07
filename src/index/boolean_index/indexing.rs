@@ -199,7 +199,7 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     use storage::persistence::Volatile;
-    use storage::compression::VByteDecoder;
+    use storage::compression::{VByteCode, DecodingScheme};
     use chunked_storage::ChunkedStorage;
     use index::boolean_index::posting::{Posting, PostingDecoder};
     use storage::RamStorage;
@@ -370,7 +370,7 @@ mod tests {
             super::write_listing(listing, 0, &mut chunk).unwrap();
         }
         let ch = storage.get(0);
-        let data = VByteDecoder::new(ch).collect::<Vec<_>>();
+        let data = VByteCode::decode_from_stream(ch).collect::<Vec<_>>();
         assert_eq!(data, vec![0, 1]);
     }    
 }
