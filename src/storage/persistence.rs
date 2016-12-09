@@ -12,18 +12,24 @@ use std::result;
 use std::path::Path;
 use std::error::Error;
 
+/// Local alias for `Result`s with `PersistenceError`
 pub type Result<T> = result::Result<T, PersistenceError>;
 
-
+/// Provides functionality needed to persist objects on the file system
 pub trait Persistent
     where Self: Sized
 {
+    /// Create a new persistent object living at `path`
     fn create(path: &Path) -> Result<Self>;
+    /// Load a previously created object from `path`
     fn load(path: &Path) -> Result<Self>;
+    /// What files are associated with this persistent type?
     fn associated_files() -> &'static [&'static str];
 }
 
+/// Provides functionality needed to create volatile objects
 pub trait Volatile {
+    /// Create a new volatile object
     fn new() -> Self;
 }
 

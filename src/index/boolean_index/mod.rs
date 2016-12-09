@@ -73,6 +73,7 @@ pub enum IndexingError {
 #[derive(Debug)]
 /// Error kinds that can occur during operations related to `BooleanIndex`
 pub enum Error {
+    /// An Error occured during a persistence operation
     Persistence(PersistenceError),
     /// An IO-Error occured
     IO(io::Error),

@@ -1,3 +1,10 @@
+//! This module provides the implementations of `EncodingScheme` and `DecodingScheme`
+//! for variable byte codes as described in
+//! http://nlp.stanford.edu/IR-book/html/htmledition/variable-byte-codes-1.html.
+//!
+//! This is a rather inoptimal implementation
+//! About 100mis => 8 to 10 times slower than what some papers describe not using SIMD
+//! and 20 to 30 times slower than what some papers describe using SIMD
 use std::mem;
 use std::io;
 use std::io::{Seek, SeekFrom, Read, Write, Error};
@@ -6,6 +13,8 @@ use storage::compression::{EncodingScheme, DecodingScheme};
 
 const BUFSIZE: usize = 32;
 
+/// Implements `EncodingScheme` and `DecodingScheme` using variable byte code.
+/// See [the module level documentation](index.html) for more.
 pub struct VByteCode;
 
 impl<W: Write> EncodingScheme<W> for VByteCode{

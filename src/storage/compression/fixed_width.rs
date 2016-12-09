@@ -10,6 +10,8 @@ use std::io::{Read, Result, Write};
 
 use storage::compression::{BatchEncodingScheme, BatchDecodingScheme};
 
+/// Implements `BatchEncodingScheme` and `BatchDecodingScheme` using fixed width code.
+/// See [the module level documentation](index.html) for more.
 pub struct FixedWidthCode;
 
 impl<W: Write> BatchEncodingScheme<W> for FixedWidthCode {
