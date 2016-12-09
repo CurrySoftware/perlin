@@ -1,3 +1,7 @@
+//This concept was based on the idea, the positional queries can only be run on query atoms
+//This is not the case anymore.
+//TODO: Rethink!
+
 /// Basic boolean operator. Use it in combination with a `BooleanQuery`
 #[derive(Copy ,Clone)]
 pub enum BooleanOperator {

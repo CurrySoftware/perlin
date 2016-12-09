@@ -15,7 +15,7 @@ use index::Index;
 use storage::{Storage, StorageError};
 use storage::DecodeResult;
 use chunked_storage::{ChunkedStorage, IndexingChunk};
-use index::boolean_index::boolean_query::*;
+use index::boolean_index::boolean_query::{BooleanQuery, BooleanOperator, PositionalOperator, FilterOperator, QueryAtom};
 use index::boolean_index::indexing::index_documents;
 use index::boolean_index::query_result_iterator::*;
 use index::boolean_index::query_result_iterator::nary_query_iterator::*;

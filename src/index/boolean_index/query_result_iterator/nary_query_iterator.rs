@@ -1,6 +1,6 @@
 use utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 
-use index::boolean_index::boolean_query::*;
+use index::boolean_index::boolean_query::BooleanOperator;
 use index::boolean_index::posting::Posting;
 use index::boolean_index::query_result_iterator::*;
 
