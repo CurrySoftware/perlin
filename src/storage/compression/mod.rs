@@ -17,9 +17,7 @@
 //! let three = VByteDecoder::new(bytes.into_iter()).next().unwrap();
 //! assert_eq!(3, three);
 //! ```
-use std::mem;
-use std::io;
-use std::io::{Seek, SeekFrom, Read, Write, Error};
+use std::io::{Read, Write, Error};
 
 pub mod vbyte;
 

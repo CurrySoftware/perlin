@@ -188,7 +188,7 @@ impl<TTerm> BooleanIndex<TTerm>
                 let term_bytes = vocab_entry.0.encode();
                 // Encode id
                 VByteCode::encode_to_stream(*vocab_entry.1 as usize, &mut byte_buffer)?;
-                VByteCode::encode_to_stream(term_bytes.len(), &mut byte_buffer);
+                VByteCode::encode_to_stream(term_bytes.len(), &mut byte_buffer)?;
                 // Append term to byte_buffer
                 byte_buffer.extend_from_slice(&term_bytes);
 

@@ -2,7 +2,6 @@ use std::io::{Seek, SeekFrom};
 use std::cmp::Ordering;
 
 use utils::seeking_iterator::SeekingIterator;
-use storage::compression::{DecodingScheme, VByteCode};
 use storage::compression::vbyte::VByteDecoder;
 use chunked_storage::chunk_ref::ChunkRef;
 
@@ -27,10 +26,12 @@ impl Posting {
 }
 
 
-/// This struct abstracts the complexity of decoding postings away from query execution
+/// This struct abstracts the complexity of decoding postings away from query
+/// execution
 /// It allows iterator-like access but also seeking access to postings.
 /// That means, that not all postings have to be decoded for every query term.
-/// To understand more about that have a look at the blog post (https://www.perlin-ir.org/post/dont-decode-everything/)
+/// To understand more about that have a look at the blog post
+/// (https://www.perlin-ir.org/post/dont-decode-everything/)
 pub struct PostingDecoder<'a> {
     decoder: VByteDecoder<ChunkRef<'a>>,
     last_doc_id: u64,
@@ -74,7 +75,8 @@ impl<'a> SeekingIterator for PostingDecoder<'a> {
             self.decoder.seek(SeekFrom::Start(offset as u64)).unwrap();
             // Decode the next posting
             let mut v = try_option!(self.next());
-            // DocId is corrupt, because delta encoding is obviously not compatible with seeking
+            // DocId is corrupt, because delta encoding is obviously not compatible with
+            // seeking
             // So overwrite it with the doc_id given to us
             v.0 = doc_id;
             // Store it for further decoding
@@ -97,7 +99,8 @@ impl<'a> SeekingIterator for PostingDecoder<'a> {
 
 // When we compare postings, we usually only care about doc_ids.
 // For comparisons that consider positions have a look at
-// `index::boolean_index::query_result_iterator::nary_query_iterator::positional_intersect` ...
+// `index::boolean_index::query_result_iterator::nary_query_iterator::
+// positional_intersect` ...
 impl Ord for Posting {
     fn cmp(&self, other: &Self) -> Ordering {
         self.doc_id().cmp(other.doc_id())
@@ -155,10 +158,8 @@ mod tests {
         }
         {
             let mut decoder = PostingDecoder::new(storage.get(0));
-            assert_eq!(decoder.next_seek(&Posting::new(5)),
-                       Some(Posting::new(5)));
-            assert_eq!(decoder.next_seek(&Posting::new(10)),
-                       Some(Posting::new(10)));
+            assert_eq!(decoder.next_seek(&Posting::new(5)), Some(Posting::new(5)));
+            assert_eq!(decoder.next_seek(&Posting::new(10)), Some(Posting::new(10)));
             assert_eq!(decoder.next_seek(&Posting::new(100)).unwrap(),
                        Posting::new(100));
             assert_eq!(decoder.next().unwrap(), Posting::new(101));
