@@ -23,6 +23,7 @@ pub mod vbyte;
 pub mod fixed_width;
 
 pub use storage::compression::vbyte::VByteCode;
+pub use storage::compression::fixed_width::FixedWidthCode;
 
 /// Provides means to encode a number to a byte-stream
 pub trait EncodingScheme<W: Write> {

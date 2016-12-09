@@ -2,7 +2,7 @@ use utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 
 use storage::Storage;
 
-use storage::compression::{DecodingScheme, VByteCode};
+use storage::compression::{BatchDecodingScheme, FixedWidthCode};
 
 use index::boolean_index::DocumentTerms;
 use index::boolean_index::boolean_query::PositionalOperator;
@@ -40,8 +40,8 @@ impl<'a> PositionalQueryIterator<'a> {
         loop {
             let posting = try_option!(self.possible_documents.next());
             let enc_docterms = self.doc_store.get(*posting.doc_id()).unwrap();
-            let docterms = VByteCode::decode_from_stream(enc_docterms.as_slice()).collect::<Vec<_>>();
-            if match_pattern(docterms, &self.pattern) {
+            let docterms = FixedWidthCode::batch_decode(&mut enc_docterms.as_slice()).unwrap();
+            if match_pattern(&docterms, &self.pattern) {
                 return Some(posting);
             }
         }
@@ -69,7 +69,7 @@ impl<'a> SeekingIterator for PositionalQueryIterator<'a> {
 
 // This is not optimal
 // TODO: Make this optimal
-fn match_pattern(data: Vec<usize>, pattern: &Vec<(u32, u64)>) -> bool {
+fn match_pattern(data: &[u64], pattern: &Vec<(u32, u64)>) -> bool {
     // Lets start searching for that pattern
     // Pointer to a document term
     let mut ptr = 0;
@@ -79,7 +79,7 @@ fn match_pattern(data: Vec<usize>, pattern: &Vec<(u32, u64)>) -> bool {
     let mut tmp = 0;
     while ptr < data.len() {
         // If the term matches the pattern
-        if data[ptr] == pattern[pos].1 as usize {
+        if data[ptr] == pattern[pos].1 {
             if pos == 0 {
                 tmp = ptr;
             }
@@ -109,13 +109,13 @@ mod tests {
 
     #[test]
     fn match_pattern_basic() {
-        assert!(match_pattern(vec![1, 2, 3, 4, 5, 6, 7], &vec![(0, 4), (1, 5)]));
-        assert!(match_pattern(vec![1, 2, 3, 4, 5, 6, 7], &vec![(0, 4), (2, 6)]));
+        assert!(match_pattern(&[1, 2, 3, 4, 5, 6, 7], &vec![(0, 4), (1, 5)]));
+        assert!(match_pattern(&[1, 2, 3, 4, 5, 6, 7], &vec![(0, 4), (2, 6)]));
     }
 
     #[test]
     fn match_pattern_rec() {
-        assert!(match_pattern(vec![1, 2, 1, 2, 1, 4],
+        assert!(match_pattern(&[1, 2, 1, 2, 1, 4],
                               &vec![(0, 1), (1, 2), (2, 1), (3, 4)]));
     }
 

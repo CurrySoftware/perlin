@@ -6,7 +6,7 @@ use std::hash::Hash;
 use std::collections::HashMap;
 
 
-use storage::compression::{EncodingScheme, VByteCode};
+use storage::compression::{EncodingScheme, VByteCode, BatchEncodingScheme, FixedWidthCode};
 
 use index::boolean_index::{Result, Error, IndexingError, DocumentTerms};
 use index::boolean_index::posting::{Posting, Listing};
@@ -105,9 +105,7 @@ fn store_documents<TDocStorage>(mut doc_storage: TDocStorage, documents: mpsc::R
     where TDocStorage: Storage<DocumentTerms> {
     while let Ok((doc_id, terms)) = documents.recv() {
         let mut bytes = Vec::with_capacity(terms.len()*4);
-        for term in terms {
-            VByteCode::encode_to_stream(term as usize, &mut bytes)?;
-        }
+        FixedWidthCode::batch_encode(&terms, &mut bytes)?;
         doc_storage.store(doc_id, bytes)?;
     }
     Ok(doc_storage)
