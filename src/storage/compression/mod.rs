@@ -17,21 +17,34 @@
 //! let three = VByteDecoder::new(bytes.into_iter()).next().unwrap();
 //! assert_eq!(3, three);
 //! ```
-use std::io::{Read, Write, Error};
+use std::io::{Read, Write, Result};
 
 pub mod vbyte;
+pub mod fixed_width;
 
 pub use storage::compression::vbyte::VByteCode;
 
-
+/// Provides means to encode a number to a byte-stream
 pub trait EncodingScheme<W: Write> {
-    
-    fn encode_to_stream(number: usize, target: &mut W) -> Result<usize, Error>;
+    /// Encode a number to a target byte-stream. Return the number of bytes written!
+    fn encode_to_stream(number: usize, target: &mut W) -> Result<usize>;
 
 }
+/// Provides means to decode a byte-stream
 pub trait DecodingScheme<R: Read> {
     type ResultIter;
+    /// Returns an iterator that decodes the byte stream
     fn decode_from_stream(source: R) -> Self::ResultIter;
 }
 
-    
+/// Provides means to batch encode a list of numbers to a byte stream
+pub trait BatchEncodingScheme<W: Write> {
+    /// Encodes a slice numbers to a target byte stream. Returns the number of bytes written!
+    fn batch_encode(data: &[u64], target: &mut W) -> Result<usize>;
+}
+
+/// Provides means to batch decode a list of numbers from a byte stream
+pub trait BatchDecodingScheme<R: Read> {
+    /// Decodes a batch wich was previouly encoded to the byte stream. Returns the vector of results
+    fn batch_decode(data: &mut R) -> Result<Vec<u64>>;
+}
