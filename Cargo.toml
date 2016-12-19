@@ -9,16 +9,3 @@ repository = "https://github.com/JDemler/perlin"
 readme = "README.md"
 keywords = ["information", "retrieval", "search", "text", "engine"]
 license = "MIT"
-
-[[example]]
-name = "text-retrieval"
-path = "examples/text-retrieval/main.rs"
-
-[[example]]
-name = "tictactoe"
-path = "examples/tictactoe/main.rs"
-
-[dev-dependencies]
-rand = "0.3"
-lazy_static = "0.2.1"
-walkdir = "0.1"
