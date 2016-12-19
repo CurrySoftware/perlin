@@ -198,14 +198,17 @@ fn decompress(Block, &mut RingBuffer<Self>) -> Result<usize>
 ** General Strategy
 Find modular testable things. Implement them module by module with extensive tests for all
 ** Modules
-*** RingBuffer
+*** DONE RingBuffer
+    CLOSED: [2016-12-19 Mon 20:23]
 1. Implement Generically
 *** PageManager
-1. Define Trait
-2. Implement RamPageManager
-3. Implement FsPageManager
-4. Implement Combination
-5. Implement BlockIterator
+**** DONE Define Trait 
+     CLOSED: [2016-12-19 Mon 20:24]
+**** DONE Implement RamPageManager
+     CLOSED: [2016-12-19 Mon 20:24]
+**** Implement FsPageManager
+**** Implement Combination
+**** Implement BlockIterator
 *** Listings and Postings
 1. Define Postings and Listings
 2. Implement naive compression algorithm
