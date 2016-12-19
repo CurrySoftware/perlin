@@ -1,0 +1,215 @@
+* Requirements
+** Speed
+*** Any Query on 100MB indexed rawdata should execute in < 10ms
+*** Simple (< 4 terms, no phrase query) Queries should execute in < 1ms
+** Memory 
+*** Minimal Memory Overhead per Index enabeling multi-tennant Systems
+*** Moving data from memory to disk or network and back should be seamlessly possible depending on ram/disk pressure
+*** Allow shared dictionaries between different indices for minimal memory overhead
+** Usability
+*** sensible defaults, which can be tweeked if needed
+*** documentation of public api
+*** as few as possible generic parameters on index
+** Flexibility
+*** data-type independent
+*** plug-in your own
+**** Compression Algorithm
+**** Query Operator and Evaluator
+**** Data Storage mechanism
+**** Scoring/Ranking Method
+** Functionality
+*** Mutable Indices
+*** Boolean Retrieval
+*** Ranked Retrieval
+*** Semantic Relations (Taxonomies, Thesaurus, etc.)
+*** Relevance Feedback
+
+
+* Modules
+** Current Status
+*** Index
+**** Vocabulary
+**** InvertedIndex
+**** Query Engine
+*** Compression
+**** General Purpose Compression
+**** Integer Compression
+*** PageManager
+**** RamPageManager
+**** DiskPageManager
+**** NetworkPageManager
+
+
+
+* Processes
+** Index documents
+** Execute Query
+*** QueryAtom
+#+begin_src plantuml :file query_atom.png
+participant Index
+participant Vocabulary
+participant InvertedIndex
+participant QueryExecutor
+
+[-> Index : execute_query(atom)
+Index -> Vocabulary : get_term_id(atom)
+Vocabulary -> Index : term_id
+Index -> InvertedIndex : get_iterator(term_id)
+InvertedIndex -> Index : PostingIterator
+Index -> QueryExecutor : new(PostingIterator, deletedDocuments)
+QueryExecutor -> Index : Self
+Index ->[ : QueryExecutor
+
+#+end_src
+
+#+RESULTS:
+[[file:query_atom.png]]
+*** ArbitraryQuery
+#+begin_src plantuml :file arbitrary_query.png
+[-> Index : execute_query(Operator, Operands)
+Index -> Vocabulary : resolve_operands(Operands)
+
+#+end_src
+** Pages Blocks
+*** Indexing Process
+#+begin_src plantuml :file indexing_process.png
+participant Indexer
+participant Listing
+participant Compressor
+database RamPageManager
+database FsPageManager
+database NwPageManager
+== First Page ==
+Indexer -> Listing : add(&[Posting])
+Listing -> Compressor : compress(&[Posting])
+Compressor -> Listing : Block
+Listing -> RamPageManager : store_new(block)
+RamPageManager -> Listing : page_id
+== In Page ==
+Indexer -> Listing : add(&[Posting])
+Listing -> Compressor : compress(&[Posting])
+Compressor -> Listing : Block
+Listing -> RamPageManager : store_in_page(block, page_id)
+RamPageManager -> Listing : Ok(block_id)
+== Page Full ==
+Indexer -> Listing : add(&[Posting])
+Listing -> Compressor : compress(&[Posting])
+Compressor -> Listing : Block
+Listing -> RamPageManager : store_in_page(block, page_id)
+RamPageManager -> FsPageManager : store_page(page_id, Page)
+FsPageManager -> NwPageManager : store_page(page_id, Page)
+NwPageManager -> FsPageManager : Ok
+FsPageManager -> RamPageManager : Ok
+RamPageManager -> Listing : Err(page_id)
+#+end_src
+
+#+RESULTS:
+[[file:indexing_process.png]]
+*** Document Deletion
+#+begin_src plantuml :file document_deletion.png
+title Docstorage Concept
+participant Index
+participant Listing
+participant DocStore
+participant BlockIterator
+participant RamPageManager
+participant FsPageManager
+participant NwPageManager
+
+[-> Index : delete_document(doc_id)
+Index -> DocStore : get_listings(doc_id)
+DocStore -> Index : &[term_ids]
+Index -> Listing : delete_posting(doc_id)
+Listing -> Listing : delete_buffer_full()?
+Listing -> BlockIterator : get_all(&[(page_id, block_id)])
+BlockIterator -> Listing : &[Blocks]
+Listing -> Listing : DecodeRemoveEncode
+  loop over new pages
+    Listing -> RamPageManager : store_page(Page) 
+    RamPageManager -> FsPageManager : store_page(Page)
+    FsPageManager -> RamPageManager : Ok(page_id)
+    RamPageManager -> Listing : Ok(page_id)    
+  end
+Listing -> Index : NewBlockList
+Index -> Listing : UpdateBlockList(NewBlockList)
+loop over old pages
+Listing -> RamPageManager : delete_page(page_id)
+RamPageManager -> FsPageManager : delete_page(page_id)
+FsPageManager -> RamPageManager : Ok()
+RamPageManager -> Listing : Ok()
+end
+Listing -> Index : Ok()
+#+end_src
+
+#+RESULTS:
+[[file:document_deletion.png]]
+
+*** Get Page/Block
+ #+begin_src plantuml :file fetch_block.png
+ participant BlockIterator
+ database RamPageManager
+ database FsPageManager
+ database NwPageManager
+ BlockIterator -> RamPageManager : get(page_id)
+ RamPageManager -> FsPageManager : get(page_id)
+ FsPageManager -> NwPageManager : get(page_id)
+
+ NwPageManager --> FsPageManager : Page
+ FsPageManager --> RamPageManager : Page
+ RamPageManager --> BlockIterator : Page
+ #+end_src
+
+ #+RESULTS:
+ [[file:fetch_block.png]]
+*** Iterate over Blocks
+#+begin_src plantuml :file iterate_blocks.png
+start
+  if (!Page Available?)    
+  else
+    -get_page(page_id)
+  endif
+  -yield page[block]
+end
+#+end_src
+
+#+RESULTS:
+[[file:iterate_blocks.png]]
+
+* Traits
+** Vocabulary
+*** Method
+fn get_or_add(Term) -> term_id
+** PageManager
+*** Methods
+fn store_page(Page) -> page_id
+fn get_blocks(Vec<(page_id, block_id)>) -> impl Iterator<Item=Block>
+fn store_new_block(Block) -> page_id
+fn store_in_page(page_id, Block) -> Result<block_id, page_id>
+** Compressable
+*** Methods
+fn compress(&mut RingBuffer<Self>) -> Result<Block>
+fn decompress(Block, &mut RingBuffer<Self>) -> Result<usize>
+
+
+* Implementation Plans
+** General Strategy
+Find modular testable things. Implement them module by module with extensive tests for all
+** Modules
+*** RingBuffer
+1. Implement Generically
+*** PageManager
+1. Define Trait
+2. Implement RamPageManager
+3. Implement FsPageManager
+4. Implement Combination
+5. Implement BlockIterator
+*** Listings and Postings
+1. Define Postings and Listings
+2. Implement naive compression algorithm
+*** Vocabulary
+1. Define Vocabulary Trait
+2. Implement Vocabulary Trait for HashMap
+*** Index
+1. Define Struct
+2. Implement Indexing
+
