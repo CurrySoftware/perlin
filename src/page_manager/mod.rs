@@ -3,11 +3,13 @@ use std::sync::Arc;
 pub use page_manager::page::{Page, PageId, PAGESIZE};
 pub use page_manager::block::{Block, BlockId, BLOCKSIZE};
 pub use page_manager::fs_page_manager::FsPageManager;
+pub use page_manager::ram_page_cache::RamPageCache;
 
 mod page;
 mod block;
 mod fs_page_manager;
 mod ram_page_cache;
+mod block_iter;
 
 trait PageCache {
     fn get_page(&mut self, PageId) -> Arc<Page>;

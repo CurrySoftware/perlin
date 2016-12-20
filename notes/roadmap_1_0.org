@@ -215,7 +215,8 @@ Find modular testable things. Implement them module by module with extensive tes
      CLOSED: [2016-12-19 Mon 20:24]
 **** DONE Implement FsPageManager
      CLOSED: [2016-12-20 Tue 11:16]
-**** Implement Combination
+**** DONE Implement Combination
+     CLOSED: [2016-12-20 Tue 13:31]
 **** Implement BlockIterator
 *** Listings and Postings
 1. Define Postings and Listings

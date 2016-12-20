@@ -1,18 +1,17 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use page_manager::{Page, Block, BlockManager, PageStore, PageId, BlockId, PageCache, PAGESIZE};
+use page_manager::{FsPageManager, Page, Block, BlockManager, PageStore, PageId, BlockId, PageCache};
 
 const CACHESIZE: usize = 1024;
 
-struct RamPageCache<T: PageStore> {
+pub struct RamPageCache {
     cache: Vec<(PageId, Arc<Page>)>,
     construction_cache: Vec<(PageId, Page)>,
-    store: T,
+    store: FsPageManager,
 }
 
-impl<T: PageStore> RamPageCache<T> {
-    pub fn new(store: T) -> Self {
+impl RamPageCache {
+    pub fn new(store: FsPageManager) -> Self {
         RamPageCache {
             cache: Vec::with_capacity(CACHESIZE),
             construction_cache: Vec::with_capacity(CACHESIZE),
@@ -28,7 +27,7 @@ impl<T: PageStore> RamPageCache<T> {
     }
 }
 
-impl<T: PageStore> BlockManager for RamPageCache<T> {
+impl BlockManager for RamPageCache {
     fn store_block(&mut self, block: Block) -> PageId {
         let page_id = self.store.reserve_page();
         let mut p = Page::empty();
@@ -64,16 +63,16 @@ impl<T: PageStore> BlockManager for RamPageCache<T> {
     fn flush_page(&mut self, page_id: PageId) {
         if let Ok(index) = self.construction_cache
             .binary_search_by_key(&page_id, |&(pid, _)| pid) {
-                let (_, page) = self.construction_cache.remove(index);
-                self.invalidate(page_id);
-                self.store.store_reserved(page_id, page);
+            let (_, page) = self.construction_cache.remove(index);
+            self.invalidate(page_id);
+            self.store.store_reserved(page_id, page);
             return;
         }
         unreachable!();
     }
 }
 
-impl<T: PageStore> PageCache for RamPageCache<T> {
+impl PageCache for RamPageCache {
     fn delete_page(&mut self, page_id: PageId) {
         self.store.delete_page(page_id);
         if let Ok(index) = self.cache.binary_search_by_key(&page_id, |&(pid, _)| pid) {
@@ -115,7 +114,7 @@ mod tests {
                        BLOCKSIZE};
 
 
-    fn new_cache(name: &str) -> RamPageCache<FsPageManager> {
+    fn new_cache(name: &str) -> RamPageCache {
         let path = &create_test_dir(format!("ram_page_cache/{}", name).as_str());
         let pmgr = FsPageManager::new(&path.join("pages.bin"));
         RamPageCache::new(pmgr)
@@ -206,7 +205,7 @@ mod tests {
             p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
             assert_eq!(cache.get_page(PageId(i)), Arc::new(p));
         }
-        for i in 0..2048 {       
+        for i in 0..2048 {
             cache.flush_page(PageId(i));
         }
         for i in 0..2048 {
