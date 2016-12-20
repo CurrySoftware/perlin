@@ -89,7 +89,7 @@ RamPageManager -> Listing : page_id
 Indexer -> Listing : add(&[Posting])
 Listing -> Compressor : compress(&[Posting])
 Compressor -> Listing : Block
-Listing -> RamPageManager : store_in_page(block, page_id)
+Listing -> RamPageManager : store_in_place(block, page_id, block_id)
 RamPageManager -> Listing : Ok(block_id)
 == Page Full ==
 Indexer -> Listing : add(&[Posting])
@@ -101,6 +101,13 @@ FsPageManager -> NwPageManager : store_page(page_id, Page)
 NwPageManager -> FsPageManager : Ok
 FsPageManager -> RamPageManager : Ok
 RamPageManager -> Listing : Err(page_id)
+== Commit Unfull Page == 
+Indexer -> Listing : commit()
+Listing -> RamPageManager : commit_page(page_id)
+RamPageManager -> FsPageManager : store_page(page_id, Page)
+FsPageManager -> RamPageManager : Ok
+RamPageManager -> Listing : Ok
+Listing -> Indexer : Ok
 #+end_src
 
 #+RESULTS:
@@ -206,7 +213,8 @@ Find modular testable things. Implement them module by module with extensive tes
      CLOSED: [2016-12-19 Mon 20:24]
 **** DONE Implement RamPageManager
      CLOSED: [2016-12-19 Mon 20:24]
-**** Implement FsPageManager
+**** DONE Implement FsPageManager
+     CLOSED: [2016-12-20 Tue 11:16]
 **** Implement Combination
 **** Implement BlockIterator
 *** Listings and Postings

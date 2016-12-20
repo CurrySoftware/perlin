@@ -2,7 +2,7 @@ use std::path::Path;
 use std::io::{Seek, SeekFrom, Write};
 use std::fs::{OpenOptions, File};
 
-use page_manager::{PageManager, Page, PageId, PageStore, PAGESIZE, BLOCKSIZE};
+use page_manager::{Page, PageId, PageStore, PAGESIZE, BLOCKSIZE};
 
 struct FsPageManager {
     pages: File,
@@ -24,31 +24,40 @@ impl FsPageManager {
             unpopulated_pages: Vec::new(),
         }
     }
-}
 
-impl PageManager for FsPageManager {
+    #[cfg(test)]
     fn store_page(&mut self, page: Page) -> PageId {
-        if !self.unpopulated_pages.is_empty() {
-            let id = self.unpopulated_pages.swap_remove(0);
-            let mut f = self.pages.try_clone().unwrap();
-            f.seek(SeekFrom::Start(id * PAGESIZE as u64 * BLOCKSIZE as u64)).unwrap();
-            f.write_all(page.as_slice()).unwrap();
-            PageId(id)
-        } else {
-            let id = PageId(self.count);
-            self.count += 1;
-            self.pages.write_all(page.as_slice()).unwrap();
-            id
-        }
-    }
-
-    fn delete_page(&mut self, page_id: PageId) {
-        let id = page_id.0;
-        self.unpopulated_pages.push(id);
+        let id = self.reserve_page();
+        self.store_reserved(id, page);
+        id
     }
 }
 
 impl PageStore for FsPageManager {
+
+    fn store_reserved(&mut self, page_id: PageId, page: Page) {
+        let id = page_id.0;
+        let mut f = self.pages.try_clone().unwrap();
+        f.seek(SeekFrom::Start(id * PAGESIZE as u64 * BLOCKSIZE as u64)).unwrap();
+        f.write_all(page.as_slice()).unwrap();
+    } 
+    
+    fn reserve_page(&mut self) -> PageId {
+        if !self.unpopulated_pages.is_empty() {
+            let id = self.unpopulated_pages.swap_remove(0);
+            PageId(id)
+        } else {
+            let id = PageId(self.count);
+            self.count += 1;
+            id
+        }
+    }
+    
+    fn delete_page(&mut self, page_id: PageId) {
+        let id = page_id.0;
+        self.unpopulated_pages.push(id);
+    }
+    
     fn get_page(&self, page_id: PageId) -> Page {
         let mut f = self.pages.try_clone().unwrap();
         f.seek(SeekFrom::Start(page_id.0 * PAGESIZE as u64 * BLOCKSIZE as u64)).unwrap();
@@ -61,7 +70,7 @@ mod tests {
     use test_utils::create_test_dir;
 
     use super::FsPageManager;
-    use page_manager::{Page, PageManager, PageStore, PageId, Block, BlockId, BLOCKSIZE};
+    use page_manager::{Page, PageStore, PageId, Block, BlockId, BLOCKSIZE};
 
 
     #[test]

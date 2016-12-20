@@ -15,6 +15,10 @@ impl BlockId {
     pub fn first() -> BlockId {
         BlockId(0)
     }
+
+    pub fn last() -> BlockId {
+        BlockId(PAGESIZE as u16 -1)
+    }
     
     pub fn from_page_capacity(page_capa: usize) -> BlockId {
         BlockId((PAGESIZE - page_capa) as u16) 

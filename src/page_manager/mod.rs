@@ -5,26 +5,25 @@ pub use page_manager::block::{Block, BlockId, BLOCKSIZE};
 
 mod page;
 mod block;
-mod ram_page_manager;
 mod fs_page_manager;
+mod ram_page_cache;
 
-
-trait PageManager {
-    fn store_page(&mut self, Page) -> PageId;
+trait PageCache {
+    fn get_page(&mut self, PageId) -> Arc<Page>;
     fn delete_page(&mut self, PageId);
 }
 
-trait PageCache {
-    fn get_page(&self, PageId) -> Arc<Page>;
-}
-
 trait PageStore {
+    fn reserve_page(&mut self) -> PageId;
+    fn store_reserved(&mut self, PageId, Page);
     fn get_page(&self, PageId) -> Page;
+    fn delete_page(&mut self, PageId);
 }
 
 trait BlockManager {
     fn store_block(&mut self, Block) -> PageId;
-    fn store_in_page(&mut self, PageId, Block) -> Result<BlockId, PageId>;
+    fn store_in_place(&mut self, PageId, BlockId, Block);
+    fn flush_page(&mut self, PageId);
 }
 
 
