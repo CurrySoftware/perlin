@@ -1,2 +1,2 @@
-mod posting;
+pub mod posting;
 mod listing;

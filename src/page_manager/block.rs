@@ -23,6 +23,10 @@ impl BlockId {
     pub fn from_page_capacity(page_capa: usize) -> BlockId {
         BlockId((PAGESIZE - page_capa) as u16) 
     }
+
+    pub fn inc(&mut self) {
+        self.0 += 1;
+    }
 }
 
 impl Block {

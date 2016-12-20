@@ -9,7 +9,7 @@ pub struct RingBuffer<T> {
 }
 
 impl<T> RingBuffer<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         RingBuffer {
             buff: unsafe { mem::uninitialized() },
             start: 0,
@@ -17,13 +17,13 @@ impl<T> RingBuffer<T> {
         }
     }
 
-    fn push_back(&mut self, element: T) {
+    pub fn push_back(&mut self, element: T) {
         debug_assert!(self.count < SIZE);
         self.buff[(self.start + self.count) % SIZE] = element;
         self.count += 1;
     }
 
-    fn pop_back(&mut self) -> Option<T> {
+    pub fn pop_back(&mut self) -> Option<T> {
         if self.count > 0 {
             self.count -= 1;
             Some(mem::replace(&mut self.buff[(self.start + self.count) % SIZE],
@@ -34,7 +34,7 @@ impl<T> RingBuffer<T> {
         }
     }
 
-    fn push_front(&mut self, element: T) {
+    pub fn push_front(&mut self, element: T) {
         debug_assert!(self.count < SIZE);
         self.start += SIZE - 1;
         self.start %= SIZE;
@@ -42,7 +42,7 @@ impl<T> RingBuffer<T> {
         self.count += 1;
     }
 
-    fn pop_front(&mut self) -> Option<T> {
+    pub fn pop_front(&mut self) -> Option<T> {
         if self.count > 0 {
             let element = Some(mem::replace(&mut self.buff[self.start],
                                             unsafe { mem::uninitialized() }));
@@ -56,7 +56,7 @@ impl<T> RingBuffer<T> {
     }
 
     #[inline]
-    fn count(&self) -> usize {
+    pub fn count(&self) -> usize {
         self.count
     }
 }

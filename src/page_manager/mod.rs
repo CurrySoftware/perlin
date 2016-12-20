@@ -23,7 +23,7 @@ trait PageStore {
     fn delete_page(&mut self, PageId);
 }
 
-trait BlockManager {
+pub trait BlockManager {
     fn store_block(&mut self, Block) -> PageId;
     fn store_in_place(&mut self, PageId, BlockId, Block);
     fn flush_page(&mut self, PageId);
