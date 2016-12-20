@@ -12,7 +12,7 @@ mod ram_page_cache;
 mod block_iter;
 
 trait PageCache {
-    fn get_page(&mut self, PageId) -> Arc<Page>;
+    fn get_page(&self, PageId) -> Arc<Page>;
     fn delete_page(&mut self, PageId);
 }
 

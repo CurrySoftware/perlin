@@ -181,10 +181,28 @@ end
 
 #+RESULTS:
 [[file:iterate_blocks.png]]
-
 ** Compression
 *** Compress to Block
 
+* Ownership
+** RamPageCache
+#+begin_src plantuml :file ownership_rampagecache.png
+object Index
+object RamPageCache
+object Listing1
+object Listing2
+object BlockIter1
+object BlockIter2
+
+Index -|> RamPageCache
+Index -|> Listing1
+Index -|> Listing2
+BlockIter1 ..> RamPageCache
+BlockIter2 ..> RamPageCache
+#+end_src
+
+#+RESULTS:
+[[file:ownership_rampagecache.png]]
 * Traits
 ** Vocabulary
 *** Method
@@ -217,7 +235,8 @@ Find modular testable things. Implement them module by module with extensive tes
      CLOSED: [2016-12-20 Tue 11:16]
 **** DONE Implement Combination
      CLOSED: [2016-12-20 Tue 13:31]
-**** Implement BlockIterator
+**** DONE Implement BlockIterator
+     CLOSED: [2016-12-20 Tue 17:11]
 *** Listings and Postings
 1. Define Postings and Listings
 2. Implement naive compression algorithm

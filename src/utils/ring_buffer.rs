@@ -2,7 +2,7 @@ use std::mem;
 
 const SIZE: usize = 64;
 
-struct RingBuffer<T> {
+pub struct RingBuffer<T> {
     buff: [T; SIZE],
     start: usize,
     count: usize,
