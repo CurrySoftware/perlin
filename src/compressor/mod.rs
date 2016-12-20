@@ -1,9 +1,9 @@
 mod naive_compressor;
 
-use compressor::naive_compressor::NaiveCompressor;
+pub use compressor::naive_compressor::NaiveCompressor;
 use utils::ring_buffer::RingBuffer;
 use index::posting::Posting;
-use page_manager::{BLOCKSIZE, Block};
+use page_manager::Block;
 
 pub trait Compressor {
     fn compress(&mut RingBuffer<Posting>) -> Option<Block>;

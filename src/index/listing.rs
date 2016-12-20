@@ -14,8 +14,17 @@ pub struct Listing {
     posting_buffer: RingBuffer<Posting>,
 }
 
-
 impl Listing {
+
+    pub fn new() -> Self  {
+        Listing {
+            block_list: Vec::new(),
+            last_block_id: BlockId::last(),
+            posting_buffer: RingBuffer::new()
+        }
+
+    }
+    
     pub fn add(&mut self, postings: &[Posting], page_cache: &mut RamPageCache) {
         for posting in postings {
             self.posting_buffer.push_back(*posting);
@@ -53,5 +62,91 @@ impl Listing {
 #[cfg(test)]
 mod tests {
 
+    use super::Listing;
+    
+    use std::sync::Arc;
+    use test_utils::create_test_dir;
 
+    use index::posting::{Posting, DocId};
+    use page_manager::{BlockManager, FsPageManager, Page, RamPageCache, PageId, Block, BlockId,
+                       BLOCKSIZE};
+
+
+    fn new_cache(name: &str) -> RamPageCache {
+        let path = &create_test_dir(format!("listing/{}", name).as_str());
+        let pmgr = FsPageManager::new(&path.join("pages.bin"));
+        RamPageCache::new(pmgr)
+    }
+    
+    #[test]
+    fn basic_add() {
+        let mut cache = new_cache("basic_add");
+        let mut listing = Listing::new();
+        listing.add(&[Posting(DocId(0))], &mut cache);
+        assert_eq!(listing.block_list.len(), 0);
+        assert_eq!(listing.posting_buffer.count(), 1);
+    }
+    
+    #[test]
+    fn commit() {
+        let mut cache = new_cache("commit");
+        let mut listing = Listing::new();
+        listing.add(&[Posting(DocId(0))], &mut cache);
+        assert_eq!(listing.block_list.len(), 0);
+        assert_eq!(listing.posting_buffer.count(), 1);
+        listing.commit(&mut cache);
+        assert_eq!(listing.block_list.len(), 1);
+        assert_eq!(listing.posting_buffer.count(), 0);
+        assert_eq!(listing.last_block_id, BlockId::first());
+    }
+
+
+    #[test]
+    fn add() {
+        let mut cache = new_cache("add");
+        let mut listing = Listing::new();
+        listing.add(&[Posting(DocId(0))], &mut cache);
+        assert_eq!(listing.block_list.len(), 0);
+        assert_eq!(listing.posting_buffer.count(), 1);
+        for i in 0..100 {
+            listing.add(&[Posting(DocId(i))], &mut cache);
+        }
+        assert!(listing.block_list.len() > 0);
+        assert!(listing.posting_buffer.count() > 0);
+        listing.commit(&mut cache);
+        assert_eq!(listing.posting_buffer.count(), 0);
+    }
+
+    #[test]
+    fn add_much() {
+        let mut cache = new_cache("add_much");
+        let mut listing = Listing::new();
+        listing.add(&[Posting(DocId(0))], &mut cache);
+        assert_eq!(listing.block_list.len(), 0);
+        assert_eq!(listing.posting_buffer.count(), 1);
+        for i in 0..10000 {
+            listing.add(&[Posting(DocId(i))], &mut cache);
+        }
+        assert!(listing.block_list.len() > 0);
+        assert!(listing.posting_buffer.count() > 0);
+        listing.commit(&mut cache);
+        assert_eq!(listing.posting_buffer.count(), 0);
+    }
+
+    #[test]
+    fn multiple_listings() {
+        let mut cache = new_cache("multiple_listings");
+        let mut listings = (0..100).map(|_| Listing::new()).collect::<Vec<_>>();
+        for i in 0..50000 {
+            listings[i%100].add(&[Posting(DocId(i as u64))], &mut cache);
+        }
+        for listing in listings.iter_mut() {
+            assert!(listing.block_list.len() > 0);
+            assert!(listing.posting_buffer.count() > 0);
+            listing.commit(&mut cache);
+        }
+        for listing in listings {
+            assert_eq!(listing.posting_buffer.count(), 0);
+        }
+    }
 }
