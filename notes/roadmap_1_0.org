@@ -202,6 +202,7 @@ BlockIter2 ..> RamPageCache
 #+end_src
 
 #+RESULTS:
+
 [[file:ownership_rampagecache.png]]
 * Traits
 ** Vocabulary
@@ -226,7 +227,8 @@ Find modular testable things. Implement them module by module with extensive tes
 *** DONE RingBuffer
     CLOSED: [2016-12-19 Mon 20:23]
 1. Implement Generically
-*** PageManager
+*** DONE PageManager
+    CLOSED: [2016-12-20 Tue 19:53]
 **** DONE Define Trait 
      CLOSED: [2016-12-19 Mon 20:24]
 **** DONE Implement RamPageManager
@@ -237,7 +239,8 @@ Find modular testable things. Implement them module by module with extensive tes
      CLOSED: [2016-12-20 Tue 13:31]
 **** DONE Implement BlockIterator
      CLOSED: [2016-12-20 Tue 17:11]
-*** Listings and Postings
+*** DONE Listings and Postings
+    CLOSED: [2016-12-20 Tue 19:53]
 1. Define Postings and Listings
 2. Implement naive compression algorithm
 *** Vocabulary
