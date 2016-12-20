@@ -1,18 +1,24 @@
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use page_manager::{Page, PageId, BlockId, Block, RamPageCache, PageCache};
 
 pub struct BlockIter<'a> {
-    cache: &'a mut RamPageCache,
+    cache: &'a RefCell<RamPageCache>,
     current_page: (PageId, Arc<Page>),
     blocks: Vec<(PageId, BlockId)>,
     ptr: usize,
 }
 
 impl<'a> BlockIter<'a> {
-    pub fn new(cache: &'a mut RamPageCache, blocks: Vec<(PageId, BlockId)>) -> Self {
+
+    pub fn get_page(&self, page_id: PageId) -> Arc<Page> {
+        self.cache.borrow_mut().get_page(page_id)
+    }
+    
+    pub fn new(cache: &'a RefCell<RamPageCache>, blocks: Vec<(PageId, BlockId)>) -> Self {
         let p_id = blocks[0].0;
-        let curr_page = (p_id, cache.get_page(p_id));
+        let curr_page = (p_id, cache.borrow_mut().get_page(p_id));
         BlockIter {
             cache: cache,
             current_page: curr_page,
@@ -29,7 +35,7 @@ impl<'a> Iterator for BlockIter<'a> {
         if self.ptr < self.blocks.len() {
             let (page_id, block_id) = self.blocks[self.ptr];
             if self.current_page.0 != page_id {
-                self.current_page = (page_id, self.cache.get_page(page_id));
+                self.current_page = (page_id, self.get_page(page_id));
             }
             self.ptr += 1;
             return Some(self.current_page.1[block_id]);
@@ -42,6 +48,7 @@ impl<'a> Iterator for BlockIter<'a> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::cell::RefCell;
     use test_utils::create_test_dir;
 
     use super::BlockIter;
@@ -65,7 +72,8 @@ mod tests {
             cache.flush_page(PageId(i));
         }
         let blocks = (0..2048).map(|i| (PageId(i), BlockId::first())).collect::<Vec<_>>();
-        let mut iter = BlockIter::new(&mut cache, blocks);
+        let rcache = RefCell::new(cache);
+        let mut iter = BlockIter::new(&rcache, blocks);
         for i in 0..2048 {
             assert_eq!(iter.next(), Some(Block([(i % 255) as u8; BLOCKSIZE])));
         }
@@ -84,8 +92,9 @@ mod tests {
         }
         let blocks1 = (0..2048).map(|i| (PageId(i), BlockId::first())).collect::<Vec<_>>();
         let blocks2 = (0..2048).map(|i| (PageId(i), BlockId(1))).collect::<Vec<_>>();
-        let mut iter1 = BlockIter::new(&mut cache, blocks1);
-        let mut iter2 = BlockIter::new(&mut cache, blocks2);
+        let rcache = RefCell::new(cache);
+        let mut iter1 = BlockIter::new(&rcache, blocks1);
+        let mut iter2 = BlockIter::new(&rcache, blocks2);
         for i in 0..2048 {
             assert_eq!(iter1.next(), Some(Block([(i % 255) as u8; BLOCKSIZE])));
             assert_eq!(iter2.next(), Some(Block([((i+1) % 255) as u8; BLOCKSIZE])));

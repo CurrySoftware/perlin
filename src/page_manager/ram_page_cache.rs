@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::sync::Arc;
 
 use page_manager::{FsPageManager, Page, Block, BlockManager, PageStore, PageId, BlockId, PageCache};
@@ -75,7 +76,7 @@ impl BlockManager for RamPageCache {
 impl PageCache for RamPageCache {
     fn delete_page(&mut self, page_id: PageId) {
         self.store.delete_page(page_id);
-        if let Ok(index) = self.cache.binary_search_by_key(&page_id, |&(pid, _)| pid) {
+        if let Ok(index) = self.cache.binary_search_by_key(&page_id, |&(pid,_)| pid) {
             self.cache.remove(index);
         }
     }
