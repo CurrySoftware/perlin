@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 pub use page_manager::page::{Page, PageId, PAGESIZE};
 pub use page_manager::block::{Block, BlockId, BLOCKSIZE};
+pub use page_manager::fs_page_manager::FsPageManager;
 
 mod page;
 mod block;

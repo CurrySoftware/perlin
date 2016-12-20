@@ -4,14 +4,14 @@ use std::fs::{OpenOptions, File};
 
 use page_manager::{Page, PageId, PageStore, PAGESIZE, BLOCKSIZE};
 
-struct FsPageManager {
+pub struct FsPageManager {
     pages: File,
     count: u64,
     unpopulated_pages: Vec<u64>,
 }
 
 impl FsPageManager {
-    fn new(path: &Path) -> Self {
+    pub fn new(path: &Path) -> Self {
         FsPageManager {
             pages: OpenOptions::new()
                 .read(true)
