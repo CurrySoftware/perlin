@@ -6,7 +6,7 @@ use page_manager::{PageId, Block, BlockId, RamPageCache, BlockManager};
 
 use index::posting::Posting;
 
-type UsedCompressor = NaiveCompressor;
+pub type UsedCompressor = NaiveCompressor;
 
 pub struct Listing {
     block_list: Vec<PageId>,

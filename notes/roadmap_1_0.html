@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2016-12-19 Mon 17:51 -->
+<!-- 2016-12-21 Wed 15:12 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title></title>
@@ -232,104 +232,114 @@ for the JavaScript code in this tag.
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents">
 <ul>
-<li><a href="#orgefb110b">1. Requirements</a>
+<li><a href="#org6c4cf9b">1. Requirements</a>
 <ul>
-<li><a href="#org68068e0">1.1. Speed</a>
+<li><a href="#orgf5b1d2d">1.1. Speed</a>
 <ul>
-<li><a href="#org58e2560">1.1.1. Any Query on 100MB indexed rawdata should execute in &lt; 10ms</a></li>
-<li><a href="#org76699cb">1.1.2. Simple (&lt; 4 terms, no phrase query) Queries should execute in &lt; 1ms</a></li>
+<li><a href="#org85e6f09">1.1.1. Any Query on 100MB indexed rawdata should execute in &lt; 10ms</a></li>
+<li><a href="#org5bba954">1.1.2. Simple (&lt; 4 terms, no phrase query) Queries should execute in &lt; 1ms</a></li>
 </ul>
 </li>
-<li><a href="#org97477e9">1.2. Memory</a>
+<li><a href="#org0b4da01">1.2. Memory</a>
 <ul>
-<li><a href="#orgcfea895">1.2.1. Minimal Memory Overhead per Index enabeling multi-tennant Systems</a></li>
-<li><a href="#org6494b25">1.2.2. Moving data from memory to disk or network and back should be seamlessly possible depending on ram/disk pressure</a></li>
-<li><a href="#org511083e">1.2.3. Allow shared dictionaries between different indices for minimal memory overhead</a></li>
+<li><a href="#orgd8f32ed">1.2.1. Minimal Memory Overhead per Index enabeling multi-tennant Systems</a></li>
+<li><a href="#org4f20b21">1.2.2. Moving data from memory to disk or network and back should be seamlessly possible depending on ram/disk pressure</a></li>
+<li><a href="#org5312688">1.2.3. Allow shared dictionaries between different indices for minimal memory overhead</a></li>
 </ul>
 </li>
-<li><a href="#org914393d">1.3. Usability</a>
+<li><a href="#orgc924fe0">1.3. Usability</a>
 <ul>
-<li><a href="#org45f8d4a">1.3.1. sensible defaults, which can be tweeked if needed</a></li>
-<li><a href="#org8f59c5e">1.3.2. documentation of public api</a></li>
-<li><a href="#org318e234">1.3.3. as few as possible generic parameters on index</a></li>
+<li><a href="#org5efea5b">1.3.1. sensible defaults, which can be tweeked if needed</a></li>
+<li><a href="#org0bb3232">1.3.2. documentation of public api</a></li>
+<li><a href="#org6402d83">1.3.3. as few as possible generic parameters on index</a></li>
 </ul>
 </li>
-<li><a href="#orgd260c81">1.4. Flexibility</a>
+<li><a href="#org8ebd9f3">1.4. Flexibility</a>
 <ul>
-<li><a href="#org06911c4">1.4.1. data-type independent</a></li>
-<li><a href="#org0d24c15">1.4.2. plug-in your own</a></li>
+<li><a href="#orgb1629bc">1.4.1. data-type independent</a></li>
+<li><a href="#org903087d">1.4.2. plug-in your own</a></li>
 </ul>
 </li>
-<li><a href="#orgdee88bd">1.5. Functionality</a>
+<li><a href="#org7c66382">1.5. Functionality</a>
 <ul>
-<li><a href="#orgb0c89b7">1.5.1. Mutable Indices</a></li>
-<li><a href="#orgf94941e">1.5.2. Boolean Retrieval</a></li>
-<li><a href="#orgd05dc30">1.5.3. Ranked Retrieval</a></li>
-<li><a href="#org933a87f">1.5.4. Semantic Relations (Taxonomies, Thesaurus, etc.)</a></li>
-<li><a href="#org33e107d">1.5.5. Relevance Feedback</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a href="#orgf22bbc2">2. Modules</a>
-<ul>
-<li><a href="#orgf58d150">2.1. Current Status</a>
-<ul>
-<li><a href="#orgea1e8e0">2.1.1. Index</a></li>
-<li><a href="#org4bcdd29">2.1.2. Compression</a></li>
-<li><a href="#org614c629">2.1.3. PageManager</a></li>
+<li><a href="#orga65c6e1">1.5.1. Mutable Indices</a></li>
+<li><a href="#orgbde3052">1.5.2. Boolean Retrieval</a></li>
+<li><a href="#org2401dc4">1.5.3. Ranked Retrieval</a></li>
+<li><a href="#org2bf9acb">1.5.4. Semantic Relations (Taxonomies, Thesaurus, etc.)</a></li>
+<li><a href="#org3140a51">1.5.5. Relevance Feedback</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#org83de68f">3. Processes</a>
+<li><a href="#org2fd2b58">2. Modules</a>
 <ul>
-<li><a href="#orgcac1b9d">3.1. Index documents</a></li>
-<li><a href="#org03a00fd">3.2. Execute Query</a>
+<li><a href="#orgf9a9d7e">2.1. Current Status</a>
 <ul>
-<li><a href="#orgcdaadfe">3.2.1. QueryAtom</a></li>
-<li><a href="#orgf2289c0">3.2.2. ArbitraryQuery</a></li>
-</ul>
-</li>
-<li><a href="#org9dff8d8">3.3. Pages Blocks</a>
-<ul>
-<li><a href="#orgdb12293">3.3.1. Indexing Process</a></li>
-<li><a href="#orgd26f5f8">3.3.2. Document Deletion</a></li>
-<li><a href="#org330a2b3">3.3.3. Get Page/Block</a></li>
-<li><a href="#orgd690945">3.3.4. Iterate over Blocks</a></li>
+<li><a href="#org5cb3410">2.1.1. Index</a></li>
+<li><a href="#org73d3b9b">2.1.2. Compression</a></li>
+<li><a href="#orgbf2df72">2.1.3. PageManager</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#org3bf83f5">4. Traits</a>
+<li><a href="#orgeb59173">3. Processes</a>
 <ul>
-<li><a href="#org4f2ecc4">4.1. Vocabulary</a>
+<li><a href="#orgb737905">3.1. Index documents</a></li>
+<li><a href="#orgdea7153">3.2. Execute Query</a>
 <ul>
-<li><a href="#org100be72">4.1.1. Method</a></li>
+<li><a href="#org17ea389">3.2.1. QueryAtom</a></li>
+<li><a href="#org481c64d">3.2.2. ArbitraryQuery</a></li>
 </ul>
 </li>
-<li><a href="#orga147b54">4.2. PageManager</a>
+<li><a href="#org0f86c35">3.3. Pages Blocks</a>
 <ul>
-<li><a href="#orgc1015f1">4.2.1. Methods</a></li>
+<li><a href="#orgb6dfb9e">3.3.1. Indexing Process</a></li>
+<li><a href="#org1238657">3.3.2. Document Deletion</a></li>
+<li><a href="#org9ee75c7">3.3.3. Get Page/Block</a></li>
+<li><a href="#org80ddbf2">3.3.4. Iterate over Blocks</a></li>
 </ul>
 </li>
-<li><a href="#org466fc3c">4.3. Compressable</a>
+<li><a href="#org68475d6">3.4. Compression</a>
 <ul>
-<li><a href="#org11688c1">4.3.1. Methods</a></li>
+<li><a href="#org4998e6c">3.4.1. Compress to Block</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#orgcb29b1d">5. Implementation Plans</a>
+<li><a href="#org43a9999">4. Ownership</a>
 <ul>
-<li><a href="#org93f6bad">5.1. General Strategy</a></li>
-<li><a href="#orga7fec0a">5.2. Modules</a>
+<li><a href="#org1eccf0f">4.1. RamPageCache</a></li>
+</ul>
+</li>
+<li><a href="#org70c0a7d">5. Traits</a>
 <ul>
-<li><a href="#org21b2c69">5.2.1. RingBuffer</a></li>
-<li><a href="#org2ed8775">5.2.2. PageManager</a></li>
-<li><a href="#org2c13bde">5.2.3. Listings and Postings</a></li>
-<li><a href="#org2b8d1b9">5.2.4. Vocabulary</a></li>
-<li><a href="#org491e3d3">5.2.5. Indexing</a></li>
+<li><a href="#orgeb6d51d">5.1. Vocabulary</a>
+<ul>
+<li><a href="#org14fd373">5.1.1. Method</a></li>
+</ul>
+</li>
+<li><a href="#org8a25254">5.2. PageManager</a>
+<ul>
+<li><a href="#org1860c89">5.2.1. Methods</a></li>
+</ul>
+</li>
+<li><a href="#orgdf11377">5.3. Compressable</a>
+<ul>
+<li><a href="#orgaa6845b">5.3.1. Methods</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#org269b2be">6. Implementation Plans</a>
+<ul>
+<li><a href="#org735997b">6.1. General Strategy</a></li>
+<li><a href="#orgee7d86e">6.2. Modules</a>
+<ul>
+<li><a href="#orgc42f271">6.2.1. <span class="done DONE">DONE</span> RingBuffer</a></li>
+<li><a href="#org41da627">6.2.2. <span class="done DONE">DONE</span> PageManager</a></li>
+<li><a href="#org0d732b0">6.2.3. <span class="done DONE">DONE</span> Listings and Postings</a></li>
+<li><a href="#orgd57c5e0">6.2.4. <span class="done DONE">DONE</span> Vocabulary</a></li>
+<li><a href="#org0762c42">6.2.5. Index</a></li>
 </ul>
 </li>
 </ul>
@@ -337,124 +347,124 @@ for the JavaScript code in this tag.
 </ul>
 </div>
 </div>
-<div id="outline-container-orgefb110b" class="outline-2">
-<h2 id="orgefb110b"><span class="section-number-2">1</span> Requirements</h2>
+<div id="outline-container-org6c4cf9b" class="outline-2">
+<h2 id="org6c4cf9b"><span class="section-number-2">1</span> Requirements</h2>
 <div class="outline-text-2" id="text-1">
-</div><div id="outline-container-org68068e0" class="outline-3">
-<h3 id="org68068e0"><span class="section-number-3">1.1</span> Speed</h3>
+</div><div id="outline-container-orgf5b1d2d" class="outline-3">
+<h3 id="orgf5b1d2d"><span class="section-number-3">1.1</span> Speed</h3>
 <div class="outline-text-3" id="text-1-1">
-</div><div id="outline-container-org58e2560" class="outline-4">
-<h4 id="org58e2560"><span class="section-number-4">1.1.1</span> Any Query on 100MB indexed rawdata should execute in &lt; 10ms</h4>
+</div><div id="outline-container-org85e6f09" class="outline-4">
+<h4 id="org85e6f09"><span class="section-number-4">1.1.1</span> Any Query on 100MB indexed rawdata should execute in &lt; 10ms</h4>
 </div>
-<div id="outline-container-org76699cb" class="outline-4">
-<h4 id="org76699cb"><span class="section-number-4">1.1.2</span> Simple (&lt; 4 terms, no phrase query) Queries should execute in &lt; 1ms</h4>
+<div id="outline-container-org5bba954" class="outline-4">
+<h4 id="org5bba954"><span class="section-number-4">1.1.2</span> Simple (&lt; 4 terms, no phrase query) Queries should execute in &lt; 1ms</h4>
 </div>
 </div>
-<div id="outline-container-org97477e9" class="outline-3">
-<h3 id="org97477e9"><span class="section-number-3">1.2</span> Memory</h3>
+<div id="outline-container-org0b4da01" class="outline-3">
+<h3 id="org0b4da01"><span class="section-number-3">1.2</span> Memory</h3>
 <div class="outline-text-3" id="text-1-2">
-</div><div id="outline-container-orgcfea895" class="outline-4">
-<h4 id="orgcfea895"><span class="section-number-4">1.2.1</span> Minimal Memory Overhead per Index enabeling multi-tennant Systems</h4>
+</div><div id="outline-container-orgd8f32ed" class="outline-4">
+<h4 id="orgd8f32ed"><span class="section-number-4">1.2.1</span> Minimal Memory Overhead per Index enabeling multi-tennant Systems</h4>
 </div>
-<div id="outline-container-org6494b25" class="outline-4">
-<h4 id="org6494b25"><span class="section-number-4">1.2.2</span> Moving data from memory to disk or network and back should be seamlessly possible depending on ram/disk pressure</h4>
+<div id="outline-container-org4f20b21" class="outline-4">
+<h4 id="org4f20b21"><span class="section-number-4">1.2.2</span> Moving data from memory to disk or network and back should be seamlessly possible depending on ram/disk pressure</h4>
 </div>
-<div id="outline-container-org511083e" class="outline-4">
-<h4 id="org511083e"><span class="section-number-4">1.2.3</span> Allow shared dictionaries between different indices for minimal memory overhead</h4>
+<div id="outline-container-org5312688" class="outline-4">
+<h4 id="org5312688"><span class="section-number-4">1.2.3</span> Allow shared dictionaries between different indices for minimal memory overhead</h4>
 </div>
 </div>
-<div id="outline-container-org914393d" class="outline-3">
-<h3 id="org914393d"><span class="section-number-3">1.3</span> Usability</h3>
+<div id="outline-container-orgc924fe0" class="outline-3">
+<h3 id="orgc924fe0"><span class="section-number-3">1.3</span> Usability</h3>
 <div class="outline-text-3" id="text-1-3">
-</div><div id="outline-container-org45f8d4a" class="outline-4">
-<h4 id="org45f8d4a"><span class="section-number-4">1.3.1</span> sensible defaults, which can be tweeked if needed</h4>
+</div><div id="outline-container-org5efea5b" class="outline-4">
+<h4 id="org5efea5b"><span class="section-number-4">1.3.1</span> sensible defaults, which can be tweeked if needed</h4>
 </div>
-<div id="outline-container-org8f59c5e" class="outline-4">
-<h4 id="org8f59c5e"><span class="section-number-4">1.3.2</span> documentation of public api</h4>
+<div id="outline-container-org0bb3232" class="outline-4">
+<h4 id="org0bb3232"><span class="section-number-4">1.3.2</span> documentation of public api</h4>
 </div>
-<div id="outline-container-org318e234" class="outline-4">
-<h4 id="org318e234"><span class="section-number-4">1.3.3</span> as few as possible generic parameters on index</h4>
+<div id="outline-container-org6402d83" class="outline-4">
+<h4 id="org6402d83"><span class="section-number-4">1.3.3</span> as few as possible generic parameters on index</h4>
 </div>
 </div>
-<div id="outline-container-orgd260c81" class="outline-3">
-<h3 id="orgd260c81"><span class="section-number-3">1.4</span> Flexibility</h3>
+<div id="outline-container-org8ebd9f3" class="outline-3">
+<h3 id="org8ebd9f3"><span class="section-number-3">1.4</span> Flexibility</h3>
 <div class="outline-text-3" id="text-1-4">
-</div><div id="outline-container-org06911c4" class="outline-4">
-<h4 id="org06911c4"><span class="section-number-4">1.4.1</span> data-type independent</h4>
+</div><div id="outline-container-orgb1629bc" class="outline-4">
+<h4 id="orgb1629bc"><span class="section-number-4">1.4.1</span> data-type independent</h4>
 </div>
-<div id="outline-container-org0d24c15" class="outline-4">
-<h4 id="org0d24c15"><span class="section-number-4">1.4.2</span> plug-in your own</h4>
+<div id="outline-container-org903087d" class="outline-4">
+<h4 id="org903087d"><span class="section-number-4">1.4.2</span> plug-in your own</h4>
 <div class="outline-text-4" id="text-1-4-2">
-</div><ol class="org-ol"><li><a id="org3dbe458"></a>Compression Algorithm<br  /></li>
-<li><a id="org22eef51"></a>Query Operator and Evaluator<br  /></li>
-<li><a id="orgdcbf8bc"></a>Data Storage mechanism<br  /></li>
-<li><a id="orgfebdd21"></a>Scoring/Ranking Method<br  /></li></ol>
+</div><ol class="org-ol"><li><a id="org8d67250"></a>Compression Algorithm<br  /></li>
+<li><a id="org624fdb6"></a>Query Operator and Evaluator<br  /></li>
+<li><a id="orgfe83f40"></a>Data Storage mechanism<br  /></li>
+<li><a id="org06bdbd8"></a>Scoring/Ranking Method<br  /></li></ol>
 </div>
 </div>
-<div id="outline-container-orgdee88bd" class="outline-3">
-<h3 id="orgdee88bd"><span class="section-number-3">1.5</span> Functionality</h3>
+<div id="outline-container-org7c66382" class="outline-3">
+<h3 id="org7c66382"><span class="section-number-3">1.5</span> Functionality</h3>
 <div class="outline-text-3" id="text-1-5">
-</div><div id="outline-container-orgb0c89b7" class="outline-4">
-<h4 id="orgb0c89b7"><span class="section-number-4">1.5.1</span> Mutable Indices</h4>
+</div><div id="outline-container-orga65c6e1" class="outline-4">
+<h4 id="orga65c6e1"><span class="section-number-4">1.5.1</span> Mutable Indices</h4>
 </div>
-<div id="outline-container-orgf94941e" class="outline-4">
-<h4 id="orgf94941e"><span class="section-number-4">1.5.2</span> Boolean Retrieval</h4>
+<div id="outline-container-orgbde3052" class="outline-4">
+<h4 id="orgbde3052"><span class="section-number-4">1.5.2</span> Boolean Retrieval</h4>
 </div>
-<div id="outline-container-orgd05dc30" class="outline-4">
-<h4 id="orgd05dc30"><span class="section-number-4">1.5.3</span> Ranked Retrieval</h4>
+<div id="outline-container-org2401dc4" class="outline-4">
+<h4 id="org2401dc4"><span class="section-number-4">1.5.3</span> Ranked Retrieval</h4>
 </div>
-<div id="outline-container-org933a87f" class="outline-4">
-<h4 id="org933a87f"><span class="section-number-4">1.5.4</span> Semantic Relations (Taxonomies, Thesaurus, etc.)</h4>
+<div id="outline-container-org2bf9acb" class="outline-4">
+<h4 id="org2bf9acb"><span class="section-number-4">1.5.4</span> Semantic Relations (Taxonomies, Thesaurus, etc.)</h4>
 </div>
-<div id="outline-container-org33e107d" class="outline-4">
-<h4 id="org33e107d"><span class="section-number-4">1.5.5</span> Relevance Feedback</h4>
+<div id="outline-container-org3140a51" class="outline-4">
+<h4 id="org3140a51"><span class="section-number-4">1.5.5</span> Relevance Feedback</h4>
 </div>
 </div>
 </div>
 
 
-<div id="outline-container-orgf22bbc2" class="outline-2">
-<h2 id="orgf22bbc2"><span class="section-number-2">2</span> Modules</h2>
+<div id="outline-container-org2fd2b58" class="outline-2">
+<h2 id="org2fd2b58"><span class="section-number-2">2</span> Modules</h2>
 <div class="outline-text-2" id="text-2">
-</div><div id="outline-container-orgf58d150" class="outline-3">
-<h3 id="orgf58d150"><span class="section-number-3">2.1</span> Current Status</h3>
+</div><div id="outline-container-orgf9a9d7e" class="outline-3">
+<h3 id="orgf9a9d7e"><span class="section-number-3">2.1</span> Current Status</h3>
 <div class="outline-text-3" id="text-2-1">
-</div><div id="outline-container-orgea1e8e0" class="outline-4">
-<h4 id="orgea1e8e0"><span class="section-number-4">2.1.1</span> Index</h4>
+</div><div id="outline-container-org5cb3410" class="outline-4">
+<h4 id="org5cb3410"><span class="section-number-4">2.1.1</span> Index</h4>
 <div class="outline-text-4" id="text-2-1-1">
-</div><ol class="org-ol"><li><a id="org8a8c958"></a>Vocabulary<br  /></li>
-<li><a id="orgcc33cc0"></a>InvertedIndex<br  /></li>
-<li><a id="orgedc8594"></a>Query Engine<br  /></li></ol>
+</div><ol class="org-ol"><li><a id="org68230c7"></a>Vocabulary<br  /></li>
+<li><a id="org6bb936d"></a>InvertedIndex<br  /></li>
+<li><a id="orgb7e0ad2"></a>Query Engine<br  /></li></ol>
 </div>
-<div id="outline-container-org4bcdd29" class="outline-4">
-<h4 id="org4bcdd29"><span class="section-number-4">2.1.2</span> Compression</h4>
+<div id="outline-container-org73d3b9b" class="outline-4">
+<h4 id="org73d3b9b"><span class="section-number-4">2.1.2</span> Compression</h4>
 <div class="outline-text-4" id="text-2-1-2">
-</div><ol class="org-ol"><li><a id="orgff01490"></a>General Purpose Compression<br  /></li>
-<li><a id="org6b5407c"></a>Integer Compression<br  /></li></ol>
+</div><ol class="org-ol"><li><a id="org8b095b5"></a>General Purpose Compression<br  /></li>
+<li><a id="orge9df411"></a>Integer Compression<br  /></li></ol>
 </div>
-<div id="outline-container-org614c629" class="outline-4">
-<h4 id="org614c629"><span class="section-number-4">2.1.3</span> PageManager</h4>
+<div id="outline-container-orgbf2df72" class="outline-4">
+<h4 id="orgbf2df72"><span class="section-number-4">2.1.3</span> PageManager</h4>
 <div class="outline-text-4" id="text-2-1-3">
-</div><ol class="org-ol"><li><a id="org644321a"></a>RamPageManager<br  /></li>
-<li><a id="orgb50a1a2"></a>DiskPageManager<br  /></li>
-<li><a id="orga0d0cbb"></a>NetworkPageManager<br  /></li></ol>
+</div><ol class="org-ol"><li><a id="orgbc8db51"></a>RamPageManager<br  /></li>
+<li><a id="orgd474847"></a>DiskPageManager<br  /></li>
+<li><a id="orge39b8c7"></a>NetworkPageManager<br  /></li></ol>
 </div>
 </div>
 </div>
 
 
 
-<div id="outline-container-org83de68f" class="outline-2">
-<h2 id="org83de68f"><span class="section-number-2">3</span> Processes</h2>
+<div id="outline-container-orgeb59173" class="outline-2">
+<h2 id="orgeb59173"><span class="section-number-2">3</span> Processes</h2>
 <div class="outline-text-2" id="text-3">
-</div><div id="outline-container-orgcac1b9d" class="outline-3">
-<h3 id="orgcac1b9d"><span class="section-number-3">3.1</span> Index documents</h3>
+</div><div id="outline-container-orgb737905" class="outline-3">
+<h3 id="orgb737905"><span class="section-number-3">3.1</span> Index documents</h3>
 </div>
-<div id="outline-container-org03a00fd" class="outline-3">
-<h3 id="org03a00fd"><span class="section-number-3">3.2</span> Execute Query</h3>
+<div id="outline-container-orgdea7153" class="outline-3">
+<h3 id="orgdea7153"><span class="section-number-3">3.2</span> Execute Query</h3>
 <div class="outline-text-3" id="text-3-2">
-</div><div id="outline-container-orgcdaadfe" class="outline-4">
-<h4 id="orgcdaadfe"><span class="section-number-4">3.2.1</span> QueryAtom</h4>
+</div><div id="outline-container-org17ea389" class="outline-4">
+<h4 id="org17ea389"><span class="section-number-4">3.2.1</span> QueryAtom</h4>
 <div class="outline-text-4" id="text-3-2-1">
 
 <div class="figure">
@@ -463,8 +473,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 </div>
-<div id="outline-container-orgf2289c0" class="outline-4">
-<h4 id="orgf2289c0"><span class="section-number-4">3.2.2</span> ArbitraryQuery</h4>
+<div id="outline-container-org481c64d" class="outline-4">
+<h4 id="org481c64d"><span class="section-number-4">3.2.2</span> ArbitraryQuery</h4>
 <div class="outline-text-4" id="text-3-2-2">
 
 <div class="figure">
@@ -475,11 +485,11 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org9dff8d8" class="outline-3">
-<h3 id="org9dff8d8"><span class="section-number-3">3.3</span> Pages Blocks</h3>
+<div id="outline-container-org0f86c35" class="outline-3">
+<h3 id="org0f86c35"><span class="section-number-3">3.3</span> Pages Blocks</h3>
 <div class="outline-text-3" id="text-3-3">
-</div><div id="outline-container-orgdb12293" class="outline-4">
-<h4 id="orgdb12293"><span class="section-number-4">3.3.1</span> Indexing Process</h4>
+</div><div id="outline-container-orgb6dfb9e" class="outline-4">
+<h4 id="orgb6dfb9e"><span class="section-number-4">3.3.1</span> Indexing Process</h4>
 <div class="outline-text-4" id="text-3-3-1">
 
 <div class="figure">
@@ -488,8 +498,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 </div>
-<div id="outline-container-orgd26f5f8" class="outline-4">
-<h4 id="orgd26f5f8"><span class="section-number-4">3.3.2</span> Document Deletion</h4>
+<div id="outline-container-org1238657" class="outline-4">
+<h4 id="org1238657"><span class="section-number-4">3.3.2</span> Document Deletion</h4>
 <div class="outline-text-4" id="text-3-3-2">
 
 <div class="figure">
@@ -499,8 +509,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 
-<div id="outline-container-org330a2b3" class="outline-4">
-<h4 id="org330a2b3"><span class="section-number-4">3.3.3</span> Get Page/Block</h4>
+<div id="outline-container-org9ee75c7" class="outline-4">
+<h4 id="org9ee75c7"><span class="section-number-4">3.3.3</span> Get Page/Block</h4>
 <div class="outline-text-4" id="text-3-3-3">
 
 <div class="figure">
@@ -509,8 +519,8 @@ for the JavaScript code in this tag.
 </div>
 </div>
 </div>
-<div id="outline-container-orgd690945" class="outline-4">
-<h4 id="orgd690945"><span class="section-number-4">3.3.4</span> Iterate over Blocks</h4>
+<div id="outline-container-org80ddbf2" class="outline-4">
+<h4 id="org80ddbf2"><span class="section-number-4">3.3.4</span> Iterate over Blocks</h4>
 <div class="outline-text-4" id="text-3-3-4">
 
 <div class="figure">
@@ -520,29 +530,56 @@ for the JavaScript code in this tag.
 </div>
 </div>
 </div>
+<div id="outline-container-org68475d6" class="outline-3">
+<h3 id="org68475d6"><span class="section-number-3">3.4</span> Compression</h3>
+<div class="outline-text-3" id="text-3-4">
+</div><div id="outline-container-org4998e6c" class="outline-4">
+<h4 id="org4998e6c"><span class="section-number-4">3.4.1</span> Compress to Block</h4>
+</div>
+</div>
 </div>
 
-<div id="outline-container-org3bf83f5" class="outline-2">
-<h2 id="org3bf83f5"><span class="section-number-2">4</span> Traits</h2>
+<div id="outline-container-org43a9999" class="outline-2">
+<h2 id="org43a9999"><span class="section-number-2">4</span> Ownership</h2>
 <div class="outline-text-2" id="text-4">
-</div><div id="outline-container-org4f2ecc4" class="outline-3">
-<h3 id="org4f2ecc4"><span class="section-number-3">4.1</span> Vocabulary</h3>
+</div><div id="outline-container-org1eccf0f" class="outline-3">
+<h3 id="org1eccf0f"><span class="section-number-3">4.1</span> RamPageCache</h3>
 <div class="outline-text-3" id="text-4-1">
-</div><div id="outline-container-org100be72" class="outline-4">
-<h4 id="org100be72"><span class="section-number-4">4.1.1</span> Method</h4>
-<div class="outline-text-4" id="text-4-1-1">
+
+<div class="figure">
+<p><img src="ownership_rampagecache.png" alt="ownership_rampagecache.png" />
+</p>
+</div>
+
+
+<div class="figure">
+<p><img src="ownership_rampagecache.png" alt="ownership_rampagecache.png" />
+</p>
+</div>
+</div>
+</div>
+</div>
+<div id="outline-container-org70c0a7d" class="outline-2">
+<h2 id="org70c0a7d"><span class="section-number-2">5</span> Traits</h2>
+<div class="outline-text-2" id="text-5">
+</div><div id="outline-container-orgeb6d51d" class="outline-3">
+<h3 id="orgeb6d51d"><span class="section-number-3">5.1</span> Vocabulary</h3>
+<div class="outline-text-3" id="text-5-1">
+</div><div id="outline-container-org14fd373" class="outline-4">
+<h4 id="org14fd373"><span class="section-number-4">5.1.1</span> Method</h4>
+<div class="outline-text-4" id="text-5-1-1">
 <p>
 fn get<sub>or</sub><sub>add</sub>(Term) -&gt; term<sub>id</sub>
 </p>
 </div>
 </div>
 </div>
-<div id="outline-container-orga147b54" class="outline-3">
-<h3 id="orga147b54"><span class="section-number-3">4.2</span> PageManager</h3>
-<div class="outline-text-3" id="text-4-2">
-</div><div id="outline-container-orgc1015f1" class="outline-4">
-<h4 id="orgc1015f1"><span class="section-number-4">4.2.1</span> Methods</h4>
-<div class="outline-text-4" id="text-4-2-1">
+<div id="outline-container-org8a25254" class="outline-3">
+<h3 id="org8a25254"><span class="section-number-3">5.2</span> PageManager</h3>
+<div class="outline-text-3" id="text-5-2">
+</div><div id="outline-container-org1860c89" class="outline-4">
+<h4 id="org1860c89"><span class="section-number-4">5.2.1</span> Methods</h4>
+<div class="outline-text-4" id="text-5-2-1">
 <p>
 fn store<sub>page</sub>(Page) -&gt; page<sub>id</sub>
 fn get<sub>blocks</sub>(Vec&lt;(page<sub>id</sub>, block<sub>id</sub>)&gt;) -&gt; impl Iterator&lt;Item=Block&gt;
@@ -552,12 +589,12 @@ fn store<sub>in</sub><sub>page</sub>(page<sub>id</sub>, Block) -&gt; Result&lt;b
 </div>
 </div>
 </div>
-<div id="outline-container-org466fc3c" class="outline-3">
-<h3 id="org466fc3c"><span class="section-number-3">4.3</span> Compressable</h3>
-<div class="outline-text-3" id="text-4-3">
-</div><div id="outline-container-org11688c1" class="outline-4">
-<h4 id="org11688c1"><span class="section-number-4">4.3.1</span> Methods</h4>
-<div class="outline-text-4" id="text-4-3-1">
+<div id="outline-container-orgdf11377" class="outline-3">
+<h3 id="orgdf11377"><span class="section-number-3">5.3</span> Compressable</h3>
+<div class="outline-text-3" id="text-5-3">
+</div><div id="outline-container-orgaa6845b" class="outline-4">
+<h4 id="orgaa6845b"><span class="section-number-4">5.3.1</span> Methods</h4>
+<div class="outline-text-4" id="text-5-3-1">
 <p>
 fn compress(&amp;mut RingBuffer&lt;Self&gt;) -&gt; Result&lt;Block&gt;
 fn decompress(Block, &amp;mut RingBuffer&lt;Self&gt;) -&gt; Result&lt;usize&gt;
@@ -568,67 +605,76 @@ fn decompress(Block, &amp;mut RingBuffer&lt;Self&gt;) -&gt; Result&lt;usize&gt;
 </div>
 
 
-<div id="outline-container-orgcb29b1d" class="outline-2">
-<h2 id="orgcb29b1d"><span class="section-number-2">5</span> Implementation Plans</h2>
-<div class="outline-text-2" id="text-5">
-</div><div id="outline-container-org93f6bad" class="outline-3">
-<h3 id="org93f6bad"><span class="section-number-3">5.1</span> General Strategy</h3>
-<div class="outline-text-3" id="text-5-1">
+<div id="outline-container-org269b2be" class="outline-2">
+<h2 id="org269b2be"><span class="section-number-2">6</span> Implementation Plans</h2>
+<div class="outline-text-2" id="text-6">
+</div><div id="outline-container-org735997b" class="outline-3">
+<h3 id="org735997b"><span class="section-number-3">6.1</span> General Strategy</h3>
+<div class="outline-text-3" id="text-6-1">
 <p>
 Find modular testable things. Implement them module by module with extensive tests for all
 </p>
 </div>
 </div>
-<div id="outline-container-orga7fec0a" class="outline-3">
-<h3 id="orga7fec0a"><span class="section-number-3">5.2</span> Modules</h3>
-<div class="outline-text-3" id="text-5-2">
-</div><div id="outline-container-org21b2c69" class="outline-4">
-<h4 id="org21b2c69"><span class="section-number-4">5.2.1</span> RingBuffer</h4>
-<div class="outline-text-4" id="text-5-2-1">
+<div id="outline-container-orgee7d86e" class="outline-3">
+<h3 id="orgee7d86e"><span class="section-number-3">6.2</span> Modules</h3>
+<div class="outline-text-3" id="text-6-2">
+</div><div id="outline-container-orgc42f271" class="outline-4">
+<h4 id="orgc42f271"><span class="section-number-4">6.2.1</span> <span class="done DONE">DONE</span> RingBuffer</h4>
+<div class="outline-text-4" id="text-6-2-1">
 <ol class="org-ol">
 <li>Implement Generically</li>
 </ol>
 </div>
 </div>
-<div id="outline-container-org2ed8775" class="outline-4">
-<h4 id="org2ed8775"><span class="section-number-4">5.2.2</span> PageManager</h4>
-<div class="outline-text-4" id="text-5-2-2">
-<ol class="org-ol">
-<li>Define Trait</li>
-<li>Implement RamPageManager</li>
-<li>Implement FsPageManager</li>
-<li>Implement Combination</li>
-<li>Implement BlockIterator</li>
-</ol>
+<div id="outline-container-org41da627" class="outline-4">
+<h4 id="org41da627"><span class="section-number-4">6.2.2</span> <span class="done DONE">DONE</span> PageManager</h4>
+<div class="outline-text-4" id="text-6-2-2">
 </div>
+<ol class="org-ol"><li><a id="orgccc5598"></a><span class="done DONE">DONE</span> Define Trait<br  /><div class="outline-text-5" id="text-6-2-2-1">
+</div></li>
+<li><a id="orge682245"></a><span class="done DONE">DONE</span> Implement RamPageManager<br  /><div class="outline-text-5" id="text-6-2-2-2">
+</div></li>
+<li><a id="orgd5a031f"></a><span class="done DONE">DONE</span> Implement FsPageManager<br  /><div class="outline-text-5" id="text-6-2-2-3">
+</div></li>
+<li><a id="orgf2c3090"></a><span class="done DONE">DONE</span> Implement Combination<br  /><div class="outline-text-5" id="text-6-2-2-4">
+</div></li>
+<li><a id="org12f72f8"></a><span class="done DONE">DONE</span> Implement BlockIterator<br  /><div class="outline-text-5" id="text-6-2-2-5">
+</div></li></ol>
 </div>
-<div id="outline-container-org2c13bde" class="outline-4">
-<h4 id="org2c13bde"><span class="section-number-4">5.2.3</span> Listings and Postings</h4>
-<div class="outline-text-4" id="text-5-2-3">
+<div id="outline-container-org0d732b0" class="outline-4">
+<h4 id="org0d732b0"><span class="section-number-4">6.2.3</span> <span class="done DONE">DONE</span> Listings and Postings</h4>
+<div class="outline-text-4" id="text-6-2-3">
 <ol class="org-ol">
 <li>Define Postings and Listings</li>
 <li>Implement naive compression algorithm</li>
 </ol>
 </div>
 </div>
-<div id="outline-container-org2b8d1b9" class="outline-4">
-<h4 id="org2b8d1b9"><span class="section-number-4">5.2.4</span> Vocabulary</h4>
-<div class="outline-text-4" id="text-5-2-4">
+<div id="outline-container-orgd57c5e0" class="outline-4">
+<h4 id="orgd57c5e0"><span class="section-number-4">6.2.4</span> <span class="done DONE">DONE</span> Vocabulary</h4>
+<div class="outline-text-4" id="text-6-2-4">
 <ol class="org-ol">
 <li>Define Vocabulary Trait</li>
 <li>Implement Vocabulary Trait for HashMap</li>
 </ol>
 </div>
 </div>
-<div id="outline-container-org491e3d3" class="outline-4">
-<h4 id="org491e3d3"><span class="section-number-4">5.2.5</span> Indexing</h4>
+<div id="outline-container-org0762c42" class="outline-4">
+<h4 id="org0762c42"><span class="section-number-4">6.2.5</span> Index</h4>
+<div class="outline-text-4" id="text-6-2-5">
+<ol class="org-ol">
+<li>Define Struct</li>
+<li>Implement Indexing</li>
+</ol>
+</div>
 </div>
 </div>
 </div>
 </div>
 <div id="postamble" class="status">
 <p class="author">Author: Jakob Demler</p>
-<p class="date">Created: 2016-12-19 Mon 17:51</p>
+<p class="date">Created: 2016-12-21 Wed 15:12</p>
 <p class="validation"><a href="http://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

@@ -6,20 +6,22 @@ use page_manager::{Page, PageId, BlockId, Block, RamPageCache, PageCache};
 pub struct BlockIter<'a> {
     cache: &'a RamPageCache,
     current_page: (PageId, Arc<Page>),
-    blocks: Vec<(PageId, BlockId)>,
+    pages: Vec<PageId>,
+    last_block: BlockId,
     ptr: usize,
 }
 
 impl<'a> BlockIter<'a> {
 
     
-    pub fn new(cache: &'a RamPageCache, blocks: Vec<(PageId, BlockId)>) -> Self {
-        let p_id = blocks[0].0;
+    pub fn new(cache: &'a RamPageCache, pages: Vec<PageId>, last_block: BlockId) -> Self {
+        let p_id = pages[0];
         let curr_page = (p_id, cache.get_page(p_id));
         BlockIter {
             cache: cache,
             current_page: curr_page,
-            blocks: blocks,
+            pages: pages,
+            last_block: last_block,
             ptr: 0,
         }
     }
@@ -29,8 +31,8 @@ impl<'a> Iterator for BlockIter<'a> {
     type Item = Block;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ptr < self.blocks.len() {
-            let (page_id, block_id) = self.blocks[self.ptr];
+        if self.ptr < self.pages.len() {
+            let page_id = self.pages[self.ptr];
             if self.current_page.0 != page_id {
                 self.current_page = (page_id, self.cache.get_page(page_id));
             }

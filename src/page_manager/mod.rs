@@ -4,6 +4,7 @@ pub use page_manager::page::{Page, PageId, PAGESIZE};
 pub use page_manager::block::{Block, BlockId, BLOCKSIZE};
 pub use page_manager::fs_page_manager::FsPageManager;
 pub use page_manager::ram_page_cache::RamPageCache;
+pub use page_manager::block_iter::BlockIter;
 
 mod page;
 mod block;

@@ -59,6 +59,11 @@ impl<T> RingBuffer<T> {
     pub fn count(&self) -> usize {
         self.count
     }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.count == 0
+    }
 }
 
 #[cfg(test)]

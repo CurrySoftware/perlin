@@ -243,7 +243,8 @@ Find modular testable things. Implement them module by module with extensive tes
     CLOSED: [2016-12-20 Tue 19:53]
 1. Define Postings and Listings
 2. Implement naive compression algorithm
-*** Vocabulary
+*** DONE Vocabulary
+    CLOSED: [2016-12-21 Wed 15:00]
 1. Define Vocabulary Trait
 2. Implement Vocabulary Trait for HashMap
 *** Index
