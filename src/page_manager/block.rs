@@ -26,6 +26,7 @@ impl BlockId {
 
     pub fn inc(&mut self) {
         self.0 += 1;
+        self.0 %= BLOCKSIZE as u16;
     }
 }
 

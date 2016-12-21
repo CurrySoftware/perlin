@@ -1,6 +1,7 @@
 use compressor::Compressor;
 use page_manager::BlockIter;
-use utils::ring_buffer::RingBuffer;
+use utils::ring_buffer::BiasedRingBuffer;
+use utils::Baseable;
 use index::listing::UsedCompressor;
 
 
@@ -10,21 +11,50 @@ pub struct Posting(pub DocId);
 pub struct DocId(pub u64);
 
 impl DocId {
+    #[inline]
     pub fn none() -> DocId {
         DocId(u64::max_value())
     }
 }
 
-struct PostingIterator<'a> {
+impl<'a> Baseable<&'a DocId> for DocId {
+    #[inline]
+    fn base_on(&mut self, other: &Self) {
+        self.0 -= other.0
+    }
+}
+
+impl Posting {
+    #[inline]
+    pub fn none() -> Posting {
+        Posting(DocId::none())
+    }
+}
+
+impl Default for Posting {
+    fn default() -> Self {
+        Posting(DocId(0))
+    }
+}
+
+impl<'a> Baseable<&'a Posting> for Posting {
+    #[inline]
+    fn base_on(&mut self, other: &Self){
+        self.0.base_on(&other.0);
+    }
+}
+
+
+pub struct PostingIterator<'a> {
     blocks: BlockIter<'a>,
-    posting_buffer: RingBuffer<Posting>
+    posting_buffer: BiasedRingBuffer<Posting>
 }
 
 impl<'a> PostingIterator<'a> {
     pub fn new(blocks: BlockIter<'a>) -> Self {
         PostingIterator {
             blocks: blocks,
-            posting_buffer: RingBuffer::new()
+            posting_buffer: BiasedRingBuffer::new()
         }
     }
 }

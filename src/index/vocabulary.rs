@@ -1,7 +1,7 @@
 use std::hash::Hash;
 use std::collections::HashMap;
 
-#[derive(Copy, Clone)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct TermId(pub u64);
 
 pub trait Vocabulary<TTerm> {

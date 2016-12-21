@@ -183,6 +183,27 @@ end
 [[file:iterate_blocks.png]]
 ** Compression
 *** Compress to Block
+*** Delta Compression
+#+begin_src plantuml :file delta_compression.png
+participant Listing
+participant Compressor
+database RamPageCache
+[-> Listing : add(&[Posting])
+Listing -> Listing : set_block_end(DocId)
+Listing -> Compressor : compress(RingBuffer<Posting>)
+Compressor -> Listing : Block
+Listing -> RamPageCache : store_block(block)
+RamPageCache -> Listing : PageId
+Listing -> Listing : store(PageId, BlockId, BlockStart)
+Listing -> Listing : set block_start = block_end
+#+end_src
+#+RESULTS:
+[[file:delta_compression.png]]
+
+#+begin_src plantuml :file based_ringbuffer.png
+
+
+#+end_src
 
 * Ownership
 ** RamPageCache

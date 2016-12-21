@@ -37,7 +37,7 @@ impl<'a> Iterator for BlockIter<'a> {
                 self.current_page = (page_id, self.cache.get_page(page_id));
             }
             self.ptr += 1;
-            return Some(self.current_page.1[block_id]);
+           // return Some(self.current_page.1[block_id]);
         }
         return None;
     }
