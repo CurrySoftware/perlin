@@ -30,8 +30,7 @@ impl BlockId {
     }
 
     pub fn dec(&mut self) {
-        debug_assert!(self.0 > 0);
-        self.0 -= 1;
+        self.0 = ((self.0 as usize + BLOCKSIZE - 1) % BLOCKSIZE) as u16;
     }
 }
 

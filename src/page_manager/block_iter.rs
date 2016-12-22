@@ -47,10 +47,10 @@ impl<'a> Iterator for BlockIter<'a> {
             self.current_page = page;
         }
         let res = Some(self.current_page[self.block_counter]);
-        self.block_counter.inc();
         if self.page_counter == self.pages.len() && self.block_counter > self.last_block {
             return None;
         }
+        self.block_counter.inc();
         res
     }
 }
