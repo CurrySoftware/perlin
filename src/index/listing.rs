@@ -21,7 +21,7 @@ impl Listing {
     pub fn new() -> Self {
         Listing {
             block_list: Vec::new(),
-            block_counter: BlockId::last(),
+            block_counter: BlockId::first(),
             posting_buffer: BiasedRingBuffer::new(),
             block_start: Posting(DocId(0)),
             block_end: Posting(DocId(0)),
@@ -39,6 +39,12 @@ impl Listing {
     pub fn commit(&mut self, page_cache: &mut RamPageCache) {
         self.compress_and_ship(page_cache, true);
         page_cache.flush_page(self.block_list.last().unwrap().0);
+    }
+
+    pub fn last_block_id(&self) -> BlockId {
+        let mut r = self.block_counter;
+        r.dec();
+        r
     }
 
     fn compress_and_ship(&mut self, page_cache: &mut RamPageCache, force: bool) {
@@ -112,7 +118,7 @@ mod tests {
         listing.commit(&mut cache);
         assert_eq!(listing.block_list.len(), 1);
         assert_eq!(listing.posting_buffer.count(), 0);
-        assert_eq!(listing.last_block_id, BlockId::first());
+        assert_eq!(listing.last_block_id(), BlockId::first());
     }
 
 

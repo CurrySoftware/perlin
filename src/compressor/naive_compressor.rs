@@ -53,7 +53,7 @@ impl Compressor for NaiveCompressor {
 
 #[cfg(test)]
 mod tests {
-    use utils::ring_buffer::RingBuffer;
+    use utils::ring_buffer::BiasedRingBuffer;
     use index::posting::{DocId, Posting};
     use page_manager::{BLOCKSIZE, Block};
     use compressor::Compressor;
@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn compress() {
-        let mut buffer = RingBuffer::<Posting>::new();
+        let mut buffer = BiasedRingBuffer::<Posting>::new();
         assert_eq!(NaiveCompressor::compress(&mut buffer), None);
         for i in 0..BLOCKSIZE / 8 {
             buffer.push_back(Posting(DocId(i as u64)));
@@ -73,7 +73,7 @@ mod tests {
 
     #[test]
     fn decompress() {
-        let mut buffer = RingBuffer::<Posting>::new();
+        let mut buffer = BiasedRingBuffer::<Posting>::new();
         assert_eq!(NaiveCompressor::compress(&mut buffer), None);
         for i in 0..BLOCKSIZE / 8 {
             buffer.push_back(Posting(DocId(i as u64)));
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn force_compress() {
-        let mut buffer = RingBuffer::<Posting>::new();
+        let mut buffer = BiasedRingBuffer::<Posting>::new();
         assert_eq!(NaiveCompressor::compress(&mut buffer), None);
         buffer.push_back(Posting(DocId(0)));
         buffer.push_back(Posting(DocId(1)));

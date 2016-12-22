@@ -28,6 +28,11 @@ impl BlockId {
         self.0 += 1;
         self.0 %= BLOCKSIZE as u16;
     }
+
+    pub fn dec(&mut self) {
+        debug_assert!(self.0 > 0);
+        self.0 -= 1;
+    }
 }
 
 impl Block {

@@ -21,7 +21,7 @@ impl RamPageCache {
     }
 
     #[inline]
-    fn search_page(&self, page_id: &PageId) -> Result<usize, usize>  {
+    fn search_page(&self, page_id: &PageId) -> Result<usize, usize> {
         self.cache.borrow().binary_search_by_key(page_id, |&(pid, _)| pid)
     }
 
@@ -71,9 +71,8 @@ impl BlockManager for RamPageCache {
             let (_, page) = self.construction_cache.remove(index);
             self.invalidate(page_id);
             self.store.store_reserved(page_id, page);
-            return;
         }
-        unreachable!();
+        // If page is not in cache it needs not to be flushed
     }
 }
 
@@ -114,7 +113,7 @@ mod tests {
 
     use super::RamPageCache;
     use page_manager::{BlockManager, FsPageManager, Page, PageCache, PageId, Block, BlockId,
-                       BLOCKSIZE};
+                       BLOCKSIZE, PAGESIZE};
 
 
     fn new_cache(name: &str) -> RamPageCache {
@@ -141,6 +140,22 @@ mod tests {
         let mut p2 = Page::empty();
         p2[BlockId::first()] = Block([3; BLOCKSIZE]);
         assert_eq!(cache.get_page(PageId(2)), Arc::new(p2));
+    }
+
+    #[test]
+    fn flush_full() {
+        let mut cache = new_cache("flush_full");
+        assert_eq!(cache.store_block(Block([0; BLOCKSIZE])),
+                   PageId(0));
+        let mut ref_page = Page::empty();
+        for j in 1..PAGESIZE {
+            cache.store_in_place(PageId(0),
+                                 BlockId(j as u16),
+                                 Block([(j % 255) as u8; BLOCKSIZE]));
+            ref_page[BlockId(j as u16)] = Block([(j % 255) as u8; BLOCKSIZE]);
+        }
+        cache.flush_page(PageId(0));
+        assert_eq!(cache.get_page(PageId(0)), Arc::new(ref_page));
     }
 
     #[test]
