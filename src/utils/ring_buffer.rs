@@ -72,25 +72,6 @@ impl<T> RingBuffer<T> {
         self.count += 1;
     }
 
-    pub fn pop_back(&mut self) -> Option<T> {
-        if self.count > 0 {
-            self.count -= 1;
-            Some(mem::replace(&mut self.buff[(self.start + self.count) % SIZE],
-                              unsafe { mem::uninitialized() }))
-
-        } else {
-            None
-        }
-    }
-
-    pub fn push_front(&mut self, element: T) {
-        debug_assert!(self.count < SIZE);
-        self.start += SIZE - 1;
-        self.start %= SIZE;
-        self.buff[self.start] = element;
-        self.count += 1;
-    }
-
     pub fn pop_front(&mut self) -> Option<T> {
         if self.count > 0 {
             let element = Some(mem::replace(&mut self.buff[self.start],
@@ -103,6 +84,7 @@ impl<T> RingBuffer<T> {
             None
         }
     }
+    
     pub fn peek_front(&self) -> Option<&T> {
         if self.count > 0 {
             Some(&self.buff[self.start])
