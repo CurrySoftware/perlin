@@ -177,4 +177,22 @@ mod tests {
             assert_eq!(listing.posting_buffer.count(), 0);
         }
     }
+
+      #[test]
+    fn biases() {
+        let mut cache = new_cache("biases");
+        let mut listing = Listing::new();
+
+        listing.add(&[Posting(DocId(1))], &mut cache);
+        assert_eq!(listing.block_start, Posting(DocId(0)));
+        assert_eq!(listing.block_end, Posting(DocId(1)));
+        listing.commit(&mut cache);
+        assert_eq!(listing.block_start, Posting(DocId(1)));
+        assert_eq!(listing.block_end, Posting(DocId(1)));
+        listing.add(&[Posting(DocId(10))], &mut cache);
+        assert_eq!(listing.block_end, Posting(DocId(10)));
+        listing.commit(&mut cache);
+        assert_eq!(listing.block_start, Posting(DocId(10)));
+        assert_eq!(listing.block_biases, vec![Posting(DocId(0)), Posting(DocId(1))]);        
+    }
 }

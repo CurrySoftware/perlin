@@ -32,6 +32,23 @@ impl<TTerm> Index<TTerm>
 
     }
 
+    pub fn index_collection<TDocIter, TDocsIter>(&mut self, collection: TDocsIter) -> Vec<DocId>
+        where TDocIter: Iterator<Item = TTerm>,
+              TDocsIter: Iterator<Item = TDocIter>
+    {
+        let mut buff = Vec::new();
+        for doc in collection {
+            let doc_id = DocId(self.doc_count);
+            self.doc_count += 1;
+            for term in doc {
+                let term_id = self.vocabulary.get_or_add(term);
+                buff.push((term_id, doc_id));
+            }
+        }
+        //        buff.sort_by_ke
+        vec![]
+    }
+
     pub fn index_document<TIter>(&mut self, document: TIter) -> DocId
         where TIter: Iterator<Item = TTerm>
     {
@@ -81,8 +98,7 @@ mod tests {
     use test_utils::create_test_dir;
     use super::Index;
     use index::posting::{Posting, DocId};
-    use page_manager::{BlockManager, FsPageManager, Page, RamPageCache, PageId, Block, BlockId,
-                       BLOCKSIZE};
+    use page_manager::{FsPageManager, RamPageCache};
 
     fn new_cache(name: &str) -> RamPageCache {
         let path = &create_test_dir(format!("index/{}", name).as_str());
@@ -104,18 +120,37 @@ mod tests {
     }
 
     #[test]
-    fn extended_indexing()  {
+    fn extended_indexing() {
         let cache = new_cache("extended_indexing");
         let mut index = Index::<usize>::new(cache);
         println!("index");
         for i in 0..200 {
-            assert_eq!(index.index_document((i..i+200)), DocId(i as u64));
+            assert_eq!(index.index_document((i..i + 200)), DocId(i as u64));
         }
         println!("commit");
         index.commit();
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
-        assert_eq!(index.query_atom(&99), (0..100).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
-        
+        assert_eq!(index.query_atom(&99),
+                   (0..100).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn mutable_index() {
+        // The fuck? That works?
+        let cache = new_cache("mutable_index");
+        let mut index = Index::<usize>::new(cache);
+        for i in 0..200 {
+            assert_eq!(index.index_document((i..i + 200)), DocId(i as u64));
+        }
+        index.commit();
+
+        assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
+        assert_eq!(index.query_atom(&99),
+                   (0..100).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
+        assert_eq!(index.index_document(0..400), DocId(200));
+        index.commit();
+        assert_eq!(index.query_atom(&0),
+                   vec![Posting(DocId(0)), Posting(DocId(200))]);
     }
 }
