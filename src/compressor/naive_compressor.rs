@@ -55,7 +55,7 @@ impl Compressor for NaiveCompressor {
 mod tests {
     use utils::ring_buffer::BiasedRingBuffer;
     use index::posting::{DocId, Posting};
-    use page_manager::{BLOCKSIZE, Block};
+    use page_manager::{BLOCKSIZE};
     use compressor::Compressor;
 
     use super::NaiveCompressor;

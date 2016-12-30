@@ -45,7 +45,34 @@ impl<TTerm> Index<TTerm>
                 buff.push((term_id, doc_id));
             }
         }
-        //        buff.sort_by_ke
+        buff.sort_by_key(|&(tid, _)| tid);
+        buff.dedup();
+        let mut grouped_buff = Vec::with_capacity(buff.len());
+        let mut last_tid = TermId(0);
+        let mut term_counter = 0;
+        for (i, &(term_id, doc_id)) in buff.iter().enumerate() {
+            // if term is the first term or different to the last term (new group)
+            if last_tid < term_id || i == 0 {
+                term_counter += 1;
+                // Term_id has to be added
+                grouped_buff.push((term_id, vec![Posting(doc_id)]));
+                last_tid = term_id;
+                continue;
+            }          
+            // Otherwise add a whole new posting
+            grouped_buff[term_counter - 1].1.push(Posting(doc_id));
+        }
+        for (term_id, postings) in grouped_buff {
+             let index = match self.listings.binary_search_by_key(&term_id, |&(t_id, _)| t_id) {
+                Ok(index) => index,
+                Err(index) => {
+                    self.listings.insert(index, (term_id, Listing::new()));
+                    index
+                }
+            };
+            self.listings[index].1.add(&postings, &mut self.page_manager);
+        }
+        self.commit();
         vec![]
     }
 
@@ -129,6 +156,17 @@ mod tests {
         }
         println!("commit");
         index.commit();
+
+        assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
+        assert_eq!(index.query_atom(&99),
+                   (0..100).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn collection_indexing() {
+        let cache = new_cache("collection_indexing");
+        let mut index = Index::<usize>::new(cache);
+        assert_eq!(index.index_collection((0..2000).map(|i| (i..i+2000))), vec![]);
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
         assert_eq!(index.query_atom(&99),

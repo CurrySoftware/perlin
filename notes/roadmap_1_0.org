@@ -268,7 +268,8 @@ Find modular testable things. Implement them module by module with extensive tes
     CLOSED: [2016-12-21 Wed 15:00]
 1. Define Vocabulary Trait
 2. Implement Vocabulary Trait for HashMap
-*** Index
+*** DONE Index
+    CLOSED: [2016-12-22 Thu 13:54]
 1. Define Struct
 2. Implement Indexing
 

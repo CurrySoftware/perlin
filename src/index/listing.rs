@@ -31,9 +31,12 @@ impl Listing {
     }
 
     pub fn add(&mut self, postings: &[Posting], page_cache: &mut RamPageCache) {
-        for posting in postings {
+        for (i, posting) in postings.iter().enumerate() {
             self.block_end = *posting;
             self.posting_buffer.push_back(*posting);
+            if i % 8 == 0{
+                self.compress_and_ship(page_cache, false);
+            }
         }
         self.compress_and_ship(page_cache, false);
     }
@@ -96,8 +99,7 @@ mod tests {
     use test_utils::create_test_dir;
 
     use index::posting::{Posting, DocId};
-    use page_manager::{BlockManager, FsPageManager, Page, RamPageCache, PageId, Block, BlockId,
-                       BLOCKSIZE};
+    use page_manager::{FsPageManager, RamPageCache, BlockId};
 
 
     fn new_cache(name: &str) -> RamPageCache {
