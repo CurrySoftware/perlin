@@ -103,7 +103,10 @@ impl<TTerm> Index<TTerm>
     }
 
     pub fn commit(&mut self) {
-        for listing in self.listings.iter_mut() {
+        //We iterate over the listings in reverse here because listing.commit() causes
+        //a remove in the ram_page_manager.construction cache which is a Vec.
+        //Vec.remove is O(n-i).
+        for listing in self.listings.iter_mut().rev() {
             listing.1.commit(&mut self.page_manager);
         }
     }
