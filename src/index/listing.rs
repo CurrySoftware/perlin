@@ -3,7 +3,7 @@ use utils::Baseable;
 
 use compressor::{Compressor, NaiveCompressor};
 
-use page_manager::{PageId, Block, BlockIter, BlockId, RamPageCache, BlockManager, PAGESIZE};
+use page_manager::{PageId, Block, BlockIter, BlockId, RamPageCache, BlockManager};
 
 use index::posting::{Posting, DocId, PostingIterator};
 
@@ -34,7 +34,7 @@ impl Listing {
         for (i, posting) in postings.iter().enumerate() {
             self.block_end = *posting;
             self.posting_buffer.push_back(*posting);
-            if i % 8 == 0{
+            if i % 8 == 0 {
                 self.compress_and_ship(page_cache, false);
             }
         }
@@ -95,7 +95,6 @@ mod tests {
 
     use super::Listing;
 
-    use std::sync::Arc;
     use test_utils::create_test_dir;
 
     use index::posting::{Posting, DocId};
@@ -180,7 +179,7 @@ mod tests {
         }
     }
 
-      #[test]
+    #[test]
     fn biases() {
         let mut cache = new_cache("biases");
         let mut listing = Listing::new();
@@ -195,6 +194,7 @@ mod tests {
         assert_eq!(listing.block_end, Posting(DocId(10)));
         listing.commit(&mut cache);
         assert_eq!(listing.block_start, Posting(DocId(10)));
-        assert_eq!(listing.block_biases, vec![Posting(DocId(0)), Posting(DocId(1))]);        
+        assert_eq!(listing.block_biases,
+                   vec![Posting(DocId(0)), Posting(DocId(1))]);
     }
 }

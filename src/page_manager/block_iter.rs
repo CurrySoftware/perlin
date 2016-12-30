@@ -1,6 +1,3 @@
-use std::mem;
-
-use std::cell::RefCell;
 use std::sync::Arc;
 
 use page_manager::{Page, PageId, BlockId, Block, RamPageCache, PageCache};
@@ -58,11 +55,10 @@ impl<'a> Iterator for BlockIter<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
     use test_utils::create_test_dir;
 
     use super::BlockIter;
-    use page_manager::{RamPageCache, BlockManager, FsPageManager, Page, PageCache, PageId, Block,
+    use page_manager::{RamPageCache, BlockManager, FsPageManager, PageId, Block,
                        BlockId, BLOCKSIZE, PAGESIZE};
 
 

@@ -25,7 +25,7 @@ impl Page {
 
     pub fn from_read<R: io::Read>(source: &mut R) -> Page {
         let mut raw: [u8; BLOCKSIZE*PAGESIZE] = unsafe {mem::uninitialized()};
-        source.read_exact(&mut raw);
+        source.read_exact(&mut raw).unwrap();
         unsafe {mem::transmute(raw)}
     }
 
