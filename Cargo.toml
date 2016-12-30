@@ -9,3 +9,6 @@ repository = "https://github.com/JDemler/perlin"
 readme = "README.md"
 keywords = ["information", "retrieval", "search", "text", "engine"]
 license = "MIT"
+
+[features]
+bench=[]

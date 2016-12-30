@@ -166,7 +166,7 @@ mod tests {
     fn collection_indexing() {
         let cache = new_cache("collection_indexing");
         let mut index = Index::<usize>::new(cache);
-        assert_eq!(index.index_collection((0..2000).map(|i| (i..i+2000))), vec![]);
+        assert_eq!(index.index_collection((0..200).map(|i| (i..i+200))), vec![]);
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
         assert_eq!(index.query_atom(&99),
@@ -175,7 +175,6 @@ mod tests {
 
     #[test]
     fn mutable_index() {
-        // The fuck? That works?
         let cache = new_cache("mutable_index");
         let mut index = Index::<usize>::new(cache);
         for i in 0..200 {
