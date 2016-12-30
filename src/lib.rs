@@ -2,8 +2,8 @@
 
 #[macro_use]
 mod utils;
-mod page_manager;
 mod compressor;
+pub mod page_manager;
 pub mod index;
 
 #[cfg(test)]
