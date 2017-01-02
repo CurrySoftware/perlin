@@ -3,14 +3,14 @@ use utils::Baseable;
 
 use compressor::{Compressor, NaiveCompressor};
 
-use page_manager::{PageId, Block, BlockIter, BlockId, RamPageCache, BlockManager};
+use page_manager::{Pages, Block, BlockIter, BlockId, RamPageCache, BlockManager};
 
 use index::posting::{Posting, DocId, PostingIterator};
 
 pub type UsedCompressor = NaiveCompressor;
 
 pub struct Listing {
-    page_list: Vec<PageId>,
+    page_list: Pages,
     block_biases: Vec<Posting>,
     block_counter: BlockId,
     block_start: Posting,
@@ -21,7 +21,7 @@ pub struct Listing {
 impl Listing {
     pub fn new() -> Self {
         Listing {
-            page_list: Vec::new(),
+            page_list: Pages::new(),
             block_biases: Vec::new(),
             block_counter: BlockId::first(),
             posting_buffer: BiasedRingBuffer::new(),
@@ -71,7 +71,7 @@ impl Listing {
     fn ship(&mut self, page_cache: &mut RamPageCache, block: Block) {
         // If the block is on a new page
         if self.block_counter == BlockId::first() {
-            // Push it on a new page and store the page ide
+            // Push it on a new page and store the page
             self.page_list.push(page_cache.store_block(block));
         } else {
             // Otherwise store it on an existing page

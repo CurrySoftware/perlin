@@ -14,6 +14,22 @@ pub struct Page(pub [Block; PAGESIZE]);
 #[derive(Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Debug)]
 pub struct PageId(pub u64);
 
+
+pub struct Pages(pub Vec<PageId>, UnfullPage);
+pub struct UnfullPage(pub PageId, pub BlockId, pub BlockId);
+
+impl Pages {
+    pub fn new() -> Pages {
+        Pages(Vec::new(), UnfullPage::empty())
+    }
+}
+
+impl UnfullPage {
+    pub fn empty() -> UnfullPage {
+        UnfullPage(PageId(0), BlockId::first(), BlockId::first())
+    }
+}
+
 impl Page {
     pub fn empty() -> Self {
         Page([Block::empty(); PAGESIZE])

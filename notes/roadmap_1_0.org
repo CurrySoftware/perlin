@@ -73,6 +73,7 @@ Index -> Vocabulary : resolve_operands(Operands)
 ** Pages Blocks
 *** Indexing Process
 #+begin_src plantuml :file indexing_process.png
+DEPRECATED!
 participant Indexer
 participant Listing
 participant Compressor
@@ -181,6 +182,35 @@ end
 
 #+RESULTS:
 [[file:iterate_blocks.png]]
+*** Adding to DiskList 
+#+begin_src plantuml :file disk_list.png
+participant DiskList
+participant RamPageCache
+database FsPageManager
+=== First Block ===
+DiskList -> RamPageCache : store_block(block)
+RamPageCache -> DiskList : PageId
+
+=== Second Block === 
+DiskList -> RamPageCache : store_in_place(block, page_id, block_id)
+RamPageCache -> DiskList : Ok()
+=== Full Page ===
+DiskList -> RamPageCache : store_in_place(block, page_id, block_id)
+RamPageCache -> DiskList : Ok()
+DiskList -> RamPageCache : commit_page(page_id)
+RamPageCache -> FsPageManager : store_full(Page) 
+FsPageManager -> RamPageCache : PageId
+RamPageCache -> DiskList : PageId 
+=== Commit Unfull Page ===
+DiskList -> RamPageCache : commit_unfull_page(page_id, block_id)
+RamPageCache -> FsPageManager : store_unfull_page(Page, block_id)
+FsPageManager -> RamPageCache : UnfullPage(PageId, BlockId, BlockId)
+RamPageCache -> DiskList : UnfullPage(PageId, BlockId, BlockId)
+#+end_src
+
+#+RESULTS:
+[[file:disk_list.png]]
+
 ** Compression
 *** Compress to Block
 *** Delta Compression

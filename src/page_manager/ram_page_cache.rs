@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use page_manager::{FsPageManager, Page, Block, BlockManager, PageStore, PageId, BlockId, PageCache};
+use utils::counter::Counter;
+use page_manager::{FsPageManager, UnfullPage, Page, Block, BlockManager, PageStore, PageId, BlockId, PageCache};
 
 const CACHESIZE: usize = 1024;
 
 pub struct RamPageCache {
     cache: RefCell<Vec<(PageId, Arc<Page>)>>,
+    counter: Counter,
     construction_cache: Vec<(PageId, Page)>,
     store: FsPageManager,
 }
@@ -14,6 +16,7 @@ pub struct RamPageCache {
 impl RamPageCache {
     pub fn new(store: FsPageManager) -> Self {
         RamPageCache {
+            counter: Counter::new(),
             cache: RefCell::new(Vec::with_capacity(CACHESIZE)),
             construction_cache: Vec::with_capacity(CACHESIZE),
             store: store,
@@ -34,7 +37,7 @@ impl RamPageCache {
 
 impl BlockManager for RamPageCache {
     fn store_block(&mut self, block: Block) -> PageId {
-        let page_id = self.store.reserve_page();
+        let page_id = PageId(self.counter.retrieve_and_inc());
         let mut p = Page::empty();
         p[BlockId::first()] = block;
         if let Err(index) = self.construction_cache
@@ -48,15 +51,11 @@ impl BlockManager for RamPageCache {
     fn store_in_place(&mut self, page_id: PageId, block_id: BlockId, block: Block) {
         match self.construction_cache
             .binary_search_by_key(&page_id, |&(pid, _)| pid) {
+            // Page is currently beeing built
             Ok(index) => {
                 self.construction_cache[index].1[block_id] = block;
-                if block_id == BlockId::last() {
-                    // Shove it into store
-                    let (_, page) = self.construction_cache.remove(index);
-                    self.store.store_reserved(page_id, page);
-                }
-                return;
             }
+            // Page was already flushed. Retrieve it, change it
             Err(index) => {
                 let mut page = self.store.get_page(page_id);
                 page[block_id] = block;
@@ -65,13 +64,25 @@ impl BlockManager for RamPageCache {
         }
     }
 
-    fn flush_page(&mut self, page_id: PageId) {
+    fn flush_page(&mut self, page_id: PageId) -> PageId {
         if let Ok(index) = self.construction_cache
             .binary_search_by_key(&page_id, |&(pid, _)| pid) {
             let (_, page) = self.construction_cache.remove(index);
             self.invalidate(page_id);
-            self.store.store_reserved(page_id, page);
+            return self.store.store_full(page);
         }
+        unreachable!();
+        // If page is not in cache it needs not to be flushed
+    }
+
+    fn flush_unfull(&mut self, page_id: PageId, block_id: BlockId) -> UnfullPage {
+        if let Ok(index) = self.construction_cache
+            .binary_search_by_key(&page_id, |&(pid, _)| pid) {
+            let (_, page) = self.construction_cache.remove(index);
+            self.invalidate(page_id);
+            return self.store.store_unfull(page, block_id);
+        }
+        unreachable!();
         // If page is not in cache it needs not to be flushed
     }
 }
@@ -145,8 +156,7 @@ mod tests {
     #[test]
     fn flush_full() {
         let mut cache = new_cache("flush_full");
-        assert_eq!(cache.store_block(Block([0; BLOCKSIZE])),
-                   PageId(0));
+        assert_eq!(cache.store_block(Block([0; BLOCKSIZE])), PageId(0));
         let mut ref_page = Page::empty();
         for j in 1..PAGESIZE {
             cache.store_in_place(PageId(0),
