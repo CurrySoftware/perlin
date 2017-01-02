@@ -1,4 +1,3 @@
-use std::ops::Add;
 use std::fmt;
 
 use page_manager::PAGESIZE;

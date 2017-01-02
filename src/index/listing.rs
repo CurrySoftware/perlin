@@ -3,14 +3,15 @@ use utils::Baseable;
 
 use compressor::{Compressor, NaiveCompressor};
 
-use page_manager::{Pages, Block, BlockIter, BlockId, RamPageCache, BlockManager};
+use page_manager::{Pages, PageId, Block, BlockIter, BlockId, RamPageCache, BlockManager};
 
 use index::posting::{Posting, DocId, PostingIterator};
 
 pub type UsedCompressor = NaiveCompressor;
 
 pub struct Listing {
-    page_list: Pages,
+    pages: Pages,
+    current_page: Option<PageId>,
     block_biases: Vec<Posting>,
     block_counter: BlockId,
     block_start: Posting,
@@ -21,7 +22,8 @@ pub struct Listing {
 impl Listing {
     pub fn new() -> Self {
         Listing {
-            page_list: Pages::new(),
+            pages: Pages::new(),
+            current_page: None,
             block_biases: Vec::new(),
             block_counter: BlockId::first(),
             posting_buffer: BiasedRingBuffer::new(),
@@ -43,12 +45,16 @@ impl Listing {
 
     pub fn commit(&mut self, page_cache: &mut RamPageCache) {
         self.compress_and_ship(page_cache, true);
-        page_cache.flush_page(*self.page_list.last().unwrap());
+        // Currentpage has to be unfull. Or None
+        if let Some(unfull_page) = self.current_page.take() {
+            self.pages.add_unfull(page_cache.flush_unfull(unfull_page, self.block_counter));
+            self.block_counter = BlockId::first();
+        }
     }
 
 
     pub fn posting_iter<'a>(&self, cache: &'a RamPageCache) -> PostingIterator<'a> {
-        let block_iter = BlockIter::new(cache, self.page_list.clone(), self.last_block_id());
+        let block_iter = BlockIter::new(cache, self.pages.clone());
         PostingIterator::new(block_iter, self.block_biases.clone())
     }
 
@@ -68,24 +74,40 @@ impl Listing {
         }
     }
 
+    /// This method does three things:
+    /// 1. It pushes a block to an existing page in ram or demands for one to
+    /// be created
+    /// 2. It checks if that page is full and then tells the ramcache to flush
+    /// it
+    /// 3. It defines the bounds of the block (e.g. With what docid does a
+    /// block start) and stores these
     fn ship(&mut self, page_cache: &mut RamPageCache, block: Block) {
         // If the block is on a new page
         if self.block_counter == BlockId::first() {
             // Push it on a new page and store the page
-            self.page_list.push(page_cache.store_block(block));
+            self.current_page = Some(page_cache.store_block(block));
         } else {
             // Otherwise store it on an existing page
-            page_cache.store_in_place(*self.page_list.last().unwrap(), self.block_counter, block)
+            page_cache.store_in_place(self.current_page.unwrap(), self.block_counter, block)
         }
         // Save with what doc_id the block just stored block starts
         self.block_biases.push(self.block_start);
+        // We just wrote the last block of a page. Flush it!
+        if self.block_counter == BlockId::last() {
+            // Store page, turn current_page to none
+            self.pages.push(page_cache.flush_page(self.current_page.take().unwrap()));
+        }
         // Count up the block
         self.block_counter.inc();
+
+        // If we know the next element take that as bias. Otherwise take the last of
+        // this block
         if let Some(posting) = self.posting_buffer.peek_front() {
             self.block_start = *posting;
         } else {
             self.block_start = self.block_end;
         }
+
         self.posting_buffer.base_on(self.block_start);
     }
 }
@@ -113,7 +135,7 @@ mod tests {
         let mut cache = new_cache("basic_add");
         let mut listing = Listing::new();
         listing.add(&[Posting(DocId(0))], &mut cache);
-        assert_eq!(listing.page_list.len(), 0);
+        assert_eq!(listing.pages.len(), 0);
         assert_eq!(listing.posting_buffer.count(), 1);
     }
 
@@ -122,10 +144,10 @@ mod tests {
         let mut cache = new_cache("commit");
         let mut listing = Listing::new();
         listing.add(&[Posting(DocId(0))], &mut cache);
-        assert_eq!(listing.page_list.len(), 0);
+        assert_eq!(listing.pages.len(), 0);
         assert_eq!(listing.posting_buffer.count(), 1);
         listing.commit(&mut cache);
-        assert_eq!(listing.page_list.len(), 1);
+        assert_eq!(listing.pages.len(), 1);
         assert_eq!(listing.posting_buffer.count(), 0);
         assert_eq!(listing.last_block_id(), BlockId::first());
     }
@@ -136,12 +158,12 @@ mod tests {
         let mut cache = new_cache("add");
         let mut listing = Listing::new();
         listing.add(&[Posting(DocId(0))], &mut cache);
-        assert_eq!(listing.page_list.len(), 0);
+        assert_eq!(listing.pages.len(), 0);
         assert_eq!(listing.posting_buffer.count(), 1);
         for i in 0..100 {
             listing.add(&[Posting(DocId(i))], &mut cache);
         }
-        assert!(listing.page_list.len() > 0);
+        assert!(listing.pages.len() > 0);
         assert!(listing.posting_buffer.count() > 0);
         listing.commit(&mut cache);
         assert_eq!(listing.posting_buffer.count(), 0);
@@ -152,12 +174,12 @@ mod tests {
         let mut cache = new_cache("add_much");
         let mut listing = Listing::new();
         listing.add(&[Posting(DocId(0))], &mut cache);
-        assert_eq!(listing.page_list.len(), 0);
+        assert_eq!(listing.pages.len(), 0);
         assert_eq!(listing.posting_buffer.count(), 1);
         for i in 0..10000 {
             listing.add(&[Posting(DocId(i))], &mut cache);
         }
-        assert!(listing.page_list.len() > 0);
+        assert!(listing.pages.len() > 0);
         assert!(listing.posting_buffer.count() > 0);
         listing.commit(&mut cache);
         assert_eq!(listing.posting_buffer.count(), 0);
@@ -171,7 +193,7 @@ mod tests {
             listings[i % 100].add(&[Posting(DocId(i as u64))], &mut cache);
         }
         for listing in listings.iter_mut() {
-            assert!(listing.page_list.len() > 0);
+            assert!(listing.pages.len() > 0);
             assert!(listing.posting_buffer.count() > 0);
             listing.commit(&mut cache);
         }

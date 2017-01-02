@@ -1,33 +1,34 @@
 use std::sync::Arc;
 
-use page_manager::{Page, PageId, BlockId, Block, RamPageCache, PageCache};
+use page_manager::{Pages, Page, PageId, BlockId, Block, RamPageCache, PageCache};
 
 pub struct BlockIter<'a> {
     cache: &'a RamPageCache,
     current_page: Arc<Page>,
-    pages: Vec<PageId>,
-    last_block: BlockId,
+    pages: Pages,
     block_counter: BlockId,
     page_counter: usize,
 }
 
 impl<'a> BlockIter<'a> {
-    pub fn new(cache: &'a RamPageCache, pages: Vec<PageId>, last_block: BlockId) -> Self {
+    pub fn new(cache: &'a RamPageCache, pages: Pages) -> Self {
         BlockIter {
             cache: cache,
             current_page: Arc::new(Page::empty()),
             pages: pages,
-            last_block: last_block,
             block_counter: BlockId::first(),
             page_counter: 0,
         }
     }
 
     fn next_page_id(&mut self) -> Option<PageId> {
+        self.page_counter += 1;
         if self.page_counter < self.pages.len() {
-            let p_id = self.pages[self.page_counter];
-            self.page_counter += 1;
+            let p_id = self.pages.0[self.page_counter];
             Some(p_id)
+        } else if let Some(unfull_page) = self.pages.1 {
+            self.block_counter = unfull_page.from();
+            Some(unfull_page.0)
         } else {
             None
         }
@@ -44,7 +45,9 @@ impl<'a> Iterator for BlockIter<'a> {
             self.current_page = page;
         }
         let res = Some(self.current_page[self.block_counter]);
-        if self.page_counter == self.pages.len() && self.block_counter > self.last_block {
+        if self.page_counter == self.pages.len() &&
+           self.block_counter >
+           self.pages.1.map_or(BlockId::first(), |unfull_page| unfull_page.to()) {
             return None;
         }
         self.block_counter.inc();
@@ -58,8 +61,8 @@ mod tests {
     use test_utils::create_test_dir;
 
     use super::BlockIter;
-    use page_manager::{RamPageCache, BlockManager, FsPageManager, PageId, Block,
-                       BlockId, BLOCKSIZE, PAGESIZE};
+    use page_manager::{RamPageCache, BlockManager, FsPageManager, Pages, PageId, Block, BlockId,
+                       BLOCKSIZE, PAGESIZE};
 
 
 
@@ -82,8 +85,8 @@ mod tests {
             }
             cache.flush_page(PageId(i));
         }
-        let pages = (0..2048).map(|i| PageId(i)).collect::<Vec<_>>();
-        let mut iter = BlockIter::new(&cache, pages, BlockId::last());
+        let pages = Pages((0..2048).map(|i| PageId(i)).collect::<Vec<_>>(), None);
+        let mut iter = BlockIter::new(&cache, pages);
         for i in 0..2048 {
             assert_eq!(iter.next(), Some(Block([(i % 255) as u8; BLOCKSIZE])));
             for j in 1..PAGESIZE {
@@ -105,13 +108,14 @@ mod tests {
             }
             cache.flush_page(PageId(i));
         }
-        let pages1 = (0..1024).map(|i| PageId(i)).collect::<Vec<_>>();
-        let pages2 = (1024..2048).map(|i| PageId(i)).collect::<Vec<_>>();
-        let mut iter1 = BlockIter::new(&cache, pages1, BlockId::last());
-        let mut iter2 = BlockIter::new(&cache, pages2, BlockId::last());
+        let pages1 = Pages((0..1024).map(|i| PageId(i)).collect::<Vec<_>>(), None);
+        let pages2 = Pages((1024..2048).map(|i| PageId(i)).collect::<Vec<_>>(), None);
+        let mut iter1 = BlockIter::new(&cache, pages1);
+        let mut iter2 = BlockIter::new(&cache, pages2);
         for i in 0..1024 {
             assert_eq!(iter1.next(), Some(Block([(i % 255) as u8; BLOCKSIZE])));
-            assert_eq!(iter2.next(), Some(Block([((i + 1024) % 255) as u8; BLOCKSIZE])));
+            assert_eq!(iter2.next(),
+                       Some(Block([((i + 1024) % 255) as u8; BLOCKSIZE])));
             for j in 1..PAGESIZE {
                 assert_eq!(iter1.next(), Some(Block([(j % 255) as u8; BLOCKSIZE])));
                 assert_eq!(iter2.next(), Some(Block([(j % 255) as u8; BLOCKSIZE])));

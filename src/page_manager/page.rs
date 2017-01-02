@@ -14,20 +14,45 @@ pub struct Page(pub [Block; PAGESIZE]);
 #[derive(Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Debug)]
 pub struct PageId(pub u64);
 
+#[derive(Clone)]
+pub struct Pages(pub Vec<PageId>, pub Option<UnfullPage>);
 
-pub struct Pages(pub Vec<PageId>, UnfullPage);
-pub struct UnfullPage(pub PageId, pub BlockId, pub BlockId);
+#[derive(Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Debug)]
+pub struct UnfullPage(pub PageId, BlockId, BlockId);
 
-impl Pages {
-    pub fn new() -> Pages {
-        Pages(Vec::new(), UnfullPage::empty())
+impl UnfullPage {
+
+    pub fn new(page_id: PageId, from: BlockId, to: BlockId) -> Self {
+        UnfullPage(page_id,from,to)
+    }
+    
+    pub fn from(&self) -> BlockId {
+        self.1
+    }
+
+    pub fn to(&self) -> BlockId {
+        self.2
     }
 }
 
-impl UnfullPage {
-    pub fn empty() -> UnfullPage {
-        UnfullPage(PageId(0), BlockId::first(), BlockId::first())
+impl Pages {
+    pub fn new() -> Pages {
+        Pages(Vec::new(), None)
     }
+
+    pub fn len(&self) -> usize {
+        self.0.len() + self.1.map_or(0, |_| 1)
+    }
+
+    #[inline]
+    pub fn push(&mut self, page_id: PageId)  {
+        self.0.push(page_id);
+    }
+
+    #[inline]
+    pub fn add_unfull(&mut self, unfull_page: UnfullPage) {
+        self.1 = Some(unfull_page);
+    }    
 }
 
 impl Page {

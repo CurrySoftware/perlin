@@ -1,5 +1,3 @@
-use std::mem;
-
 use std::path::Path;
 use std::io::{Seek, SeekFrom, Write};
 use std::fs::{OpenOptions, File};
@@ -48,7 +46,7 @@ impl PageStore for FsPageManager {
     } 
 
     fn store_unfull(&mut self, page: Page, block_id: BlockId) -> UnfullPage {
-        let (page, page_id) = if self.last_page_last_block.0 + block_id.0 > PAGESIZE as u16 {
+        let (mut page, page_id) = if self.last_page_last_block.0 + block_id.0 > PAGESIZE as u16 {
             //New Page
             self.last_page_last_block = BlockId(1);
             (Page::empty(), PageId(self.count.retrieve_and_inc()))
@@ -68,7 +66,7 @@ impl PageStore for FsPageManager {
         self.write_page(page, page_id);
         //And set the last_page_last_block
         self.last_page_last_block = BlockId(first_block.0 + block_id.0);
-        UnfullPage(page_id, first_block, self.last_page_last_block)            
+        UnfullPage::new(page_id, first_block, self.last_page_last_block)            
     }
     
     fn delete_page(&mut self, page_id: PageId) {
