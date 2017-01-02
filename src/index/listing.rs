@@ -46,15 +46,16 @@ impl Listing {
         page_cache.flush_page(*self.page_list.last().unwrap());
     }
 
-    pub fn last_block_id(&self) -> BlockId {
-        let mut r = self.block_counter;
-        r.dec();
-        r
-    }
 
     pub fn posting_iter<'a>(&self, cache: &'a RamPageCache) -> PostingIterator<'a> {
         let block_iter = BlockIter::new(cache, self.page_list.clone(), self.last_block_id());
         PostingIterator::new(block_iter, self.block_biases.clone())
+    }
+
+    fn last_block_id(&self) -> BlockId {
+        let mut r = self.block_counter;
+        r.dec();
+        r
     }
 
     fn compress_and_ship(&mut self, page_cache: &mut RamPageCache, force: bool) {
