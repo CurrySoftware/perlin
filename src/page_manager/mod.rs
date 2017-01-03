@@ -12,9 +12,10 @@ mod fs_page_manager;
 mod ram_page_cache;
 mod block_iter;
 
-trait PageCache {
+pub trait PageCache {
     fn get_page(&self, PageId) -> Arc<Page>;
     fn delete_page(&mut self, PageId);
+    fn delete_unfull(&mut self, PageId);
 }
 
 trait PageStore {
@@ -29,7 +30,7 @@ pub trait BlockManager {
     fn store_block(&mut self, Block) -> PageId;
     fn store_in_place(&mut self, PageId, BlockId, Block);
     fn flush_page(&mut self, PageId) -> PageId;
-    fn flush_unfull(&mut self, PageId, BlockId) -> UnfullPage;
+    fn flush_unfull(&mut self, PageId, BlockId) -> UnfullPage;    
 }
 
 

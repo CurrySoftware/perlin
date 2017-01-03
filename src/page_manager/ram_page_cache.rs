@@ -94,6 +94,11 @@ impl PageCache for RamPageCache {
         self.invalidate(page_id);
     }
 
+    fn delete_unfull(&mut self, page_id: PageId) {
+        self.store.delete_unfull(page_id);
+        self.invalidate(page_id);
+    }
+    
     fn get_page(&self, page_id: PageId) -> Arc<Page> {
         use std::cmp;
         match self.search_page(&page_id) {
@@ -196,66 +201,5 @@ mod tests {
             p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
             assert_eq!(cache.get_page(PageId(i)), Arc::new(p));
         }
-    }
-
-    #[test]
-    fn mutation() {
-        let mut cache = new_cache("mutation");
-        for i in 0..2048 {
-            assert_eq!(cache.store_block(Block([(i % 255) as u8; BLOCKSIZE])),
-                       PageId(i));
-            cache.flush_page(PageId(i));
-        }
-        for i in 0..2048 {
-            let mut p = Page::empty();
-            p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
-            assert_eq!(cache.get_page(PageId(i)), Arc::new(p));
-        }
-        for i in 0..2048 {
-            cache.store_in_place(PageId(i),
-                                 BlockId(1),
-                                 Block([((i + 1) % 255) as u8; BLOCKSIZE]));
-            cache.flush_page(PageId(i));
-        }
-        for i in 0..2048 {
-            let mut p = Page::empty();
-            p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
-            p[BlockId(1)] = Block([((i + 1) % 255) as u8; BLOCKSIZE]);
-            assert_eq!(cache.get_page(PageId(i)), Arc::new(p));
-        }
-    }
-
-    #[test]
-    fn read_during_mutation() {
-        let mut cache = new_cache("read_during_mutation");
-        for i in 0..2048 {
-            assert_eq!(cache.store_block(Block([(i % 255) as u8; BLOCKSIZE])),
-                       PageId(i));
-            cache.flush_page(PageId(i));
-        }
-        for i in 0..2048 {
-            let mut p = Page::empty();
-            p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
-            assert_eq!(cache.get_page(PageId(i)), Arc::new(p));
-        }
-        for i in 0..2048 {
-            cache.store_in_place(PageId(i),
-                                 BlockId(1),
-                                 Block([((i + 1) % 255) as u8; BLOCKSIZE]));
-        }
-        for i in 0..2048 {
-            let mut p = Page::empty();
-            p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
-            assert_eq!(cache.get_page(PageId(i)), Arc::new(p));
-        }
-        for i in 0..2048 {
-            cache.flush_page(PageId(i));
-        }
-        for i in 0..2048 {
-            let mut p = Page::empty();
-            p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
-            p[BlockId(1)] = Block([((i + 1) % 255) as u8; BLOCKSIZE]);
-            assert_eq!(cache.get_page(PageId(i)), Arc::new(p));
-        }
-    }
+    }  
 }

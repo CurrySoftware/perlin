@@ -25,6 +25,10 @@ impl UnfullPage {
     pub fn new(page_id: PageId, from: BlockId, to: BlockId) -> Self {
         UnfullPage(page_id,from,to)
     }
+
+    pub fn page_id(&self) -> PageId {
+        self.0
+    }
     
     pub fn from(&self) -> BlockId {
         self.1
@@ -52,7 +56,17 @@ impl Pages {
     #[inline]
     pub fn add_unfull(&mut self, unfull_page: UnfullPage) {
         self.1 = Some(unfull_page);
-    }    
+    }
+
+    #[inline]
+    pub fn take_unfull(&mut self) -> Option<UnfullPage> {
+        self.1.take()
+    }
+
+    #[inline]
+    pub fn unfull(&self) -> Option<UnfullPage> {
+        self.1
+    }
 }
 
 impl Page {

@@ -3,7 +3,7 @@ use utils::Baseable;
 
 use compressor::{Compressor, NaiveCompressor};
 
-use page_manager::{Pages, PageId, Block, BlockIter, BlockId, RamPageCache, BlockManager};
+use page_manager::{Pages, PageId, Block, BlockIter, BlockId, RamPageCache, PageCache, BlockManager};
 
 use index::posting::{Posting, DocId, PostingIterator};
 
@@ -33,6 +33,11 @@ impl Listing {
     }
 
     pub fn add(&mut self, postings: &[Posting], page_cache: &mut RamPageCache) {
+        // Check if we previously commited an unfull page
+        // in that case it has to be unraveld
+        if self.pages.unfull().is_some() {
+            self.unravel_unfull(page_cache)
+        }
         for (i, posting) in postings.iter().enumerate() {
             self.block_end = *posting;
             self.posting_buffer.push_back(*posting);
@@ -65,6 +70,34 @@ impl Listing {
         if force && self.posting_buffer.count() > 0 {
             let block = UsedCompressor::force_compress(&mut self.posting_buffer);
             self.ship(page_cache, block);
+        }
+    }
+
+    /// This method is used when a previously commited listing is added to.
+    /// It retrieves the last unfull page and rewinds to the state as of the
+    /// last uncommited status.
+    /// e.g.: retrieve the postings of the unfull page and add them the usual way
+    ///
+    /// Use with care...
+    fn unravel_unfull(&mut self, page_cache: &mut RamPageCache) {
+        // This only makes sense if there is a commited unfull page
+        // Otherwise we ran into a very unpleasant bug! Scream around loudly!
+        assert!(self.current_page.is_none());
+        if let Some(unfull_page) = self.pages.take_unfull() {
+            // Build the block iter
+            let postings = {
+                let block_count = unfull_page.to().0 - unfull_page.from().0;
+                let block_iter = BlockIter::new(page_cache, Pages(vec![], Some(unfull_page)));
+                PostingIterator::new(block_iter,
+                                     self.block_biases[self.block_biases.len() -
+                                                       block_count as usize..]
+                                         .to_vec())
+                    .collect::<Vec<_>>()
+            };
+            self.block_counter = BlockId::first();
+            self.add(&postings, page_cache);
+            // Previous unfull page can now be deleted!
+            page_cache.delete_unfull(unfull_page.page_id());
         }
     }
 

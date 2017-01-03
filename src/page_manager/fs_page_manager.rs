@@ -3,7 +3,7 @@ use std::io::{Seek, SeekFrom, Write, Read};
 use std::fs::{OpenOptions, File};
 
 use utils::counter::Counter;
-use page_manager::{Pages, UnfullPage, Page, PageId, BlockId, PageStore, PAGESIZE, BLOCKSIZE};
+use page_manager::{UnfullPage, Page, PageId, BlockId, PageStore, PAGESIZE, BLOCKSIZE};
 
 pub struct FsPageManager {
     pages: File,

@@ -73,7 +73,7 @@ Index -> Vocabulary : resolve_operands(Operands)
 ** Pages Blocks
 *** Indexing Process
 #+begin_src plantuml :file indexing_process.png
-title DEPRECATED!
+title DEPRECATED! see Adding to DiskList
 participant Indexer
 participant Listing
 participant Compressor
@@ -152,8 +152,20 @@ Listing -> Index : Ok()
 #+RESULTS:
 [[file:document_deletion.png]]
 
+*** Incremental Indexing
+#+begin_src plantuml file: incremental_indexing.png
+participant Listing
+participant RamPageCache
+database FsPagemanager
+[-> Listing : add(&[Posting])
+Listing -> RamPageCache : get_page(pages.unfull)
+RamPageCache -> Listing : Page
+Listing -> RamPageCache : delete_unfull(pages.unfull)
+Listing -> RamPageCache : store_blocks
+Listing -> 
+#+end_src
 *** Get Page/Block
- #+begin_src plantuml :file fetch_block.png
+#+begin_src plantuml :file fetch_block.png
  participant BlockIterator
  database RamPageManager
  database FsPageManager
