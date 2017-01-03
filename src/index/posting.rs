@@ -140,6 +140,32 @@ mod tests {
         assert_eq!(listing3.posting_iter(&cache).collect::<Vec<_>>(), res3);
     }
 
+    #[test]
+    fn different_listings() {
+        let mut cache = new_cache("different_listings");
+        let mut listing1 = Listing::new();
+        let mut listing2 = Listing::new();
+        let mut listing3 = Listing::new();
+        for i in 0..4596 {            
+            listing1.add(&[Posting(DocId(i))], &mut cache);
+            if i % 2 == 0 {
+                listing2.add(&[Posting(DocId(i*2))], &mut cache);
+            }
+            if i % 3 == 0 {
+                listing3.add(&[Posting(DocId(i*3))], &mut cache);
+            }
+        }
+        listing1.commit(&mut cache);
+        listing2.commit(&mut cache);
+        listing3.commit(&mut cache);
+        let res1 = (0..4596).map(|i| Posting(DocId(i))).collect::<Vec<_>>();
+        let res2 = (0..4596).filter(|i| i % 2 == 0).map(|i| Posting(DocId(i*2))).collect::<Vec<_>>();
+        let res3 = (0..4596).filter(|i| i % 3 == 0).map(|i| Posting(DocId(i*3))).collect::<Vec<_>>();
+        assert_eq!(listing1.posting_iter(&cache).collect::<Vec<_>>(), res1);
+        // assert_eq!(listing2.posting_iter(&cache).collect::<Vec<_>>(), res2);
+        // assert_eq!(listing3.posting_iter(&cache).collect::<Vec<_>>(), res3);
+    }
+
 
   
 }

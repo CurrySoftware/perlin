@@ -58,12 +58,6 @@ impl Listing {
         PostingIterator::new(block_iter, self.block_biases.clone())
     }
 
-    fn last_block_id(&self) -> BlockId {
-        let mut r = self.block_counter;
-        r.dec();
-        r
-    }
-
     fn compress_and_ship(&mut self, page_cache: &mut RamPageCache, force: bool) {
         while let Some(block) = UsedCompressor::compress(&mut self.posting_buffer) {
             self.ship(page_cache, block);
@@ -121,7 +115,7 @@ mod tests {
     use test_utils::create_test_dir;
 
     use index::posting::{Posting, DocId};
-    use page_manager::{FsPageManager, RamPageCache, BlockId};
+    use page_manager::{FsPageManager, RamPageCache};
 
 
     fn new_cache(name: &str) -> RamPageCache {
@@ -149,7 +143,6 @@ mod tests {
         listing.commit(&mut cache);
         assert_eq!(listing.pages.len(), 1);
         assert_eq!(listing.posting_buffer.count(), 0);
-        assert_eq!(listing.last_block_id(), BlockId::first());
     }
 
 

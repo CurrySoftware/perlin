@@ -14,7 +14,7 @@ pub struct Page(pub [Block; PAGESIZE]);
 #[derive(Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Debug)]
 pub struct PageId(pub u64);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Pages(pub Vec<PageId>, pub Option<UnfullPage>);
 
 #[derive(Copy, Clone, Ord, PartialOrd, PartialEq, Eq, Debug)]

@@ -26,7 +26,8 @@ impl<'a> BlockIter<'a> {
         if self.page_counter <= self.pages.0.len() {
             let p_id = self.pages.0[self.page_counter - 1];
             Some(p_id)
-        } else if let Some(unfull_page) = self.pages.1 {
+        } else if self.page_counter <= self.pages.len() {
+            let unfull_page = try_option!(self.pages.1);
             self.block_counter = unfull_page.from();
             Some(unfull_page.0)
         } else {
@@ -44,9 +45,9 @@ impl<'a> Iterator for BlockIter<'a> {
             let page = self.cache.get_page(try_option!(self.next_page_id()));
             self.current_page = page;
         }
-        //Special case for last block:
-        //1. Unfull page has to exist
-        //2. BlockCounter must be >= unfull_page.to()
+        // Special case for last block:
+        // 1. Unfull page has to exist
+        // 2. BlockCounter must be >= unfull_page.to()
         if self.page_counter == self.pages.len() && self.pages.1.is_some() &&
            self.block_counter >= self.pages.1.map(|unfull_page| unfull_page.to()).unwrap() {
             return None;
