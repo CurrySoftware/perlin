@@ -22,6 +22,7 @@ trait PageStore {
     fn store_full(&mut self, Page) -> PageId;
     fn get_page(&self, PageId) -> Page;
     fn delete_page(&mut self, PageId);
+    fn delete_unfull(&mut self, PageId);
 }
 
 pub trait BlockManager {

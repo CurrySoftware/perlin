@@ -73,7 +73,7 @@ Index -> Vocabulary : resolve_operands(Operands)
 ** Pages Blocks
 *** Indexing Process
 #+begin_src plantuml :file indexing_process.png
-DEPRECATED!
+title DEPRECATED!
 participant Indexer
 participant Listing
 participant Compressor
@@ -187,21 +187,21 @@ end
 participant DiskList
 participant RamPageCache
 database FsPageManager
-=== First Block ===
+== First Block ==
 DiskList -> RamPageCache : store_block(block)
 RamPageCache -> DiskList : PageId
 
-=== Second Block === 
+== Second Block == 
 DiskList -> RamPageCache : store_in_place(block, page_id, block_id)
 RamPageCache -> DiskList : Ok()
-=== Full Page ===
+== Full Page ==
 DiskList -> RamPageCache : store_in_place(block, page_id, block_id)
 RamPageCache -> DiskList : Ok()
 DiskList -> RamPageCache : commit_page(page_id)
 RamPageCache -> FsPageManager : store_full(Page) 
 FsPageManager -> RamPageCache : PageId
 RamPageCache -> DiskList : PageId 
-=== Commit Unfull Page ===
+== Commit Unfull Page ==
 DiskList -> RamPageCache : commit_unfull_page(page_id, block_id)
 RamPageCache -> FsPageManager : store_unfull_page(Page, block_id)
 FsPageManager -> RamPageCache : UnfullPage(PageId, BlockId, BlockId)
@@ -210,6 +210,30 @@ RamPageCache -> DiskList : UnfullPage(PageId, BlockId, BlockId)
 
 #+RESULTS:
 [[file:disk_list.png]]
+
+*** Removing From DiskList 
+#+begin_src plantuml :file remove_disk_list.png
+participant DiskList
+participant RamPageCache
+database FsPageManager
+
+#+end_src
+*** Removing UnfullPage
+#+begin_src plantuml :file remove_unfull_page.png
+participant RamPageCache
+participant FsPageManager
+database FileSystem
+[-> RamPageCache : delete_unfull(PageId) 
+RamPageCache -> FsPageManager : delete_unfull(PageId)
+FsPageManager -> FileSystem : decdement first byte of PageId
+FileSystem -> FsPageManager : refcount
+FsPageManager -> FsPageManager : if refcount == 0 Add PageId to VacantPages
+FsPageManager -> RamPageCache : Ok()
+[<- RamPageCache : Ok()
+#+end_src
+
+#+RESULTS:
+[[file:remove_unfull_page.png]]
 
 ** Compression
 *** Compress to Block

@@ -1,5 +1,5 @@
 use std::path::Path;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Seek, SeekFrom, Write, Read};
 use std::fs::{OpenOptions, File};
 
 use utils::counter::Counter;
@@ -9,7 +9,7 @@ pub struct FsPageManager {
     pages: File,
     count: Counter,
     last_page_last_block: BlockId,
-    unpopulated_pages: Vec<u64>,
+    unpopulated_pages: Vec<PageId>,
 }
 
 impl FsPageManager {
@@ -39,9 +39,9 @@ impl FsPageManager {
 
 impl PageStore for FsPageManager {
     fn store_full(&mut self, page: Page) -> PageId {
-        let id = self.unpopulated_pages.pop().unwrap_or(self.count.retrieve_and_inc());
-        self.write_page(page, PageId(id));
-        PageId(id)
+        let id = self.unpopulated_pages.pop().unwrap_or(PageId(self.count.retrieve_and_inc()));
+        self.write_page(page, id);
+        id
     }
 
     fn store_unfull(&mut self, page: Page, block_id: BlockId) -> UnfullPage {
@@ -69,9 +69,33 @@ impl PageStore for FsPageManager {
         UnfullPage::new(page_id, first_block, self.last_page_last_block)
     }
 
+    #[inline]
     fn delete_page(&mut self, page_id: PageId) {
-        let id = page_id.0;
-        self.unpopulated_pages.push(id);
+        self.unpopulated_pages.push(page_id);
+    }
+
+    ///This method deletes an unfull page.
+    ///Actually it just decreases the refcount of that page
+    ///In case it becomes zero, the page is added to the unpopulated pages
+    ///Otherwise the new refcount is written
+    fn delete_unfull(&mut self, page_id: PageId) {
+        let mut refcount: [u8; 1] = [0; 1];
+        let mut f = self.pages.try_clone().unwrap();
+        //Seek start of page
+        f.seek(SeekFrom::Start(page_id.0 * PAGESIZE as u64 * BLOCKSIZE as u64)).unwrap();
+        //Read one byte...
+        f.read_exact(&mut refcount).unwrap();
+        //Decrease it
+        refcount[0] -= 1;
+        //If its zero it means no more relevant data is on that page
+        //Throw it into the unpopulated pages
+        if refcount[0] == 0 {
+            self.unpopulated_pages.push(page_id);
+        } else {
+            //Otherwise we have to write the refcount back to page... alas
+            f.seek(SeekFrom::Start(page_id.0 * PAGESIZE as u64 * BLOCKSIZE as u64)).unwrap();
+            f.write(&refcount).unwrap();
+        }
     }
 
     fn get_page(&self, page_id: PageId) -> Page {
@@ -93,6 +117,40 @@ mod tests {
         FsPageManager::new(&path.join("pages.bin"))
     }
 
+    #[test]
+    fn delete_unfull_basic() {
+        let mut pmgr = new_pmgr("delete_unfull_basic");
+        assert_eq!(pmgr.store_unfull(Page::empty(), BlockId(1)),
+                   UnfullPage::new(PageId(0), BlockId(1), BlockId(2)));
+        pmgr.delete_unfull(PageId(0));
+        assert_eq!(pmgr.unpopulated_pages, vec![PageId(0)]);
+        assert_eq!(pmgr.store_full(Page::empty()), PageId(0));
+    }
+
+    #[test]
+    fn delete_multitenant_unfull() {
+        let mut pmgr = new_pmgr("multitenant_unfull");
+        let mut ref_p = Page::empty();
+        for i in 0..PAGESIZE - 1 {
+            ref_p[BlockId(i as u16 + 1u16)] = Block([(i % 255) as u8; BLOCKSIZE]);
+            let mut p = Page::empty();
+            p[BlockId::first()] = Block([(i % 255) as u8; BLOCKSIZE]);
+            assert_eq!(pmgr.store_unfull(p, BlockId(1)),
+                       UnfullPage::new(PageId(0), BlockId(i as u16 + 1), BlockId(i as u16 + 2)));
+        }
+        ref_p[BlockId::first()].0[0] = (PAGESIZE - 1) as u8;
+        assert_eq!(pmgr.get_page(PageId(0)), ref_p);
+        pmgr.delete_unfull(PageId(0));
+        assert_eq!(pmgr.unpopulated_pages, vec![]);
+        assert_eq!(pmgr.store_full(Page::empty()), PageId(1));
+        for _ in 0..PAGESIZE -2 {
+            assert_eq!(pmgr.unpopulated_pages, vec![]);
+            pmgr.delete_unfull(PageId(0));
+        }
+        assert_eq!(pmgr.unpopulated_pages, vec![PageId(0)]);
+        assert_eq!(pmgr.store_full(Page::empty()), PageId(0));
+    }
+    
     #[test]
     fn basic_unfull() {
         let mut pmgr = new_pmgr("basic_unfull");
