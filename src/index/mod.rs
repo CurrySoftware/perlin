@@ -153,11 +153,9 @@ mod tests {
     fn extended_indexing() {
         let cache = new_cache("extended_indexing");
         let mut index = Index::<usize>::new(cache);
-        println!("index");
         for i in 0..200 {
             assert_eq!(index.index_document((i..i + 200)), DocId(i as u64));
         }
-        println!("commit");
         index.commit();
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);

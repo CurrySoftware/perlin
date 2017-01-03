@@ -66,9 +66,6 @@ impl PageStore for FsPageManager {
         self.write_page(container_page, page_id);
         // And set the last_page_last_block
         self.last_page_last_block = BlockId(first_block.0 + block_id.0);
-        println!("First Block: {:?}; last_page_last_block: {:?}",
-                 first_block,
-                 self.last_page_last_block);
         UnfullPage::new(page_id, first_block, self.last_page_last_block)
     }
 
