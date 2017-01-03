@@ -23,8 +23,8 @@ impl<'a> BlockIter<'a> {
 
     fn next_page_id(&mut self) -> Option<PageId> {
         self.page_counter += 1;
-        if self.page_counter < self.pages.len() {
-            let p_id = self.pages.0[self.page_counter];
+        if self.page_counter <= self.pages.0.len() {
+            let p_id = self.pages.0[self.page_counter - 1];
             Some(p_id)
         } else if let Some(unfull_page) = self.pages.1 {
             self.block_counter = unfull_page.from();
@@ -44,12 +44,14 @@ impl<'a> Iterator for BlockIter<'a> {
             let page = self.cache.get_page(try_option!(self.next_page_id()));
             self.current_page = page;
         }
-        let res = Some(self.current_page[self.block_counter]);
-        if self.page_counter == self.pages.len() &&
-           self.block_counter >
-           self.pages.1.map_or(BlockId::first(), |unfull_page| unfull_page.to()) {
+        //Special case for last block:
+        //1. Unfull page has to exist
+        //2. BlockCounter must be >= unfull_page.to()
+        if self.page_counter == self.pages.len() && self.pages.1.is_some() &&
+           self.block_counter >= self.pages.1.map(|unfull_page| unfull_page.to()).unwrap() {
             return None;
         }
+        let res = Some(self.current_page[self.block_counter]);
         self.block_counter.inc();
         res
     }
@@ -61,8 +63,8 @@ mod tests {
     use test_utils::create_test_dir;
 
     use super::BlockIter;
-    use page_manager::{RamPageCache, BlockManager, FsPageManager, Pages, PageId, Block, BlockId,
-                       BLOCKSIZE, PAGESIZE};
+    use page_manager::{UnfullPage, RamPageCache, BlockManager, FsPageManager, Pages, PageId,
+                       Block, BlockId, BLOCKSIZE, PAGESIZE};
 
 
 
@@ -93,6 +95,20 @@ mod tests {
                 assert_eq!(iter.next(), Some(Block([(j % 255) as u8; BLOCKSIZE])));
             }
         }
+    }
+
+    #[test]
+    fn unfull() {
+        let mut cache = new_cache("unfull");
+        assert_eq!(cache.store_block(Block([1; BLOCKSIZE])), PageId(0));
+        assert_eq!(cache.flush_unfull(PageId(0), BlockId(1)),
+                   UnfullPage::new(PageId(0), BlockId(1), BlockId(2)));
+        let mut iter =
+            BlockIter::new(&cache,
+                           Pages(Vec::new(),
+                                 Some(UnfullPage::new(PageId(0), BlockId(1), BlockId(2)))));
+        assert_eq!(iter.next(), Some(Block([1; BLOCKSIZE])));
+        assert_eq!(iter.next(), None);
     }
 
     #[test]

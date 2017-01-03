@@ -163,7 +163,7 @@ mod tests {
         for i in 0..100 {
             listing.add(&[Posting(DocId(i))], &mut cache);
         }
-        assert!(listing.pages.len() > 0);
+        assert_eq!(listing.pages.len(), 0);
         assert!(listing.posting_buffer.count() > 0);
         listing.commit(&mut cache);
         assert_eq!(listing.posting_buffer.count(), 0);
@@ -193,7 +193,6 @@ mod tests {
             listings[i % 100].add(&[Posting(DocId(i as u64))], &mut cache);
         }
         for listing in listings.iter_mut() {
-            assert!(listing.pages.len() > 0);
             assert!(listing.posting_buffer.count() > 0);
             listing.commit(&mut cache);
         }

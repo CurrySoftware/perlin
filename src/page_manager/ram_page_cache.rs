@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::sync::Arc;
 
 use utils::counter::Counter;
-use page_manager::{FsPageManager, UnfullPage, Page, Block, BlockManager, PageStore, PageId, BlockId, PageCache};
+use page_manager::{FsPageManager, UnfullPage, Page, Block, BlockManager, PageStore, PageId,
+                   BlockId, PageCache};
 
 const CACHESIZE: usize = 1024;
 
@@ -123,8 +124,8 @@ mod tests {
     use test_utils::create_test_dir;
 
     use super::RamPageCache;
-    use page_manager::{BlockManager, FsPageManager, Page, PageCache, PageId, Block, BlockId,
-                       BLOCKSIZE, PAGESIZE};
+    use page_manager::{BlockManager, FsPageManager, Page, PageCache, UnfullPage, PageId, Block,
+                       BlockId, BLOCKSIZE, PAGESIZE};
 
 
     fn new_cache(name: &str) -> RamPageCache {
@@ -141,8 +142,8 @@ mod tests {
         assert_eq!(cache.store_block(Block([2; BLOCKSIZE])), PageId(1));
         assert_eq!(cache.store_block(Block([3; BLOCKSIZE])), PageId(2));
         cache.store_in_place(PageId(0), BlockId(1), Block([15; BLOCKSIZE]));
-        cache.flush_page(PageId(1));
         cache.flush_page(PageId(0));
+        cache.flush_page(PageId(1));
         cache.flush_page(PageId(2));
         let mut p0 = Page::empty();
         p0[BlockId::first()] = Block([1; BLOCKSIZE]);
@@ -152,6 +153,20 @@ mod tests {
         p2[BlockId::first()] = Block([3; BLOCKSIZE]);
         assert_eq!(cache.get_page(PageId(2)), Arc::new(p2));
     }
+
+
+    #[test]
+    fn basic_unfull() {
+        let mut pmgr = new_cache("basic_unfull");
+        assert_eq!(pmgr.store_block(Block([1; BLOCKSIZE])), PageId(0));
+        assert_eq!(pmgr.flush_unfull(PageId(0), BlockId(1)),
+                   UnfullPage::new(PageId(0), BlockId(1), BlockId(2)));
+        let mut p = Page::empty();
+        p[BlockId::first()].0[0] = 1;
+        p[BlockId(1)] = Block([1; BLOCKSIZE]);
+        assert_eq!(pmgr.get_page(PageId(0)), Arc::new(p));
+    }
+
 
     #[test]
     fn flush_full() {
