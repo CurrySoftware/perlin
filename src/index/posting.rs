@@ -7,7 +7,7 @@ use index::listing::UsedCompressor;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct Posting(pub DocId);
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Copy, Clone)]
 pub struct DocId(pub u64);
 
 impl DocId {
@@ -28,6 +28,10 @@ impl Posting {
     #[inline]
     pub fn none() -> Posting {
         Posting(DocId::none())
+    }
+
+    pub fn doc_id(&self) -> DocId {
+        self.0
     }
 }
 
@@ -162,8 +166,8 @@ mod tests {
         let res2 = (0..4596).filter(|i| i % 2 == 0).map(|i| Posting(DocId(i*2))).collect::<Vec<_>>();
         let res3 = (0..4596).filter(|i| i % 3 == 0).map(|i| Posting(DocId(i*3))).collect::<Vec<_>>();
         assert_eq!(listing1.posting_iter(&cache).collect::<Vec<_>>(), res1);
-        // assert_eq!(listing2.posting_iter(&cache).collect::<Vec<_>>(), res2);
-        // assert_eq!(listing3.posting_iter(&cache).collect::<Vec<_>>(), res3);
+        assert_eq!(listing2.posting_iter(&cache).collect::<Vec<_>>(), res2);
+        assert_eq!(listing3.posting_iter(&cache).collect::<Vec<_>>(), res3);
     }
 
 

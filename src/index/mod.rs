@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::hash::Hash;
 use std::collections::HashMap;
 
@@ -58,12 +59,12 @@ impl<TTerm> Index<TTerm>
                 grouped_buff.push((term_id, vec![Posting(doc_id)]));
                 last_tid = term_id;
                 continue;
-            }          
+            }
             // Otherwise add a whole new posting
             grouped_buff[term_counter - 1].1.push(Posting(doc_id));
         }
         for (term_id, postings) in grouped_buff {
-             let index = match self.listings.binary_search_by_key(&term_id, |&(t_id, _)| t_id) {
+            let index = match self.listings.binary_search_by_key(&term_id, |&(t_id, _)| t_id) {
                 Ok(index) => index,
                 Err(index) => {
                     self.listings.insert(index, (term_id, Listing::new()));
@@ -103,9 +104,9 @@ impl<TTerm> Index<TTerm>
     }
 
     pub fn commit(&mut self) {
-        //We iterate over the listings in reverse here because listing.commit() causes
-        //a remove in the ram_page_manager.construction cache which is a Vec.
-        //Vec.remove is O(n-i).
+        // We iterate over the listings in reverse here because listing.commit() causes
+        // a remove in the ram_page_manager.construction cache which is a Vec.
+        // Vec.remove is O(n-i).
         for listing in self.listings.iter_mut().rev() {
             listing.1.commit(&mut self.page_manager);
         }
@@ -167,7 +168,8 @@ mod tests {
     fn collection_indexing() {
         let cache = new_cache("collection_indexing");
         let mut index = Index::<usize>::new(cache);
-        assert_eq!(index.index_collection((0..200).map(|i| (i..i+200))), vec![]);
+        assert_eq!(index.index_collection((0..200).map(|i| (i..i + 200))),
+                   vec![]);
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
         assert_eq!(index.query_atom(&99),

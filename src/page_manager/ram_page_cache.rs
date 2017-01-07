@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::sync::Arc;
+use std::sync::{RwLock, Arc};
 
 use utils::counter::Counter;
 use page_manager::{FsPageManager, UnfullPage, Page, Block, BlockManager, PageStore, PageId,
@@ -8,7 +7,7 @@ use page_manager::{FsPageManager, UnfullPage, Page, Block, BlockManager, PageSto
 const CACHESIZE: usize = 1024;
 
 pub struct RamPageCache {
-    cache: RefCell<Vec<(PageId, Arc<Page>)>>,
+    cache: RwLock<Vec<(PageId, Arc<Page>)>>,
     counter: Counter,
     construction_cache: Vec<(PageId, Page)>,
     store: FsPageManager,
@@ -18,7 +17,7 @@ impl RamPageCache {
     pub fn new(store: FsPageManager) -> Self {
         RamPageCache {
             counter: Counter::new(),
-            cache: RefCell::new(Vec::with_capacity(CACHESIZE)),
+            cache: RwLock::new(Vec::with_capacity(CACHESIZE)),
             construction_cache: Vec::with_capacity(CACHESIZE),
             store: store,
         }
@@ -26,12 +25,12 @@ impl RamPageCache {
 
     #[inline]
     fn search_page(&self, page_id: &PageId) -> Result<usize, usize> {
-        self.cache.borrow().binary_search_by_key(page_id, |&(pid, _)| pid)
+        self.cache.read().unwrap().binary_search_by_key(page_id, |&(pid, _)| pid)
     }
 
     fn invalidate(&mut self, page_id: PageId) {
         if let Ok(index) = self.search_page(&page_id) {
-            self.cache.borrow_mut().remove(index);
+            self.cache.write().unwrap().remove(index);
         }
     }
 }
@@ -103,19 +102,19 @@ impl PageCache for RamPageCache {
         use std::cmp;
         match self.search_page(&page_id) {
             // Page in cache
-            Ok(index) => self.cache.borrow()[index].1.clone(),
+            Ok(index) => self.cache.read().unwrap()[index].1.clone(),
             // Page not in cache
             Err(index) => {
                 // Get it, arc it
                 let page = Arc::new(self.store.get_page(page_id));
                 // If cache is not full
-                if self.cache.borrow().len() < CACHESIZE {
+                if self.cache.read().unwrap().len() < CACHESIZE {
                     // Insert it
-                    self.cache.borrow_mut().insert(index, (page_id, page.clone()));
+                    self.cache.write().unwrap().insert(index, (page_id, page.clone()));
                 } else {
                     // Otherwise replace it
                     let index = cmp::min(index, CACHESIZE - 1);
-                    self.cache.borrow_mut()[index] = (page_id, page.clone());
+                    self.cache.write().unwrap()[index] = (page_id, page.clone());
                 }
                 page
             }
