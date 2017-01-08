@@ -1,6 +1,9 @@
 use std::hash::Hash;
 use std::collections::HashMap;
 
+use std::sync::{Arc, RwLock};
+
+
 use page_manager::RamPageCache;
 use index::listing::Listing;
 use index::posting::{DocId, Posting};
@@ -15,7 +18,7 @@ mod listing;
 pub struct Index<TTerm> {
     page_manager: RamPageCache,
     listings: Vec<(TermId, Listing)>,
-    vocabulary: HashMap<TTerm, TermId>,
+    vocabulary: Arc<RwLock<HashMap<TTerm, TermId>>>,
     doc_count: u64,
 }
 
@@ -23,11 +26,11 @@ pub struct Index<TTerm> {
 impl<TTerm> Index<TTerm>
     where TTerm: Hash + Ord
 {
-    pub fn new(page_manager: RamPageCache) -> Self {
+    pub fn new(page_manager: RamPageCache, vocabulary: Arc<RwLock<HashMap<TTerm, TermId>>>) -> Self {
         Index {
             page_manager: page_manager,
             listings: Vec::new(),
-            vocabulary: HashMap::new(),
+            vocabulary: vocabulary,
             doc_count: 0,
         }
 
@@ -119,7 +122,7 @@ impl<TTerm> Index<TTerm>
 
     pub fn query_atom(&self, atom: &TTerm) -> Vec<Posting> {
         if let Some(term_id) = self.vocabulary.get(atom) {
-            if let Ok(index) = self.listings.binary_search_by_key(term_id, |&(t_id, _)| t_id) {
+            if let Ok(index) = self.listings.binary_search_by_key(&term_id, |&(t_id, _)| t_id) {
                 return self.listings[index].1.posting_iter(&self.page_manager).collect::<Vec<_>>();
             }
         }
@@ -131,21 +134,24 @@ impl<TTerm> Index<TTerm>
 #[cfg(test)]
 mod tests {
 
+    use std::sync::{Arc, RwLock};
+    use std::collections::HashMap;
+    
     use test_utils::create_test_dir;
-    use super::Index;
+    
+    use super::Index;    
     use index::posting::{Posting, DocId};
     use page_manager::{FsPageManager, RamPageCache};
 
-    fn new_cache(name: &str) -> RamPageCache {
+    fn new_index(name: &str) -> Index<usize> {
         let path = &create_test_dir(format!("index/{}", name).as_str());
         let pmgr = FsPageManager::new(&path.join("pages.bin"));
-        RamPageCache::new(pmgr)
+        Index::<usize>::new(RamPageCache::new(pmgr), Arc::new(RwLock::new(HashMap::new())))
     }
 
     #[test]
     fn basic_indexing() {
-        let cache = new_cache("basic_indexing");
-        let mut index = Index::<usize>::new(cache);
+        let mut index = new_index("basic_indexing");
 
         assert_eq!(index.index_document((0..2000)), DocId(0));
         assert_eq!(index.index_document((2000..4000)), DocId(1));
@@ -157,8 +163,7 @@ mod tests {
 
     #[test]
     fn extended_indexing() {
-        let cache = new_cache("extended_indexing");
-        let mut index = Index::<usize>::new(cache);
+        let mut index = new_index("extended_indexing");
         for i in 0..200 {
             assert_eq!(index.index_document((i..i + 200)), DocId(i as u64));
         }
@@ -171,10 +176,9 @@ mod tests {
 
     #[test]
     fn collection_indexing() {
-        let cache = new_cache("collection_indexing");
-        let mut index = Index::<usize>::new(cache);
+        let mut index = new_index("collection_indexing");
         assert_eq!(index.index_collection((0..200).map(|i| (i..i + 200))),
-                   vec![]);
+                   (0..200).map(|i| DocId(i)).collect::<Vec<_>>());
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
         assert_eq!(index.query_atom(&99),
@@ -183,8 +187,7 @@ mod tests {
 
     #[test]
     fn mutable_index() {
-        let cache = new_cache("mutable_index");
-        let mut index = Index::<usize>::new(cache);
+        let mut index = new_index("mutable_index");
         for i in 0..200 {
             assert_eq!(index.index_document((i..i + 200)), DocId(i as u64));
         }
