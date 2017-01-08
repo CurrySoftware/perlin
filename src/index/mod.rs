@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::hash::Hash;
 use std::collections::HashMap;
 
@@ -11,7 +10,8 @@ pub mod vocabulary;
 pub mod posting;
 mod listing;
 
-
+/// Central struct of perlin
+/// Stores and manages an index with its listings and vocabulary
 pub struct Index<TTerm> {
     page_manager: RamPageCache,
     listings: Vec<(TermId, Listing)>,
@@ -33,13 +33,16 @@ impl<TTerm> Index<TTerm>
 
     }
 
+    /// Index a whole collection returning the corresponding document_ids
     pub fn index_collection<TDocIter, TDocsIter>(&mut self, collection: TDocsIter) -> Vec<DocId>
         where TDocIter: Iterator<Item = TTerm>,
               TDocsIter: Iterator<Item = TDocIter>
     {
+        let mut result = Vec::new();
         let mut buff = Vec::new();
         for doc in collection {
             let doc_id = DocId(self.doc_count);
+            result.push(doc_id);
             self.doc_count += 1;
             for term in doc {
                 let term_id = self.vocabulary.get_or_add(term);
@@ -74,9 +77,11 @@ impl<TTerm> Index<TTerm>
             self.listings[index].1.add(&postings, &mut self.page_manager);
         }
         self.commit();
-        vec![]
+        result
     }
 
+    /// Index a single document. If this should be retrievable right away, a
+    /// call to commit is needed afterwards
     pub fn index_document<TIter>(&mut self, document: TIter) -> DocId
         where TIter: Iterator<Item = TTerm>
     {
