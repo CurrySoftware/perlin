@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::collections::HashMap;
 
@@ -26,7 +27,9 @@ pub struct Index<TTerm> {
 impl<TTerm> Index<TTerm>
     where TTerm: Hash + Ord
 {
-    pub fn new(page_manager: RamPageCache, vocabulary: Arc<RwLock<HashMap<TTerm, TermId>>>) -> Self {
+    pub fn new(page_manager: RamPageCache,
+               vocabulary: Arc<RwLock<HashMap<TTerm, TermId>>>)
+               -> Self {
         Index {
             page_manager: page_manager,
             listings: Vec::new(),
@@ -120,7 +123,7 @@ impl<TTerm> Index<TTerm>
         }
     }
 
-    pub fn query_atom(&self, atom: &TTerm) -> Vec<Posting> {
+    pub fn query_atom(&self, atom: &TTerm) -> Vec<Posting> where TTerm : Debug{
         if let Some(term_id) = self.vocabulary.get(atom) {
             if let Ok(index) = self.listings.binary_search_by_key(&term_id, |&(t_id, _)| t_id) {
                 return self.listings[index].1.posting_iter(&self.page_manager).collect::<Vec<_>>();
@@ -136,17 +139,18 @@ mod tests {
 
     use std::sync::{Arc, RwLock};
     use std::collections::HashMap;
-    
+
     use test_utils::create_test_dir;
-    
-    use super::Index;    
+
+    use super::Index;
     use index::posting::{Posting, DocId};
     use page_manager::{FsPageManager, RamPageCache};
 
     fn new_index(name: &str) -> Index<usize> {
         let path = &create_test_dir(format!("index/{}", name).as_str());
         let pmgr = FsPageManager::new(&path.join("pages.bin"));
-        Index::<usize>::new(RamPageCache::new(pmgr), Arc::new(RwLock::new(HashMap::new())))
+        Index::<usize>::new(RamPageCache::new(pmgr),
+                            Arc::new(RwLock::new(HashMap::new())))
     }
 
     #[test]
@@ -200,5 +204,34 @@ mod tests {
         index.commit();
         assert_eq!(index.query_atom(&0),
                    vec![Posting(DocId(0)), Posting(DocId(200))]);
+    }           
+
+    #[test]
+    fn shared_vocabulary() {
+        let path = &create_test_dir("index/shared_vocabulary");
+        let pmgr1 = FsPageManager::new(&path.join("pages1.bin"));
+        let pmgr2 = FsPageManager::new(&path.join("pages2.bin"));
+        let vocab = Arc::new(RwLock::new(HashMap::new()));
+
+        let mut index1 = Index::<usize>::new(RamPageCache::new(pmgr1), vocab.clone());
+        let mut index2 = Index::<usize>::new(RamPageCache::new(pmgr2), vocab.clone());
+
+        for i in 0..200 {
+            if i % 2 == 0 {
+                assert_eq!(index1.index_document((i..i + 200).filter(|i| i % 2 == 0)), DocId((i/2) as u64));
+            } else {
+                assert_eq!(index2.index_document((i..i + 200).filter(|i| i % 2 != 0)), DocId((i/2 )as u64));
+            }
+        }
+        index1.commit();
+        index2.commit();
+        
+        assert_eq!(index1.query_atom(&99), vec![]);
+        assert_eq!(index2.query_atom(&99),
+                   (0..100).filter(|i| i % 2 != 0).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
+
+        assert_eq!(index1.query_atom(&200),
+                   (100..200).filter(|i| i % 2 == 0).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
+        assert_eq!(index2.query_atom(&200), vec![]);
     }
 }
