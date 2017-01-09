@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 use page_manager::RamPageCache;
 use index::listing::Listing;
 use index::posting::{DocId, Posting};
-use index::vocabulary::{Vocabulary, TermId};
+use index::vocabulary::{Vocabulary, TermId, SharedVocabulary};
 
 pub mod vocabulary;
 pub mod posting;
@@ -19,7 +19,7 @@ mod listing;
 pub struct Index<TTerm> {
     page_manager: RamPageCache,
     listings: Vec<(TermId, Listing)>,
-    vocabulary: Arc<RwLock<HashMap<TTerm, TermId>>>,
+    vocabulary: SharedVocabulary<TTerm>,
     last_doc_id: DocId,
     doc_count: usize,
 }
@@ -29,7 +29,7 @@ impl<TTerm> Index<TTerm>
     where TTerm: Hash + Ord
 {
     pub fn new(page_manager: RamPageCache,
-               vocabulary: Arc<RwLock<HashMap<TTerm, TermId>>>)
+               vocabulary: SharedVocabulary<TTerm>)
                -> Self {
         Index {
             page_manager: page_manager,
@@ -157,21 +157,18 @@ impl<TTerm> Index<TTerm>
 
 #[cfg(test)]
 mod tests {
-
-    use std::sync::{Arc, RwLock};
-    use std::collections::HashMap;
-
     use test_utils::create_test_dir;
 
     use super::Index;
     use index::posting::{Posting, DocId};
+    use index::vocabulary::SharedVocabulary;
     use page_manager::{FsPageManager, RamPageCache};
 
     fn new_index(name: &str) -> Index<usize> {
         let path = &create_test_dir(format!("index/{}", name).as_str());
         let pmgr = FsPageManager::new(&path.join("pages.bin"));
         Index::<usize>::new(RamPageCache::new(pmgr),
-                            Arc::new(RwLock::new(HashMap::new())))
+                            SharedVocabulary::new())
     }
 
     #[test]
@@ -232,7 +229,7 @@ mod tests {
         let path = &create_test_dir("index/shared_vocabulary");
         let pmgr1 = FsPageManager::new(&path.join("pages1.bin"));
         let pmgr2 = FsPageManager::new(&path.join("pages2.bin"));
-        let vocab = Arc::new(RwLock::new(HashMap::new()));
+        let vocab = SharedVocabulary::new();
 
         let mut index1 = Index::<usize>::new(RamPageCache::new(pmgr1), vocab.clone());
         let mut index2 = Index::<usize>::new(RamPageCache::new(pmgr2), vocab.clone());

@@ -6,21 +6,30 @@ use std::collections::HashMap;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct TermId(pub u64);
 
+#[derive(Clone)]
+pub struct SharedVocabulary<TTerm>(Arc<RwLock<HashMap<TTerm, TermId>>>);
+
+impl<TTerm: Hash + Eq> SharedVocabulary<TTerm> {
+    pub fn new() -> Self {
+        SharedVocabulary(Arc::new(RwLock::new(HashMap::new())))
+    }
+}
+
 pub trait Vocabulary<TTerm> {
     fn get_or_add(&mut self, TTerm) -> TermId;
     fn get(&self, &TTerm) -> Option<TermId>;
 }
 
-impl<TTerm> Vocabulary<TTerm> for Arc<RwLock<HashMap<TTerm, TermId>>> where TTerm: Hash + Eq{
+impl<TTerm: Hash + Eq> Vocabulary<TTerm> for SharedVocabulary<TTerm>{
     fn get_or_add(&mut self, term: TTerm) -> TermId {
         {//Scope of read lock
-            let read = self.read().unwrap();
+            let read = self.0.read().unwrap();
             if let Some(term_id) = read.get(&term) {
                 return *term_id;
             }            
         }
         {//Scope of write lock
-            let mut write = self.write().unwrap();
+            let mut write = self.0.write().unwrap();
             //between last time checking and write locking, the term could have already been added!
             if let Some(term_id) = write.get(&term) {
                 return *term_id;
@@ -33,7 +42,7 @@ impl<TTerm> Vocabulary<TTerm> for Arc<RwLock<HashMap<TTerm, TermId>>> where TTer
     }
 
     fn get(&self, term: &TTerm) -> Option<TermId> {
-        self.read().unwrap().get(term).map(|t| *t)
+        self.0.read().unwrap().get(term).map(|t| *t)
     }
 }
 
