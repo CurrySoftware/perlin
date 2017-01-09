@@ -20,7 +20,8 @@ pub struct Index<TTerm> {
     page_manager: RamPageCache,
     listings: Vec<(TermId, Listing)>,
     vocabulary: Arc<RwLock<HashMap<TTerm, TermId>>>,
-    doc_count: u64,
+    last_doc_id: DocId,
+    doc_count: usize,
 }
 
 
@@ -34,6 +35,7 @@ impl<TTerm> Index<TTerm>
             page_manager: page_manager,
             listings: Vec::new(),
             vocabulary: vocabulary,
+            last_doc_id: DocId::none(),
             doc_count: 0,
         }
 
@@ -47,7 +49,8 @@ impl<TTerm> Index<TTerm>
         let mut result = Vec::new();
         let mut buff = Vec::new();
         for doc in collection {
-            let doc_id = DocId(self.doc_count);
+            self.last_doc_id.inc();
+            let doc_id = self.last_doc_id;
             result.push(doc_id);
             self.doc_count += 1;
             for term in doc {
@@ -88,10 +91,26 @@ impl<TTerm> Index<TTerm>
 
     /// Index a single document. If this should be retrievable right away, a
     /// call to commit is needed afterwards
-    pub fn index_document<TIter>(&mut self, document: TIter) -> DocId
+    ///
+    /// You may overwrite the assigned doc id
+    pub fn index_document<TIter>(&mut self,
+                                 document: TIter,
+                                 overwrite_doc_id: Option<DocId>)
+                                 -> DocId
         where TIter: Iterator<Item = TTerm>
     {
-        let doc_id = DocId(self.doc_count);
+        //check if user wants to overwrite doc id.
+        //If so, assert, that the one assumption about doc_ids is enforced:
+        //They are strictly monotonically increasing.
+        //If this is not the case: fail hard before something bad happens!
+        let doc_id = if let Some(doc_id) = overwrite_doc_id {
+            assert!(doc_id > self.last_doc_id || self.last_doc_id == DocId::none());
+            self.last_doc_id = doc_id;
+            doc_id
+        } else {
+            self.last_doc_id.inc();
+            self.last_doc_id
+        };
         self.doc_count += 1;
         let mut buff = Vec::new();
         for term in document {
@@ -123,7 +142,9 @@ impl<TTerm> Index<TTerm>
         }
     }
 
-    pub fn query_atom(&self, atom: &TTerm) -> Vec<Posting> where TTerm : Debug{
+    pub fn query_atom(&self, atom: &TTerm) -> Vec<Posting>
+        where TTerm: Debug
+    {
         if let Some(term_id) = self.vocabulary.get(atom) {
             if let Ok(index) = self.listings.binary_search_by_key(&term_id, |&(t_id, _)| t_id) {
                 return self.listings[index].1.posting_iter(&self.page_manager).collect::<Vec<_>>();
@@ -157,9 +178,9 @@ mod tests {
     fn basic_indexing() {
         let mut index = new_index("basic_indexing");
 
-        assert_eq!(index.index_document((0..2000)), DocId(0));
-        assert_eq!(index.index_document((2000..4000)), DocId(1));
-        assert_eq!(index.index_document((500..600)), DocId(2));
+        assert_eq!(index.index_document((0..2000), None), DocId(0));
+        assert_eq!(index.index_document((2000..4000), None), DocId(1));
+        assert_eq!(index.index_document((500..600), None), DocId(2));
         index.commit();
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
@@ -169,7 +190,7 @@ mod tests {
     fn extended_indexing() {
         let mut index = new_index("extended_indexing");
         for i in 0..200 {
-            assert_eq!(index.index_document((i..i + 200)), DocId(i as u64));
+            assert_eq!(index.index_document((i..i + 200), None), DocId(i as u64));
         }
         index.commit();
 
@@ -193,18 +214,18 @@ mod tests {
     fn mutable_index() {
         let mut index = new_index("mutable_index");
         for i in 0..200 {
-            assert_eq!(index.index_document((i..i + 200)), DocId(i as u64));
+            assert_eq!(index.index_document((i..i + 200), None), DocId(i as u64));
         }
         index.commit();
 
         assert_eq!(index.query_atom(&0), vec![Posting(DocId(0))]);
         assert_eq!(index.query_atom(&99),
                    (0..100).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
-        assert_eq!(index.index_document(0..400), DocId(200));
+        assert_eq!(index.index_document(0..400, None), DocId(200));
         index.commit();
         assert_eq!(index.query_atom(&0),
                    vec![Posting(DocId(0)), Posting(DocId(200))]);
-    }           
+    }
 
     #[test]
     fn shared_vocabulary() {
@@ -218,20 +239,35 @@ mod tests {
 
         for i in 0..200 {
             if i % 2 == 0 {
-                assert_eq!(index1.index_document((i..i + 200).filter(|i| i % 2 == 0)), DocId((i/2) as u64));
+                assert_eq!(index1.index_document((i..i + 200).filter(|i| i % 2 == 0),
+                                                 Some(DocId(i as u64))),
+                           DocId(i as u64));
             } else {
-                assert_eq!(index2.index_document((i..i + 200).filter(|i| i % 2 != 0)), DocId((i/2 )as u64));
+                assert_eq!(index2.index_document((i..i + 200).filter(|i| i % 2 != 0),
+                                                 Some(DocId(i as u64))),
+                           DocId(i as u64));
             }
         }
         index1.commit();
         index2.commit();
-        
+
         assert_eq!(index1.query_atom(&99), vec![]);
         assert_eq!(index2.query_atom(&99),
                    (0..100).filter(|i| i % 2 != 0).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
 
         assert_eq!(index1.query_atom(&200),
-                   (100..200).filter(|i| i % 2 == 0).map(|i| Posting(DocId(i))).collect::<Vec<_>>());
+                   (1..200)
+                       .filter(|i| i % 2 == 0)
+                       .map(|i| Posting(DocId(i)))
+                       .collect::<Vec<_>>());
         assert_eq!(index2.query_atom(&200), vec![]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn wrong_overwritten_doc_id() {
+        let mut index = new_index("wrong_overwritten_doc_id");
+        index.index_document(0..10, Some(DocId(10)));
+        index.index_document(0..10, Some(DocId(5)));
     }
 }

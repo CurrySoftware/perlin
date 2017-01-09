@@ -15,6 +15,11 @@ impl DocId {
     pub fn none() -> DocId {
         DocId(u64::max_value())
     }
+
+    #[inline]
+    pub fn inc(&mut self) {
+        self.0 = self.0.wrapping_add(1);
+    }
 }
 
 impl<'a> Baseable<&'a DocId> for DocId {
@@ -48,7 +53,7 @@ impl<'a> Baseable<&'a Posting> for Posting {
     }
 }
 
-
+///Takes a block iterator and a list of biases and iterates over the resulting postings
 pub struct PostingIterator<'a> {
     blocks: BlockIter<'a>,
     bias_list: Vec<Posting>,
