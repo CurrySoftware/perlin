@@ -271,6 +271,64 @@ Listing -> Listing : set block_start = block_end
 
 #+end_src
 
+** Fields
+*** Indexing
+#+begin_src plantuml :file field_indexing.png
+participant PerlinIndex
+participant Counter
+participant TitleIndex
+participant ContentIndex
+participant DateIndex
+[-> PerlinIndex : index_document(title, content, date)
+PerlinIndex -> Counter : next_doc_id()
+Counter -> PerlinIndex : DocId
+PerlinIndex -> TitleIndex : index_document(title, doc_id)
+PerlinIndex -> ContentIndex : index_document(content, doc_id)
+PerlinIndex -> DateIndex : index_document(date, doc_id)
+[<- PerlinIndex : doc_id
+#+end_src
+
+#+RESULTS:
+[[file:field_indexing.png]]
+*** Querying...
+#+begin_src plantuml :file field_querying
+
+#+end_src
+** OrdFields
+*** Continous
+The idea here is to map continous variable intervalls as discrete values.
+That enables incomplete query execution, which in turn allows fast query execution!
+
+**** Sorting
+#+begin_src plantuml :file continous_field_sorting.png
+title Sort query result by date
+participant PerlinIndex
+participant ContentIndex
+participant DateIndex
+participant QueryEngine
+[-> PerlinIndex : "x and y order by date"
+PerlinIndex -> ContentIndex : Query(A + B)
+ContentIndex -> PerlinIndex : A+B Query
+PerlinIndex -> DateIndex : Query(DateIntervall 1)
+DateIndex -> PerlinIndex : DateIntervall 1 Query
+PerlinIndex -> QueryEngine : run join A+B Query & DateIntervall 1 Query
+QueryEngine -> PerlinIndex : Postings
+== If Postings.len() < (page+1)*pagesize ==
+PerlinIndex -> DateIndex : Query(DateIntervall 2)
+DateIndex -> PerlinIndex : DateIntervall 2 Query
+PerlinIndex -> QueryEngine : run join A+B Query & DateIntervall 2 Query
+QueryEngine -> PerlinIndex : Postings
+== End if ==
+[<- PerlinIndex: Postings.sort().skip(page*pagesize).take(pagesize)
+#+end_src
+
+#+RESULTS:
+[[file:continous_field_sorting.png]]
+
+*** Discrete
+**** Implementation
+**** Faceting
+
 * Ownership
 ** RamPageCache
 #+begin_src plantuml :file ownership_rampagecache.png
