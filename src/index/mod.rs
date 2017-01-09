@@ -1,9 +1,5 @@
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::collections::HashMap;
-
-use std::sync::{Arc, RwLock};
-
 
 use page_manager::RamPageCache;
 use index::listing::Listing;
@@ -16,7 +12,7 @@ mod listing;
 
 /// Central struct of perlin
 /// Stores and manages an index with its listings and vocabulary
-pub struct Index<TTerm> {
+pub struct Index<TTerm: Hash + Eq> {
     page_manager: RamPageCache,
     listings: Vec<(TermId, Listing)>,
     vocabulary: SharedVocabulary<TTerm>,

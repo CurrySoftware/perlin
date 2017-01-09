@@ -6,8 +6,8 @@ use std::collections::HashMap;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 pub struct TermId(pub u64);
 
-#[derive(Clone)]
-pub struct SharedVocabulary<TTerm>(Arc<RwLock<HashMap<TTerm, TermId>>>);
+#[derive(Debug, Clone)]
+pub struct SharedVocabulary<TTerm: Hash + Eq>(Arc<RwLock<HashMap<TTerm, TermId>>>);
 
 impl<TTerm: Hash + Eq> SharedVocabulary<TTerm> {
     pub fn new() -> Self {
