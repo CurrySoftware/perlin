@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn delete_multitenant_unfull() {
-        let mut pmgr = new_pmgr("multitenant_unfull");
+        let mut pmgr = new_pmgr("delete_multitenant_unfull");
         let mut ref_p = Page::empty();
         for i in 0..PAGESIZE - 1 {
             ref_p[BlockId(i as u16 + 1u16)] = Block([(i % 255) as u8; BLOCKSIZE]);
