@@ -26,9 +26,16 @@ impl DocumentBuilder {
             fields: Vec::new()
         }
     }
-    // Add a new field to this document
+
+    /// Add a string field to this document
     pub fn add_string_field(mut self, field_id: FieldId, content: String) -> Self {
         self.fields.push(Field(field_id, FieldContent::String(content)));
+        self
+    }
+
+    /// Add a number field to this document
+    pub fn add_number_field(mut self, field_id: FieldId, content: u64) -> Self {
+        self.fields.push(Field(field_id, FieldContent::Number(content)));
         self
     }
 

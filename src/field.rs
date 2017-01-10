@@ -1,6 +1,18 @@
 use std::str::FromStr;
 use std::collections::HashMap;
 
+pub struct FieldQuery(pub Field);
+
+impl FieldQuery {
+    pub fn new_string(field_id: FieldId, query: String) -> Self {
+        FieldQuery(Field(field_id, FieldContent::String(query)))
+    }
+
+    pub fn new_number(field_id: FieldId, query: u64) -> Self {
+        FieldQuery(Field(field_id, FieldContent::Number(query)))
+    }
+}
+
 #[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
 pub struct FieldId(pub u64);
 
