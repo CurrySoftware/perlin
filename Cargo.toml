@@ -10,5 +10,8 @@ readme = "README.md"
 keywords = ["information", "retrieval", "search", "text", "engine"]
 license = "MIT"
 
+[dependencies.perlin-core]
+path = "../perlin-core"
+
 [features]
 bench=[]
