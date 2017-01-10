@@ -11,8 +11,8 @@
 extern crate perlin_core;
 
 mod document;
-mod field;
 mod document_index;
+pub mod field;
 
 pub use document::Document;
 pub use document_index::DocumentIndex;

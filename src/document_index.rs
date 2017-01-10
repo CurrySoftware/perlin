@@ -38,12 +38,13 @@ impl DocumentIndex {
     }
 
     /// Adds a document to this index by indexing every field in its index
-    pub fn add_document(&mut self, document: Document) {
+    pub fn add_document(&mut self, document: Document) -> DocId {
         self.doc_id_counter.inc();
         let doc_id = self.doc_id_counter;
         for field in document.take_fields() {
             self.index_field(doc_id, field);
-        }
+        };
+        doc_id
     }
 
     /// Creates a new `Index<String>` for a new field.
@@ -85,14 +86,14 @@ impl DocumentIndex {
     }
 
     /// Runs a query on this index
-    pub fn query_index(&self, query: String) -> Vec<usize> {
+    pub fn query_index(&self, query: String) -> Vec<DocId> {
         self.string_fields
             .first()
             .unwrap()
             .1
             .query_atom(&query)
             .into_iter()
-            .map(|posting| posting.doc_id().0 as usize)
+            .map(|posting| posting.doc_id())
             .collect()
     }
 }
