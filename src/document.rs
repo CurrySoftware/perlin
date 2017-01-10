@@ -1,50 +1,38 @@
-#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
-pub struct FieldId(pub u64);
+use std::vec::IntoIter;
 
-pub enum FieldContent  {
-    String(String),
-    DiscreteNumber(u64),
-}
+use field::{Field, FieldId, FieldContent};
 
-pub struct Field(pub FieldId, pub FieldContent);
 
-impl Field {
-    pub fn get_content(self) -> FieldContent {
-        self.1
-    }
+/// A document is represented by an abitrary number of fields
+pub struct Document(pub Vec<Field>);
 
-    pub fn id(&self) -> &FieldId {
-        &self.0
+impl Document {
+    
+    /// Consumes the document and returns an iterator over its fields by value
+    pub fn take_fields(self) -> IntoIter<Field> {
+        self.0.into_iter()
     }
 }
 
-pub struct Document {
-    pub external_id: usize,
-    pub fields: Vec<Field>,
-}
-
+/// This builder can be used to ergonomically (really?) build documents
 pub struct DocumentBuilder{
-    external_id: usize,
     fields: Vec<Field>,
 }
 
 impl DocumentBuilder {
-    pub fn new(external_id: usize) -> Self {
+    
+    pub fn new() -> Self {
         DocumentBuilder {
-            external_id: external_id,
             fields: Vec::new()
         }
     }
-
+    // Add a new field to this document
     pub fn add_string_field(mut self, field_id: FieldId, content: String) -> Self {
         self.fields.push(Field(field_id, FieldContent::String(content)));
         self
     }
 
     pub fn build(self) -> Document {
-        Document {
-            external_id: self.external_id,
-            fields: self.fields
-        }
+        Document(self.fields)
     }
 }

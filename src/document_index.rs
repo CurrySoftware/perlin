@@ -5,59 +5,66 @@ use perlin_core::index::vocabulary::SharedVocabulary;
 use perlin_core::index::posting::DocId;
 use perlin_core::page_manager::{RamPageCache, FsPageManager};
 
-use document::{Field, FieldId, FieldContent, Document};
+use field::{Field, FieldId, FieldContent};
+use document::Document;
 
-/// `PerlinIndex`es are Indexes provided by perlin_core and specialised for use
-/// with text.
-/// They also contain auxiliary data structures like an external key storage
-pub struct PerlinIndex {
+/// `DocumentIndex` takes some of the basic building blocks in perlin_core
+/// and provides an abstraction that can be used to index and query documents
+/// using fields, metadata, taxonomies etc
+pub struct DocumentIndex {
+    // We need to overwrite perlin_core's default DocIds as some Documents might contain
+    // other fields than others. This counter acts as DocumentIndex global document counter.
     doc_id_counter: DocId,
+    // The base path of this index.
     base_path: PathBuf,
+    // A, possible shared between many DocumentIndices, vocabulary for string-terms
     vocabulary: SharedVocabulary<String>,
+    // Indices for fields that contain strings
     string_fields: Vec<(FieldId, Index<String>)>,
+    // Indices for fields that contain numbers
     number_fields: Vec<(FieldId, Index<u64>)>,
-    external_keys: Vec<(DocId, usize)>,
 }
 
-impl PerlinIndex {
+impl DocumentIndex {
     /// Create a new index.
     pub fn new(path: &Path, vocab: SharedVocabulary<String>) -> Self {
-        PerlinIndex {
+        DocumentIndex {
             vocabulary: vocab,
             doc_id_counter: DocId::none(),
             base_path: path.to_path_buf(),
             string_fields: Vec::new(),
             number_fields: Vec::new(),
-            external_keys: Vec::new(),
         }
     }
 
-    /// Adds a document to this index
+    /// Adds a document to this index by indexing every field in its index
     pub fn add_document(&mut self, document: Document) {
         self.doc_id_counter.inc();
         let doc_id = self.doc_id_counter;
-        for field in document.fields.into_iter() {
-            self.add_field(doc_id, field);
+        for field in document.take_fields() {
+            self.index_field(doc_id, field);
         }
-        self.external_keys.push((doc_id, document.external_id));
     }
 
+    /// Creates a new `Index<String>` for a new field.
+    fn create_new_string_field(&mut self, pos: usize, field_id: FieldId) {
+        self.string_fields
+            .insert(pos,
+                    (field_id,
+                     Index::new(RamPageCache::new(FsPageManager::new(&self.base_path
+                                    .join(format!("{}_pages.bin", field_id.0).to_string()))),
+                                self.vocabulary.clone())));
+    }
 
-    /// Adds an index for a field if it is nowhere to be found!
-    fn add_field(&mut self, doc_id: DocId, field: Field) {
+    /// Indexes a field. Might create a new index!
+    fn index_field(&mut self, doc_id: DocId, field: Field) {
         let Field(field_id, field_content) = field;
         match field_content {
             FieldContent::String(content) => {
                 let pos = match self.string_fields
                     .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
                     Err(pos) => {
-                        self.string_fields
-                            .insert(pos,
-                                    (field_id,
-                                     Index::new(RamPageCache::new(FsPageManager::new(&self.base_path
-                                                    .join(format!("{}_pages.bin", field_id.0)
-                                                        .to_string()))),
-                                                self.vocabulary.clone())));
+                        self.create_new_string_field(pos, field_id);
                         pos
                     }
                     Ok(pos) => pos,
@@ -79,65 +86,52 @@ impl PerlinIndex {
 
     /// Runs a query on this index
     pub fn query_index(&self, query: String) -> Vec<usize> {
-        self.transform_keys(self.string_fields
+        self.string_fields
             .first()
             .unwrap()
             .1
             .query_atom(&query)
             .into_iter()
-            .map(|posting| posting.doc_id()))
-    }
-
-    /// When querying a perlin index it will respond with internal doc_ids
-    /// What we are external doc ids. Therefore transform them!
-    fn transform_keys<TResultIter>(&self, mut results: TResultIter) -> Vec<usize>
-        where TResultIter: Iterator<Item = DocId>
-    {
-        let mut external_results = Vec::new();
-        while let Some(doc_id) = results.next() {
-            match self.external_keys.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
-                Ok(index) => external_results.push(self.external_keys[index].1),
-                _ => continue,
-            }
-        }
-        external_results
+            .map(|posting| posting.doc_id().0 as usize)
+            .collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::PerlinIndex;
+    use super::DocumentIndex;
 
     use test_utils::create_test_dir;
-    use document::{FieldId, DocumentBuilder};
+    use document::DocumentBuilder;
+    use field::FieldId;
 
     use perlin_core::index::vocabulary::SharedVocabulary;
 
-    fn new_index(name: &str) -> PerlinIndex {
-        PerlinIndex::new(&create_test_dir(format!("perlin_index/{}", name).as_str()),
-                         SharedVocabulary::new())
+    fn new_index(name: &str) -> DocumentIndex {
+        DocumentIndex::new(&create_test_dir(format!("perlin_index/{}", name).as_str()),
+                           SharedVocabulary::new())
     }
 
     #[test]
     fn one_document() {
         let mut index = new_index("one_document");
-        index.add_document(DocumentBuilder::new(25)
+        index.add_document(DocumentBuilder::new()
             .add_string_field(FieldId(0), "This is a test title".to_string())
             .build());
         index.commit();
-        assert_eq!(index.query_index("test".to_string()), vec![25]);
+        assert_eq!(index.query_index("test".to_string()), vec![0]);
     }
 
     #[test]
     fn multiple_documents() {
         let mut index = new_index("multiple_documents");
-        index.add_document(DocumentBuilder::new(25)
+        index.add_document(DocumentBuilder::new()
             .add_string_field(FieldId(0), "This is a test title".to_string())
             .build());
-        index.add_document(DocumentBuilder::new(15)
+        index.add_document(DocumentBuilder::new()
             .add_string_field(FieldId(0), "This is a test title".to_string())
             .build());
         index.commit();
-        assert_eq!(index.query_index("test".to_string()), vec![25, 15]);
+        assert_eq!(index.query_index("test".to_string()), vec![0, 1]);
     }
 }
