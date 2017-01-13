@@ -13,7 +13,7 @@ impl FieldQuery {
     }
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
 pub struct FieldId(pub u64);
 
 pub enum FieldType {
@@ -21,12 +21,14 @@ pub enum FieldType {
     Number,
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum FieldContent {
     String(String),
     Number(u64),
 }
 
 /// A field represented by its Id and its Content
+#[derive(Debug, PartialEq, Eq)]
 pub struct Field(pub FieldId, pub FieldContent);
 
 impl Field {

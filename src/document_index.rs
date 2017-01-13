@@ -108,10 +108,10 @@ impl DocumentIndex {
     }
 
     /// Runs an atom_query on a certain field
-    pub fn query_field(&self, query: FieldQuery) -> Vec<DocId> {
-        let FieldQuery(Field(field_id, field_content)) = query;
-        match field_content {
-            FieldContent::String(content) => {
+    pub fn query_field(&self, query: &FieldQuery) -> Vec<DocId> {
+        let &FieldQuery(Field(field_id, ref field_content)) = query;
+        match *field_content {
+            FieldContent::String(ref content) => {
                 if let Ok(pos) = self.string_fields
                     .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
                     return self.string_fields[pos]
@@ -122,7 +122,7 @@ impl DocumentIndex {
                         .collect();
                 }
             },
-            FieldContent::Number(content) => {
+            FieldContent::Number(ref content) => {
                 if let Ok(pos) = self.number_fields
                     .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
                     return self.number_fields[pos]

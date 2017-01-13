@@ -4,6 +4,7 @@ use field::{Field, FieldId, FieldContent};
 
 
 /// A document is represented by an abitrary number of fields
+#[derive(Debug, Eq, PartialEq)]
 pub struct Document(pub Vec<Field>);
 
 impl Document {
@@ -36,6 +37,12 @@ impl DocumentBuilder {
     /// Add a number field to this document
     pub fn add_number_field(mut self, field_id: FieldId, content: u64) -> Self {
         self.fields.push(Field(field_id, FieldContent::Number(content)));
+        self
+    }
+
+    /// Add a new field to the document
+    pub fn add_field(mut self, field: Field) -> Self {
+        self.fields.push(field);
         self
     }
 
