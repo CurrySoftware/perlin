@@ -14,7 +14,7 @@ mod document;
 mod document_index;
 pub mod field;
 
-pub use document::Document;
+pub use document::{DocumentBuilder, Document};
 pub use document_index::DocumentIndex;
 
 #[cfg(test)]
