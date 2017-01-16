@@ -20,6 +20,12 @@ pub struct DocumentBuilder{
     fields: Vec<Field>,
 }
 
+impl Default for DocumentBuilder {
+    fn default() -> Self {
+        DocumentBuilder::new()
+    }
+}
+
 impl DocumentBuilder {
     
     pub fn new() -> Self {

@@ -8,7 +8,7 @@ use perlin_core::page_manager::{RamPageCache, FsPageManager};
 use field::{Field, FieldId, FieldContent, FieldQuery};
 use document::Document;
 
-/// `DocumentIndex` takes some of the basic building blocks in perlin_core
+/// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
 /// and provides an abstraction that can be used to index and query documents
 /// using fields, metadata, taxonomies etc
 pub struct DocumentIndex {
@@ -116,7 +116,7 @@ impl DocumentIndex {
                     .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
                     return self.string_fields[pos]
                         .1
-                        .query_atom(&content)
+                        .query_atom(content)
                         .into_iter()
                         .map(|posting| posting.doc_id())
                         .collect();
@@ -127,7 +127,7 @@ impl DocumentIndex {
                     .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
                     return self.number_fields[pos]
                         .1
-                        .query_atom(&content)
+                        .query_atom(content)
                         .into_iter()
                         .map(|posting| posting.doc_id())
                         .collect();
