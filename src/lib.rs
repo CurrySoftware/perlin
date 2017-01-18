@@ -10,11 +10,10 @@
 
 extern crate perlin_core;
 
-mod document;
 mod document_index;
+pub mod document;
 pub mod field;
 
-pub use document::{DocumentBuilder, Document};
 pub use document_index::DocumentIndex;
 
 #[cfg(test)]

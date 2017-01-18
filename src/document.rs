@@ -1,4 +1,5 @@
 use std::vec::IntoIter;
+use std::borrow::Cow;
 
 use field::{RawField, FieldId, FieldResolver};
 
@@ -18,16 +19,20 @@ impl<'a> DocumentBuilder<'a> {
     }
 
     /// Add a new field to the document
-    pub fn add_field(mut self,
-                     field_name: &str,
-                     field_content: &'a str,
-                     resolver: &FieldResolver)
-                     -> Result<Self, ()> {
-        self.fields.push(resolver.resolve(field_name, field_content)?);
-        Ok(self)
+    pub fn add_field(mut self, field: RawField<'a>) -> Self {
+        self.fields.push(field);
+        self
     }
 
     pub fn build(self) -> Document<'a> {
         Document(self.fields)
     }
+}
+
+
+/// Implemented by an entity that has the ability to parse documents
+pub trait DocumentParser {
+    fn parse_document<'a>(&self,
+                          key_values: &'a [(Cow<'a, str>, Cow<'a, str>)])
+                          -> Result<Document<'a>, ()>;
 }

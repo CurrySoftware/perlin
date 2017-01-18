@@ -25,8 +25,6 @@ pub struct DocumentIndex {
     text_fields: Vec<(FieldId, Index<String>)>,
     // Indices for fields that contain numbers
     number_fields: Vec<(FieldId, Index<u64>)>,
-    // Field Definitions. As this document index needs to be able to implement `FieldResolver`
-    field_defs: HashMap<String, FieldDefinition>,
 }
 
 impl DocumentIndex {
@@ -38,7 +36,6 @@ impl DocumentIndex {
             base_path: path.to_path_buf(),
             text_fields: Vec::new(),
             number_fields: Vec::new(),
-            field_defs: HashMap::new(),
         }
     }
 
@@ -89,30 +86,7 @@ impl DocumentIndex {
 }
 
 
-impl FieldResolver for DocumentIndex {
-    fn register_field(&mut self, name: &str, field_type: FieldType) -> Result<(), ()> {
-        use std::collections::hash_map::Entry;
-        let field_id = FieldId(self.field_defs.len() as u64);
-        // Make sure that field is not already registered
-        if let Entry::Vacant(entry) = self.field_defs.entry(name.to_string()) {
-            // Determine new field_id
-            // Insert value!
-            entry.insert(FieldDefinition(field_id, field_type));
-            Ok(())
-        } else {
-            // Field was already registered
-            Err(())
-        }
-    }
 
-    fn resolve<'a>(&self, name: &str, content: &'a str) -> Result<RawField<'a>, ()> {
-        if let Some(field_definition) = self.field_defs.get(name) {
-            Ok(RawField(*field_definition, content))
-        } else {
-            Err(())
-        }
-    }
-}
 
 trait Indexer<'a> {
     fn index(&mut self, DocId, &'a str);
