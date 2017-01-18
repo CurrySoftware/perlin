@@ -1,0 +1,55 @@
+* Fields
+Problem: We get untyped input from the user (string) and what to be checked 
+and handled by the typesystem as soon as possible.
+
+Players, needs and positions:
+** Current
+*** User
+To Search Engine: Enters Query
+*** Search Engine:
+From User: Query resolveing to Pseudotyped Query
+To Perlin: Field Definitions
+To Perlin: Pseudotyped Documents for Indexing (FieldType, str)
+To Perlin: Pseudotyped Query
+
+Impls Trait FieldResolver and DocumentParser
+*** Perlin
+From SearchEngine: Pseudotyped Documents. 
+                   Using Specialisation to move into Typed lanes. 
+                   In typed Lane: &str to T!
+From SearchEngine: FieldDefinitions to create perlin-core indices
+From SearchEngine: Pseudotyped Query 
+                   Using Specialisation to move into typed lanes.
+
+Provides public traits: FieldResolver, DocumentParser
+Provides and implements specialisation, pseudotype to typed trait `Indexer`
+
+Defines and sets up possible field types (VERY BAD!)
+*** Perlin Core:
+Nothing untyped or pseudotyped happens here
+
+*** Advantages:
+Clear separation of typed, pseudotyped and untyped data!
+No dynamic typing with `Any` and friends.
+We can fail hard if anything goes wrong.
+Fast! Only one level of indirection (one virtual method call per indexed field or queried document)
+
+*** Disadvantages:
+Perlin has to much responsibility.
+It predefines possible types;
+It defines how the conversion from string happens (clearly not the right place to do that);
+Pseudotyperesolving and Typeresolving happen at two very differnt places!
+if a wrong field or wrong datatype was submitted (i.e. text not parsable to number) we crash, 
+but we crash at the very end. We could crash much sooner.
+
+** Proposed
+*** User
+To Search Engine: Entery Query
+*** Search Engine:
+Provides own FieldType impl. Provides own IndexContainer impl.
+
+*** Perlin
+Provides FieldType trait. Provides IndexContainer trait
+
+
+
