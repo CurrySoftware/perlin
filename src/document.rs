@@ -1,7 +1,6 @@
-use std::vec::IntoIter;
 use std::borrow::Cow;
 
-use field::{RawField, FieldId, FieldResolver};
+use field::RawField;
 
 
 /// A document is represented by an abitrary number of fields

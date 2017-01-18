@@ -1,11 +1,12 @@
 use std::path::{PathBuf, Path};
+use std::str::FromStr;
 
 use perlin_core::index::Index;
 use perlin_core::index::vocabulary::SharedVocabulary;
 use perlin_core::index::posting::DocId;
 use perlin_core::page_manager::{RamPageCache, FsPageManager};
 
-use field::{RawField, FieldId, FieldDefinition, FieldType, FieldResolver};
+use field::{RawField, FieldId, FieldDefinition, FieldType};
 
 use document::Document;
 
@@ -48,18 +49,25 @@ impl DocumentIndex {
         doc_id
     }
 
-    pub fn add_index(&mut self, field_def: FieldDefinition) -> Result<(), ()>{
+    pub fn add_field(&mut self, field_def: FieldDefinition) -> Result<(), ()> {
         let FieldDefinition(field_id, field_type) = field_def;
-        let page_cache = RamPageCache::new(FsPageManager::new(&self.base_path.join(format!("{}_pages.bin", field_id.0).to_string())));
+        let page_cache = RamPageCache::new(FsPageManager::new(&self.base_path
+            .join(format!("{}_pages.bin", field_id.0).to_string())));
         match field_type {
             FieldType::Text => {
-                if let Err(pos) = self.text_fields.binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
-                    self.text_fields.insert(pos, (field_id, Index::new(page_cache, self.vocabulary.clone())));
+                if let Err(pos) = self.text_fields
+                    .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
+                    self.text_fields.insert(pos,
+                                            (field_id,
+                                             Index::new(page_cache, self.vocabulary.clone())));
                 }
-            },
+            }
             FieldType::Number => {
-                if let Err(pos) = self.number_fields.binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
-                    self.number_fields.insert(pos, (field_id, Index::new(page_cache, SharedVocabulary::new())));
+                if let Err(pos) = self.number_fields
+                    .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
+                    self.number_fields.insert(pos,
+                                              (field_id,
+                                               Index::new(page_cache, SharedVocabulary::new())));
                 }
             }
         };
@@ -98,6 +106,24 @@ impl DocumentIndex {
 
     /// Runs an atom_query on a certain field
     pub fn query_field(&self, query: &RawField) -> Vec<DocId> {
+        match *query {
+            RawField(FieldDefinition(field_id, FieldType::Text), content) => {
+                if let Ok(pos) = self.text_fields
+                    .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
+                    return self.text_fields[pos].1.query(content);
+                } else {
+                    panic!("Something is seriously wrong!");
+                }
+            }
+            RawField(FieldDefinition(field_id, FieldType::Number), content) => {
+                if let Ok(pos) = self.number_fields
+                    .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
+                    return self.number_fields[pos].1.query(content);
+                } else {
+                    panic!("Something is seriously wrong!");
+                }
+            }
+        }
         vec![]
     }
 }
@@ -107,19 +133,28 @@ impl DocumentIndex {
 
 trait Indexer<'a> {
     fn index(&mut self, DocId, &'a str);
+    fn query(&self, &'a str) -> Vec<DocId>;
 }
 
 impl<'a> Indexer<'a> for Index<String> {
     fn index(&mut self, doc_id: DocId, data: &'a str) {
         self.index_document(data.split_whitespace().map(|s| s.to_string()), Some(doc_id));
     }
+
+    fn query(&self, query: &'a str) -> Vec<DocId> {
+        self.query_atom(&query.to_string()).into_iter().map(|posting| posting.doc_id()).collect()
+    }
 }
 
 impl<'a> Indexer<'a> for Index<u64> {
     fn index(&mut self, doc_id: DocId, data: &'a str) {
-        use std::str::FromStr;
         let num = u64::from_str(data).unwrap();
         self.index_document(vec![num].into_iter(), Some(doc_id));
+    }
+
+    fn query(&self, query: &'a str) -> Vec<DocId> {
+        let num = u64::from_str(query).unwrap();
+        self.query_atom(&num).into_iter().map(|posting| posting.doc_id()).collect()
     }
 }
 
@@ -130,7 +165,7 @@ mod tests {
 
     use test_utils::create_test_dir;
     use document::DocumentBuilder;
-    use field::{FieldId, FieldQuery};
+    use field::{FieldDefinition, FieldType, FieldId, RawField};
 
     use perlin_core::index::vocabulary::SharedVocabulary;
     use perlin_core::index::posting::DocId;
@@ -143,89 +178,114 @@ mod tests {
     #[test]
     fn one_document() {
         let mut index = new_index("one_document");
+        let text_field_def = FieldDefinition(FieldId(0), FieldType::Text);
+        // Add a field
+        index.add_field(FieldDefinition(FieldId(0), FieldType::Text));
+        // Index a new documnet
         index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "This is a test title".to_string())
+            .add_field(RawField(text_field_def, "This is a test title"))
             .build());
+        // Commit the index.
         index.commit();
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(0), "test".to_string())),
+        assert_eq!(index.query_field(&RawField(text_field_def, "title")),
                    vec![DocId(0)]);
     }
 
     #[test]
     fn multiple_documents() {
         let mut index = new_index("multiple_documents");
+        let text_field_def = FieldDefinition(FieldId(0), FieldType::Text);
+        // Add a field
+        index.add_field(FieldDefinition(FieldId(0), FieldType::Text));
+        // Index a new documnet
         index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "This is a test title".to_string())
+            .add_field(RawField(text_field_def, "This is a test title"))
             .build());
         index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "This is a test title".to_string())
+            .add_field(RawField(text_field_def, "This is a test text"))
             .build());
+
+        // Commit the index.
         index.commit();
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(0), "test".to_string())),
+        assert_eq!(index.query_field(&RawField(text_field_def, "title")),
+                   vec![DocId(0)]);
+        assert_eq!(index.query_field(&RawField(text_field_def, "test")),
                    vec![DocId(0), DocId(1)]);
     }
 
     #[test]
     fn multiple_fields() {
         let mut index = new_index("multiple_fields");
+        let text_field0 = FieldDefinition(FieldId(0), FieldType::Text);
+        let text_field1 = FieldDefinition(FieldId(1), FieldType::Text);
+        index.add_field(text_field0);
+        index.add_field(text_field1);
         index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "This is a test title".to_string())
-            .add_string_field(FieldId(1), "This is a test content".to_string())
+            .add_field(RawField(text_field0, "This is a test title"))
+            .add_field(RawField(text_field1, "This is a test content"))
             .build());
         index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "This is a test title".to_string())
-            .add_string_field(FieldId(1), "This is a test content".to_string())
+            .add_field(RawField(text_field0, "This is a test title"))
+            .add_field(RawField(text_field1, "This is a test content"))
             .build());
         index.commit();
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(0), "content".to_string())),
-                   vec![]);
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(0), "title".to_string())),
+        assert_eq!(index.query_field(&RawField(text_field0, "content")), vec![]);
+        assert_eq!(index.query_field(&RawField(text_field0, "title")),
                    vec![DocId(0), DocId(1)]);
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(1), "content".to_string())),
+        assert_eq!(index.query_field(&RawField(text_field1, "content")),
                    vec![DocId(0), DocId(1)]);
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(1), "title".to_string())),
-                   vec![])
+        assert_eq!(index.query_field(&RawField(text_field1, "title")), vec![])
     }
 
     #[test]
     fn multiple_fieldtypes() {
         let mut index = new_index("multiple_fieldtypes");
+        let text_field0 = FieldDefinition(FieldId(0), FieldType::Text);
+        let text_field1 = FieldDefinition(FieldId(1), FieldType::Text);
+        // Planet Number in solar system
+        let num_field2 = FieldDefinition(FieldId(2), FieldType::Number);
+        // Object type. 1=star 2=planet 3=moon
+        let num_field3 = FieldDefinition(FieldId(3), FieldType::Number);
+        index.add_field(text_field0);
+        index.add_field(text_field1);
+        index.add_field(num_field2);
+        index.add_field(num_field3);        
+        // Mars
         index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "Mars".to_string())
-            .add_string_field(FieldId(1),
-                              "Mars is the fourth planet from the Sun and the second-smallest \
-                               planet in the Solar System, after Mercury."
-                              .to_string())
-             //Planet Number in solar system
-            .add_number_field(FieldId(2), 4)
-             //Object type. 1=star 2=planet 3=moon
-            .add_number_field(FieldId(3), 2)
-                           .build());
-        index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "Sun".to_string())
-            .add_string_field(FieldId(1),
-                              "The Sun is the star at the center of the Solar System."
-                                  .to_string())
-            .add_number_field(FieldId(3), 1)
+            .add_field(RawField(text_field0, "Mars"))
+            .add_field(RawField(text_field1,
+                                "Mars is the fourth planet from the Sun and the \
+                                 second-smallest planet in the Solar System, after Mercury."))
+            .add_field(RawField(num_field2, "4"))
+            .add_field(RawField(num_field3, "2"))
             .build());
+        // Sun
         index.add_document(DocumentBuilder::new()
-            .add_string_field(FieldId(0), "Moon".to_string())
-            .add_string_field(FieldId(1),
-                              "The Moon is an astronomical body that orbits planet Earth, being \
-                               Earth's only permanent natural satellite."
-                                  .to_string())
-            .add_number_field(FieldId(3), 3)
+            .add_field(RawField(text_field0, "Sun"))
+            .add_field(RawField(text_field1,
+                                "The Sun is the star at the center of the Solar System."))
+            .add_field(RawField(num_field3, "1"))
             .build());
+
+        // Moon
+        index.add_document(DocumentBuilder::new()
+            .add_field(RawField(text_field0, "Moon"))
+            .add_field(RawField(text_field1,
+                                "The Moon is an astronomical body that orbits planet Earth, \
+                                 being Earth's only permanent natural satellite."))
+            .add_field(RawField(num_field3, "3"))
+            .build());
+
         index.commit();
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(0), "Moon".to_string())),
+        assert_eq!(index.query_field(&RawField(text_field0, "Moon")),
                    vec![DocId(2)]);
-        assert_eq!(index.query_field(FieldQuery::new_number(FieldId(2), 4)),
+        assert_eq!(index.query_field(&RawField(num_field2, "4")),
                    vec![DocId(0)]);
-        assert_eq!(index.query_field(FieldQuery::new_number(FieldId(3), 1)),
+        assert_eq!(index.query_field(&RawField(num_field3, "1")),
                    vec![DocId(1)]);
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(0), "is".to_string())),
+        assert_eq!(index.query_field(&RawField(text_field0, "is")),
                    vec![]);
-        assert_eq!(index.query_field(FieldQuery::new_string(FieldId(1), "is".to_string())),
+        assert_eq!(index.query_field(&RawField(text_field1, "is")),
                    vec![DocId(0), DocId(1), DocId(2)]);
 
     }
