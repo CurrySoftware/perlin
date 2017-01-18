@@ -1,5 +1,4 @@
 use std::path::{PathBuf, Path};
-use std::collections::HashMap;
 
 use perlin_core::index::Index;
 use perlin_core::index::vocabulary::SharedVocabulary;
@@ -47,6 +46,24 @@ impl DocumentIndex {
             self.index_field(doc_id, field);
         }
         doc_id
+    }
+
+    pub fn add_index(&mut self, field_def: FieldDefinition) -> Result<(), ()>{
+        let FieldDefinition(field_id, field_type) = field_def;
+        let page_cache = RamPageCache::new(FsPageManager::new(&self.base_path.join(format!("{}_pages.bin", field_id.0).to_string())));
+        match field_type {
+            FieldType::Text => {
+                if let Err(pos) = self.text_fields.binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
+                    self.text_fields.insert(pos, (field_id, Index::new(page_cache, self.vocabulary.clone())));
+                }
+            },
+            FieldType::Number => {
+                if let Err(pos) = self.number_fields.binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
+                    self.number_fields.insert(pos, (field_id, Index::new(page_cache, SharedVocabulary::new())));
+                }
+            }
+        };
+        Ok(())
     }
 
     /// Indexes a field. Might create a new index!
