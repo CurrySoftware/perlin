@@ -1,11 +1,13 @@
 use std::path::{PathBuf, Path};
+use std::collections::HashMap;
 
 use perlin_core::index::Index;
 use perlin_core::index::vocabulary::SharedVocabulary;
 use perlin_core::index::posting::DocId;
 use perlin_core::page_manager::{RamPageCache, FsPageManager};
 
-use field::{Field, FieldId, FieldContent, FieldQuery};
+use field::{RawField, FieldId, FieldDefinition, FieldType, FieldResolver};
+
 use document::Document;
 
 /// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
@@ -20,9 +22,11 @@ pub struct DocumentIndex {
     // A, possible shared between many DocumentIndices, vocabulary for string-terms
     vocabulary: SharedVocabulary<String>,
     // Indices for fields that contain strings
-    string_fields: Vec<(FieldId, Index<String>)>,
+    text_fields: Vec<(FieldId, Index<String>)>,
     // Indices for fields that contain numbers
     number_fields: Vec<(FieldId, Index<u64>)>,
+    // Field Definitions. As this document index needs to be able to implement `FieldResolver`
+    field_defs: HashMap<String, FieldDefinition>,
 }
 
 impl DocumentIndex {
@@ -32,8 +36,9 @@ impl DocumentIndex {
             vocabulary: vocab,
             doc_id_counter: DocId::none(),
             base_path: path.to_path_buf(),
-            string_fields: Vec::new(),
+            text_fields: Vec::new(),
             number_fields: Vec::new(),
+            field_defs: HashMap::new(),
         }
     }
 
@@ -41,102 +46,92 @@ impl DocumentIndex {
     pub fn add_document(&mut self, document: Document) -> DocId {
         self.doc_id_counter.inc();
         let doc_id = self.doc_id_counter;
-        for field in document.take_fields() {
+        for field in document.0 {
             self.index_field(doc_id, field);
         }
         doc_id
     }
 
-    /// Creates a new `Index<String>` for a new field.
-    fn create_new_string_field(&mut self, pos: usize, field_id: FieldId) {
-        self.string_fields
-            .insert(pos,
-                    (field_id,
-                     Index::new(RamPageCache::new(FsPageManager::new(&self.base_path
-                                    .join(format!("{}_pages.bin", field_id.0).to_string()))),
-                                self.vocabulary.clone())));
-    }
-
-    /// Creates a new `Index<String>` for a new field.
-    fn create_new_number_field(&mut self, pos: usize, field_id: FieldId) {
-        self.number_fields
-            .insert(pos,
-                    (field_id,
-                     Index::new(RamPageCache::new(FsPageManager::new(&self.base_path
-                                    .join(format!("{}_pages.bin", field_id.0).to_string()))),
-                                SharedVocabulary::new())));
-    }    
-
     /// Indexes a field. Might create a new index!
-    fn index_field(&mut self, doc_id: DocId, field: Field) {
-        let Field(field_id, field_content) = field;
-        match field_content {
-            FieldContent::String(content) => {
-                let pos = match self.string_fields
+    fn index_field(&mut self, doc_id: DocId, field: RawField) {
+        match field {
+            RawField(FieldDefinition(field_id, FieldType::Text), content) => {
+                // Find index for field_id
+                if let Ok(pos) = self.text_fields
                     .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
-                    Err(pos) => {
-                        self.create_new_string_field(pos, field_id);
-                        pos
-                    }
-                    Ok(pos) => pos,
-                };
-                self.string_fields[pos]
-                    .1
-                    .index_document(content.split_whitespace().map(|s| s.to_string()),
-                                    Some(doc_id));
+                    self.text_fields[pos].1.index(doc_id, content);
+                } else {
+                    panic!("Something is seriously wrong!");
+                }
             }
-            FieldContent::Number(content) => {
-                let pos = match self.number_fields
+            RawField(FieldDefinition(field_id, FieldType::Number), content) => {
+                // Find index for field_id
+                if let Ok(pos) = self.number_fields
                     .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
-                    Err(pos) => {
-                        self.create_new_number_field(pos, field_id);
-                        pos
-                    }
-                    Ok(pos) => pos,
-                };
-                self.number_fields[pos]
-                    .1
-                    .index_document(vec![content].into_iter(), Some(doc_id));
+                    self.number_fields[pos].1.index(doc_id, content);
+                } else {
+                    panic!("Something is seriously wrong!");
+                }
             }
         }
     }
 
     /// Commits this index
     pub fn commit(&mut self) {
-        self.string_fields.iter_mut().map(|&mut (_, ref mut index)| index.commit()).count();
+        self.text_fields.iter_mut().map(|&mut (_, ref mut index)| index.commit()).count();
         self.number_fields.iter_mut().map(|&mut (_, ref mut index)| index.commit()).count();
     }
 
     /// Runs an atom_query on a certain field
-    pub fn query_field(&self, query: &FieldQuery) -> Vec<DocId> {
-        let &FieldQuery(Field(field_id, ref field_content)) = query;
-        match *field_content {
-            FieldContent::String(ref content) => {
-                if let Ok(pos) = self.string_fields
-                    .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
-                    return self.string_fields[pos]
-                        .1
-                        .query_atom(content)
-                        .into_iter()
-                        .map(|posting| posting.doc_id())
-                        .collect();
-                }
-            },
-            FieldContent::Number(ref content) => {
-                if let Ok(pos) = self.number_fields
-                    .binary_search_by_key(&field_id, |&(f_id, _)| f_id) {
-                    return self.number_fields[pos]
-                        .1
-                        .query_atom(content)
-                        .into_iter()
-                        .map(|posting| posting.doc_id())
-                        .collect();
-                }
-            }
-        }
+    pub fn query_field(&self, query: &RawField) -> Vec<DocId> {
         vec![]
     }
 }
+
+
+impl FieldResolver for DocumentIndex {
+    fn register_field(&mut self, name: &str, field_type: FieldType) -> Result<(), ()> {
+        use std::collections::hash_map::Entry;
+        let field_id = FieldId(self.field_defs.len() as u64);
+        // Make sure that field is not already registered
+        if let Entry::Vacant(entry) = self.field_defs.entry(name.to_string()) {
+            // Determine new field_id
+            // Insert value!
+            entry.insert(FieldDefinition(field_id, field_type));
+            Ok(())
+        } else {
+            // Field was already registered
+            Err(())
+        }
+    }
+
+    fn resolve<'a>(&self, name: &str, content: &'a str) -> Result<RawField<'a>, ()> {
+        if let Some(field_definition) = self.field_defs.get(name) {
+            Ok(RawField(*field_definition, content))
+        } else {
+            Err(())
+        }
+    }
+}
+
+trait Indexer<'a> {
+    fn index(&mut self, DocId, &'a str);
+}
+
+impl<'a> Indexer<'a> for Index<String> {
+    fn index(&mut self, doc_id: DocId, data: &'a str) {
+        self.index_document(data.split_whitespace().map(|s| s.to_string()), Some(doc_id));
+    }
+}
+
+impl<'a> Indexer<'a> for Index<u64> {
+    fn index(&mut self, doc_id: DocId, data: &'a str) {
+        use std::str::FromStr;
+        let num = u64::from_str(data).unwrap();
+        self.index_document(vec![num].into_iter(), Some(doc_id));
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
