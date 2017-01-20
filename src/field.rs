@@ -26,3 +26,6 @@ pub trait FieldResolver {
     /// Returns an `Err` if `name` was not previously registered
     fn resolve<'a>(&self, name: &str, content: &'a str) -> Result<RawField<'a>, ()>;
 }
+
+
+pub struct Field<T>(pub FieldDefinition, pub T);
