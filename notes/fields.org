@@ -53,3 +53,61 @@ Provides FieldType trait. Provides IndexContainer trait
 
 
 
+
+** Proposed Implemented
+#+begin_src plantuml :file sem_implemented_fields.png
+title Semantically correct
+participant SearchEngine
+participant Perlin
+participant IndexContainer
+participant PerlinCore
+== Define Fields ==
+SearchEngine -> Perlin : add_field::<T>(FieldDefinition)
+Perlin -> PerlinCore  : Index::<T>new()
+PerlinCore -> Perlin  : Index<T>
+Perlin -> IndexContainer : manage_index(FieldDefinition, Index<T>)
+Perlin -> SearchEngine : Ok(())
+== Index Field ==
+SearchEngine -> Perlin : index_field::<T>(DocId, Field<T>)
+Perlin -> IndexContainer : index_field::<T>(DocId, Field<T>)
+IndexContainer -> PerlinCore : index_document(iterator, DocId)
+== Query Field ==
+SearchEngine -> Perlin : query_field<T>(&Field<T>) 
+Perlin -> IndexContainer : query_field<T>(&Field<T>)
+IndexContainer -> PerlinCore : query_atom(&term)
+PerlinCore -> IndexContainer : Vec<Posting>
+IndexContainer -> Perlin : Vec<Posting>
+Perlin -> SearchEngine : Vec<DocId>
+#+end_src
+
+#+RESULTS:
+[[file:implemented_fields.png]]
+
+
+#+begin_src plantuml :file impl_implemented_fields.png
+title Implementation Detail Correct
+participant SearchEngine
+participant IndexContainer
+participant Perlin
+participant PerlinCore
+== Define Fields ==
+SearchEngine -> Perlin : add_field::<T>(FieldDefinition)
+Perlin -> PerlinCore  : Index::<T>new()
+PerlinCore -> Perlin  : Index<T>
+Perlin -> IndexContainer : manage_index(FieldDefinition, Index<T>)
+Perlin -> SearchEngine : Ok(())
+== Index Field ==
+SearchEngine -> Perlin : index_field::<T>(DocId, Field<T>)
+Perlin -> IndexContainer : index_field::<T>(DocId, Field<T>)
+IndexContainer -> PerlinCore : index_document(iterator, DocId)
+== Query Field ==
+SearchEngine -> Perlin : query_field<T>(&Field<T>) 
+Perlin -> IndexContainer : query_field<T>(&Field<T>)
+IndexContainer -> PerlinCore : query_atom(&term)
+PerlinCore -> IndexContainer : Vec<Posting>
+IndexContainer -> Perlin : Vec<Posting>
+Perlin -> SearchEngine : Vec<DocId>
+#+end_src
+
+#+RESULTS:
+[[file:impl_implemented_fields.png]]

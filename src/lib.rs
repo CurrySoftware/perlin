@@ -10,7 +10,7 @@
 
 extern crate perlin_core;
 
-mod document_index;
+pub mod document_index;
 pub mod document;
 pub mod field;
 

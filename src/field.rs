@@ -24,7 +24,7 @@ pub trait FieldResolver {
     fn register_field(&mut self, name: &str, field_type: FieldType) -> Result<(), ()>;
     /// Pass in raw data to the resolver. Get a back "typed" result!
     /// Returns an `Err` if `name` was not previously registered
-    fn resolve<'a>(&self, name: &str, content: &'a str) -> Result<RawField<'a>, ()>;
+    fn resolve<'a>(&self, name: &str) -> Result<FieldDefinition, ()>;
 }
 
 

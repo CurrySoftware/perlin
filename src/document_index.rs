@@ -12,6 +12,7 @@ use field::{FieldDefinition, Field};
 /// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
 /// and provides an abstraction that can be used to index and query documents
 /// using fields, metadata, taxonomies etc
+#[derive(Debug)]
 pub struct DocumentIndex<TContainer> {
     // We need to overwrite perlin_core's default DocIds as some Documents might contain
     // other fields than others. This counter acts as DocumentIndex global document counter.
@@ -64,8 +65,8 @@ impl<TContainer: Default + Commitable> DocumentIndex<TContainer> {
         self.doc_id_counter
     }
 
-    /// Indexes a field. Might create a new index!
-    fn index_field<TTerm: Hash + Eq>(&mut self, doc_id: DocId, field: Field<TTerm>)
+    /// Indexes a field
+    pub fn index_field<TTerm: Hash + Eq>(&mut self, doc_id: DocId, field: Field<TTerm>)
         where TContainer: IndexContainer<TTerm>
     {
         self.index_container.index_field(doc_id, field);
