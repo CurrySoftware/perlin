@@ -1,3 +1,5 @@
+use language::pipeline::PipelineElement;
+
 /// Uniquely identifies a field
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, PartialEq, Eq)]
 pub struct FieldId(pub u64);
@@ -10,7 +12,7 @@ pub enum FieldType {
 }
 
 /// A field definition storing its id and its type
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, Copy, Clone, PartialEq)]
 pub struct FieldDefinition(pub FieldId, pub FieldType);
 
 /// A field which has yet to be processed!

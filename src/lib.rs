@@ -10,6 +10,8 @@
 
 extern crate perlin_core;
 
+#[macro_use]
+pub mod language;
 pub mod document_index;
 pub mod document;
 pub mod field;
