@@ -9,7 +9,7 @@ use perlin_core::index::posting::{Posting, DocId};
 use perlin_core::page_manager::{RamPageCache, FsPageManager};
 
 use field::{FieldDefinition, Field, FieldId};
-use language::pipeline::PipelineElement;
+use language::pipeline::Pipeline;
 
 /// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
 /// and provides an abstraction that can be used to index and query documents
@@ -21,8 +21,7 @@ pub struct DocumentIndex<TContainer> {
     // The base path of this index.
     base_path: PathBuf,
     index_container: TContainer,
-    pipelines: BTreeMap<FieldId, Box<PipelineElement<TContainer>>>,
-
+    pipelines: BTreeMap<FieldId, Pipeline>,
 }
 
 pub trait IndexContainer<T: Hash + Eq> {
@@ -34,15 +33,11 @@ pub trait Commitable {
 }
 
 pub trait TermIndexer<T> {
-    fn index_term(&mut self, Field<T>);
+    fn index_term(&mut self, Field<T>, DocId);
 }
 
 pub trait TermQuerier<T> {
     fn query_term(&self, &Field<T>) -> Vec<Posting>;
-}
-
-pub trait PipelineProvider {
-    fn get_pipeline(&self, FieldDefinition) -> &PipelineElement<Self>;
 }
 
 impl<TContainer: Default + Commitable> DocumentIndex<TContainer> {
@@ -52,13 +47,13 @@ impl<TContainer: Default + Commitable> DocumentIndex<TContainer> {
             doc_id_counter: DocId::none(),
             base_path: path.to_path_buf(),
             index_container: TContainer::default(),
-            pipelines: BTreeMap::new()
+            pipelines: BTreeMap::new(),
         }
     }
 
     pub fn add_field<TTerm: Hash + Eq + Ord>(&mut self,
                                              field_def: FieldDefinition,
-                                             pipeline: Box<PipelineElement<TContainer>>)
+                                             pipeline: Pipeline)
                                              -> Result<(), ()>
         where TContainer: IndexContainer<TTerm>
     {
@@ -75,12 +70,17 @@ impl<TContainer: Default + Commitable> DocumentIndex<TContainer> {
         self.doc_id_counter.inc();
         self.doc_id_counter
     }
-    
+
     /// Indexes a field
     pub fn index_field(&mut self, doc_id: DocId, field: FieldDefinition, content: &str)
+        where TContainer: TermIndexer<String>
     {
         if let Some(pipe) = self.pipelines.get(&field.0) {
-            pipe.apply(content, &mut self.index_container);
+            let container = &mut self.index_container;
+            pipe.push(content,
+                      &mut move |d: &str| {
+                          container.index_term(Field(field, d.to_owned()), doc_id);
+                      });
         } else {
             panic!();
         }
@@ -110,8 +110,8 @@ mod tests {
     use test_utils::create_test_dir;
     use document::DocumentBuilder;
     use field::{FieldDefinition, FieldType, FieldId, Field};
-    use language::{StringFunnel, WhitespaceTokenizer, PipelineElement, CanAppend};
-    
+    use language::{LowercaseFilter, WhitespaceTokenizer};
+
     use std::collections::BTreeMap;
 
     use perlin_core::index::vocabulary::SharedVocabulary;
@@ -125,40 +125,28 @@ mod tests {
     }
 
     impl IndexContainer<String> for TestContainer {
-        fn manage_index(&mut self,
-                        def: FieldDefinition,
-                        index: Index<String>) {
+        fn manage_index(&mut self, def: FieldDefinition, index: Index<String>) {
             self.text_fields.insert(def.0, index);
         }
     }
 
 
     impl IndexContainer<u64> for TestContainer {
-        fn manage_index(&mut self,
-                        def: FieldDefinition,
-                        index: Index<u64>) {
+        fn manage_index(&mut self, def: FieldDefinition, index: Index<u64>) {
             self.num_fields.insert(def.0, index);
         }
     }
 
     impl TermIndexer<String> for TestContainer {
-        fn index_term(&mut self, field: Field<String>) {
+        fn index_term(&mut self, field: Field<String>, doc_id: DocId) {
             if let Some(index) = self.text_fields.get_mut(&(field.0).0) {
-                index.index_term(field.1, self.cur_doc_id);
-            }
-        }
-    }
-    
-    impl TermIndexer<u64> for TestContainer {
-        fn index_term(&mut self, field: Field<u64>) {
-            if let Some(index) = self.num_fields.get_mut(&(field.0).0) {
-                index.index_term(field.1, self.cur_doc_id);
+                index.index_term(field.1, doc_id);
             }
         }
     }
 
     impl TermQuerier<String> for TestContainer {
-        fn query_term(&self, field: &Field<String>) -> Vec<Posting>{
+        fn query_term(&self, field: &Field<String>) -> Vec<Posting> {
             if let Some(index) = self.text_fields.get(&(field.0).0) {
                 index.query_atom(&field.1)
             } else {
@@ -189,21 +177,44 @@ mod tests {
         DocumentIndex::new(&create_test_dir(format!("perlin_index/{}", name).as_str()))
     }
 
-    fn get_testpipeline(field_def: FieldDefinition) -> Box<PipelineElement<TestContainer>> {
-        Box::new(pipeline!(StringFunnel::new(field_def), WhitespaceTokenizer<TestContainer>))
-    }
-
     #[test]
     fn pipeline_mode() {
         let mut index = new_index("pipeline_mode");
         let text_field_def = FieldDefinition(FieldId(0), FieldType::Text);
-        index.add_field::<String>(text_field_def, get_testpipeline(text_field_def));
+        index.add_field::<String>(text_field_def,
+                                  Pipeline::new(vec![Box::new(WhitespaceTokenizer {})]));
 
         index.index_field(DocId(0), text_field_def, "this is a test");
+        index.index_field(DocId(1), text_field_def, "this is a title");
         index.commit();
-        assert_eq!(index.query_field(&Field(text_field_def, "test".to_owned())), vec![DocId(0)]);
+        assert_eq!(index.query_field(&Field(text_field_def, "test".to_owned())),
+                   vec![DocId(0)]);
+        assert_eq!(index.query_field(&Field(text_field_def, "title".to_owned())),
+                   vec![DocId(1)]);
     }
-    
+
+    #[test]
+    fn different_pipelines() {
+        let mut index = new_index("different_pipelines");
+        let text_def1 = FieldDefinition(FieldId(0), FieldType::Text);
+        let text_def2 = FieldDefinition(FieldId(1), FieldType::Text);
+        index.add_field::<String>(text_def1,
+                                  Pipeline::new(vec![Box::new(WhitespaceTokenizer {}),
+                                                     Box::new(LowercaseFilter {})]));
+        index.add_field::<String>(text_def2,
+                                  Pipeline::new(vec![Box::new(WhitespaceTokenizer {})]));
+        index.index_field(DocId(0), text_def1, "THIS is a test");
+        index.index_field(DocId(1), text_def1, "this is a title");
+        index.index_field(DocId(0), text_def2, "THIS is a test");
+        index.index_field(DocId(1), text_def2, "this is a title");
+        index.commit();
+        assert_eq!(index.query_field(&Field(text_def1, "this".to_owned())),
+                   vec![DocId(0), DocId(1)]);
+        assert_eq!(index.query_field(&Field(text_def2, "this".to_owned())),
+                   vec![DocId(1)]);
+        
+    }
+
     // #[test]
     // fn one_document() {
     //     let mut index = new_index("one_document");
@@ -214,7 +225,8 @@ mod tests {
     //     index.index_field(DocId(0), Field(text_field_def, "title".to_string()));
     //     // Commit the index.
     //     index.commit();
-    //     assert_eq!(index.query_field(&Field(text_field_def, "title".to_string())),
+    // assert_eq!(index.query_field(&Field(text_field_def,
+    // "title".to_string())),
     //                vec![DocId(0)]);
     // }
 
@@ -225,8 +237,10 @@ mod tests {
     //     // Add a field
     //     index.add_field::<String>(FieldDefinition(FieldId(0), FieldType::Text));
     //     // Index a new documnet
-    //     index.index_field(DocId(0), Field(text_field_def, "This is a test title"));
-    //     index.index_field(DocId(1), Field(text_field_def, "This is a test text"));
+    // index.index_field(DocId(0), Field(text_field_def, "This is a test
+    // title"));
+    // index.index_field(DocId(1), Field(text_field_def, "This is a test
+    // text"));
 
     //     // Commit the index.
     //     index.commit();
@@ -245,11 +259,13 @@ mod tests {
     //     index.add_field::<String>(text_field1);
 
     //     index.index_field(DocId(0), Field(text_field0, "This is a test title"));
-    //     index.index_field(DocId(0), Field(text_field1, "This is a test content"));
+    // index.index_field(DocId(0), Field(text_field1, "This is a test
+    // content"));
 
 
     //     index.index_field(DocId(1), Field(text_field0, "This is a test title"));
-    //     index.index_field(DocId(1), Field(text_field1, "This is a test content"));
+    // index.index_field(DocId(1), Field(text_field1, "This is a test
+    // content"));
 
     //     index.commit();
     //     assert_eq!(index.query_field(&Field(text_field0, "content")), vec![]);
@@ -277,7 +293,8 @@ mod tests {
     //     index.index_field(DocId(0), Field(text_field0, "Mars"));
     //     index.index_field(DocId(0),
     //                       Field(text_field1,
-    //                             "Mars is the fourth planet from the Sun and the second-smallest \
+    // "Mars is the fourth planet from the Sun and the
+    // second-smallest \
     //                              planet in the Solar System, after Mercury."));
     //     index.index_field(DocId(0), Field(num_field2, 4));
     //     index.index_field(DocId(0), Field(num_field3, 2));
@@ -285,7 +302,8 @@ mod tests {
     //     index.index_field(DocId(1), Field(text_field0, "Sun"));
     //     index.index_field(DocId(1),
     //                       Field(text_field1,
-    //                             "The Sun is the star at the center of the Solar System."));
+    // "The Sun is the star at the center of the Solar
+    // System."));
     //     index.index_field(DocId(1), Field(num_field3, 1));
 
     //     // Moon
@@ -293,8 +311,10 @@ mod tests {
     //     index.index_field(DocId(2), Field(text_field0, "Moon"));
     //     index.index_field(DocId(2),
     //                       Field(text_field1,
-    //                             "The Moon is an astronomical body that orbits planet Earth, \
-    //                              being Earth's only permanent natural satellite."));
+    // "The Moon is an astronomical body that orbits
+    // planet Earth, \
+    // being Earth's only permanent natural
+    // satellite."));
     //     index.index_field(DocId(2), Field(num_field3, 3));
 
     //     index.commit();
