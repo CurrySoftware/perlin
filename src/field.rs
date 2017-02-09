@@ -1,5 +1,3 @@
-use language::pipeline::PipelineElement;
-
 /// Uniquely identifies a field
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, PartialEq, Eq)]
 pub struct FieldId(pub u64);

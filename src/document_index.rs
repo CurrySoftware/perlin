@@ -1,6 +1,5 @@
 use std::hash::Hash;
 use std::path::{PathBuf, Path};
-use std::str::FromStr;
 
 use std::collections::BTreeMap;
 
@@ -21,8 +20,6 @@ pub struct DocumentIndex<TContainer> {
     doc_id_counter: DocId,
     // The base path of this index.
     base_path: PathBuf,
-    // A, possible shared between many DocumentIndices, vocabulary for string-terms
-    vocabulary: SharedVocabulary<String>,
     index_container: TContainer,
     pipelines: BTreeMap<FieldId, Box<PipelineElement<TContainer>>>,
 
@@ -50,9 +47,8 @@ pub trait PipelineProvider {
 
 impl<TContainer: Default + Commitable> DocumentIndex<TContainer> {
     /// Create a new index.
-    pub fn new(path: &Path, vocab: SharedVocabulary<String>) -> Self {
+    pub fn new(path: &Path) -> Self {
         DocumentIndex {
-            vocabulary: vocab,
             doc_id_counter: DocId::none(),
             base_path: path.to_path_buf(),
             index_container: TContainer::default(),
@@ -115,7 +111,6 @@ mod tests {
     use document::DocumentBuilder;
     use field::{FieldDefinition, FieldType, FieldId, Field};
     use language::{StringFunnel, WhitespaceTokenizer, PipelineElement, CanAppend};
-    use language::pipeline;
     
     use std::collections::BTreeMap;
 
@@ -183,7 +178,7 @@ mod tests {
     impl Default for TestContainer {
         fn default() -> Self {
             TestContainer {
-                cur_doc_id: DocId(0),
+                cur_doc_id: DocId::none(),
                 text_fields: BTreeMap::new(),
                 num_fields: BTreeMap::new(),
             }
@@ -191,8 +186,7 @@ mod tests {
     }
 
     fn new_index(name: &str) -> DocumentIndex<TestContainer> {
-        DocumentIndex::new(&create_test_dir(format!("perlin_index/{}", name).as_str()),
-                           SharedVocabulary::new())
+        DocumentIndex::new(&create_test_dir(format!("perlin_index/{}", name).as_str()))
     }
 
     fn get_testpipeline(field_def: FieldDefinition) -> Box<PipelineElement<TestContainer>> {

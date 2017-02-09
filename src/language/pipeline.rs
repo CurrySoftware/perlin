@@ -1,5 +1,3 @@
-use field::FieldDefinition;
-
 /// One element in the pipeline. Call it by calling apply
 /// It will do one of three things with a token
 /// 1. Consume it
