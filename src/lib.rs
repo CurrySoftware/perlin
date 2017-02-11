@@ -1,3 +1,4 @@
+#![feature(log_syntax)]
 //! perlin is a free and open source search engine library build on top of
 //! perlin-core
 //!
@@ -9,6 +10,7 @@
 //! [https://doc.perlin-ir.org/v0.1/perlin/index.html] for documentation
 
 extern crate perlin_core;
+extern crate rust_stemmers;
 
 #[macro_use]
 pub mod language;
