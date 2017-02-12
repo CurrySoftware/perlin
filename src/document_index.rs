@@ -165,6 +165,14 @@ mod tests {
         }
     }
 
+    impl<'a> TermIndexer<&'a str> for TestContainer {
+        fn index_term(&mut self, field: FieldId, doc_id: DocId, term: &'a str) {
+            if let Some(index) = self.text_fields.get_mut(&field) {
+                index.index_term(term.to_owned(), doc_id);
+            }
+        }
+    }
+
     impl TermQuerier<String> for TestContainer {
         fn query_term(&self, field: &Field<String>) -> Vec<Posting> {
             if let Some(index) = self.text_fields.get(&(field.0).0) {
@@ -172,8 +180,19 @@ mod tests {
             } else {
                 panic!();
             }
+        }        
+    }
+
+    impl TermQuerier<u64> for TestContainer {
+        fn query_term(&self, field: &Field<u64>) -> Vec<Posting> {
+            if let Some(index) = self.num_fields.get(&(field.0).0) {
+                index.query_atom(&field.1)
+            } else {
+                panic!();
+            }
         }
     }
+
 
     impl Commitable for TestContainer {
         fn commit(&mut self) {
@@ -218,27 +237,47 @@ mod tests {
                    vec![DocId(0), DocId(1)]);
     }
 
-    // #[test]
-    // fn different_pipelines() {
-    //     let mut index = new_index("different_pipelines");
-    //     let text_def1 = FieldDefinition(FieldId(0), FieldType::Text);
-    //     let text_def2 = FieldDefinition(FieldId(1), FieldType::Text);
-    //     index.add_field::<String>(text_def1,
-    //                               Pipeline::new(vec![Box::new(WhitespaceTokenizer {}),
-    //                                                  Box::new(LowercaseFilter {})]));
-    //     index.add_field::<String>(text_def2,
-    //                               Pipeline::new(vec![Box::new(WhitespaceTokenizer {})]));
-    //     index.index_field(DocId(0), text_def1, "THIS is a test");
-    //     index.index_field(DocId(1), text_def1, "this is a title");
-    //     index.index_field(DocId(0), text_def2, "THIS is a test");
-    //     index.index_field(DocId(1), text_def2, "this is a title");
-    //     index.commit();
-    //     assert_eq!(index.query_field(&Field(text_def1, "this".to_owned())),
-    //                vec![DocId(0), DocId(1)]);
-    //     assert_eq!(index.query_field(&Field(text_def2, "this".to_owned())),
-    //                vec![DocId(1)]);
-        
-    // }
+    #[test]
+    fn different_pipelines() {
+        let mut index = new_index("different_pipelines");
+        let text_def1 = FieldDefinition(FieldId(0), FieldType::Text);
+        let text_def2 = FieldDefinition(FieldId(1), FieldType::Text);
+        index.add_field::<String>(text_def1,
+                                  pipeline!( WhitespaceTokenizer
+                                             > LowercaseFilter ));
+        index.add_field::<String>(text_def2,
+                                  pipeline!( WhitespaceTokenizer ));                                             
+        index.index_field(DocId(0), text_def1, "THIS is a test");
+        index.index_field(DocId(1), text_def1, "this is a title");
+        index.index_field(DocId(0), text_def2, "THIS is a test");
+        index.index_field(DocId(1), text_def2, "this is a title");
+        index.commit();
+        assert_eq!(index.query_field(&Field(text_def1, "this".to_owned())),
+                   vec![DocId(0), DocId(1)]);
+        assert_eq!(index.query_field(&Field(text_def2, "this".to_owned())),
+                   vec![DocId(1)]);        
+    }
+
+    #[test]
+    fn multityped_pipeline() {
+        let mut index = new_index("multityped_pipelines");
+        let text_def1 = FieldDefinition(FieldId(0), FieldType::Text);
+        let num_def2 = FieldDefinition(FieldId(1), FieldType::Number);
+        index.add_field::<String>(text_def1,
+                                  pipeline!( WhitespaceTokenizer
+                                             > NumberFilter
+                                                 | [FieldId(1)]
+                                             > LowercaseFilter ));
+        index.add_field::<u64>(num_def2,
+                               pipeline!( NumberFilter | [FieldId(1)] >  ));
+        index.index_field(DocId(0), text_def1, "These are 10 tests");
+        index.index_field(DocId(1), text_def1, "this is 1 single title");
+        index.commit();
+        assert_eq!(index.query_field(&Field(text_def1, "this".to_owned())),
+                   vec![DocId(1)]);
+        assert_eq!(index.query_field(&Field(num_def2, 10)),
+                   vec![DocId(0)]);
+    }
 
     // #[test]
     // fn one_document() {

@@ -1,4 +1,3 @@
-#![feature(log_syntax)]
 //! perlin is a free and open source search engine library build on top of
 //! perlin-core
 //!
