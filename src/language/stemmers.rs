@@ -1,6 +1,5 @@
 use rust_stemmers::{Algorithm, Stemmer as RStemmer};
 
-use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use language::CanApply;
@@ -13,10 +12,11 @@ pub struct Stemmer<T, TCallback>
 }
 
 impl<T, TCallback> CanApply<String, T> for Stemmer<T, TCallback>
-    where TCallback: for<'r> CanApply<Cow<'r, str>, T>
+    where TCallback: CanApply<String, T>
 {
+    type Output = TCallback::Output;
     fn apply(&self, input: String, t: &mut T) {
-        self.callback.apply(self.stemmer.stem(&input), t);
+        self.callback.apply(self.stemmer.stem(&input).into_owned(), t);
     }
 }
 

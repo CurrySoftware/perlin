@@ -1,8 +1,6 @@
 use std::hash::Hash;
 use std::path::{PathBuf, Path};
 
-use std::collections::BTreeMap;
-
 use perlin_core::index::Index;
 use perlin_core::index::vocabulary::SharedVocabulary;
 use perlin_core::index::posting::{Posting, DocId};
@@ -12,23 +10,28 @@ use language::CanApply;
 
 use field::{FieldDefinition, Field, FieldId};
 
-type Pipeline<T> = Box<Fn(DocId, FieldId) -> Box<for<'r> CanApply<&'r str, T>>>;
+type Pipeline<T, Out> = Box<Fn(DocId, FieldId) -> Box<for<'r> CanApply<&'r str, T, Output=Out>>>;
 
 /// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
 /// and provides an abstraction that can be used to index and query documents
 /// using fields, metadata, taxonomies etc
-pub struct DocumentIndex<TContainer> {
+pub struct DocumentIndex<TContainer, TPipelineContainer> {
     // We need to overwrite perlin_core's default DocIds as some Documents might contain
     // other fields than others. This counter acts as DocumentIndex global document counter.
     doc_id_counter: DocId,
     // The base path of this index.
     base_path: PathBuf,
     index_container: TContainer,
-    pipelines: BTreeMap<FieldId, Pipeline<TContainer>>,
+    pipeline_container: TPipelineContainer
 }
 
 pub trait IndexContainer<T: Hash + Eq> {
     fn manage_index(&mut self, FieldDefinition, Index<T>);
+}
+
+pub trait PipelineContainer<TContainer, TOutput> {
+    fn manage_pipeline(&mut self, FieldDefinition, Pipeline<TContainer, TOutput>);
+    fn apply_pipeline(&mut self, &mut TContainer, FieldDefinition, DocId, &str);    
 }
 
 pub trait Commitable {
@@ -43,47 +46,45 @@ pub trait TermQuerier<T> {
     fn query_term(&self, &Field<T>) -> Vec<Posting>;
 }
 
-impl<TContainer: Default + Commitable> DocumentIndex<TContainer> {
+impl<TContainer: Default + Commitable, TPipelineContainer: Default> DocumentIndex<TContainer, TPipelineContainer> {
     /// Create a new index.
     pub fn new(path: &Path) -> Self {
         DocumentIndex {
             doc_id_counter: DocId::none(),
             base_path: path.to_path_buf(),
             index_container: TContainer::default(),
-            pipelines: BTreeMap::new(),
+            pipeline_container: TPipelineContainer::default(),
         }
     }
 
     pub fn add_field<TTerm: Hash + Eq + Ord>(&mut self,
                                              field_def: FieldDefinition,
-                                             pipeline: Pipeline<TContainer>)
+                                             pipeline: Pipeline<TContainer, TTerm>)
                                              -> Result<(), ()>
-        where TContainer: IndexContainer<TTerm>
+        where TContainer: IndexContainer<TTerm>,
+              TPipelineContainer: PipelineContainer<TContainer, TTerm>
     {
         let FieldDefinition(field_id, _) = field_def;
         let page_cache = RamPageCache::new(FsPageManager::new(&self.base_path
             .join(format!("{}_pages.bin", field_id.0).to_string())));
         self.index_container.manage_index(field_def,
                                           Index::<TTerm>::new(page_cache, SharedVocabulary::new()));
-        self.pipelines.insert(field_id, pipeline);
+        self.pipeline_container.manage_pipeline(field_def,
+                                                pipeline);
         Ok(())
     }
 
+
+    /// Indexes a field
+    pub fn index_field<TTerm>(&mut self, doc_id: DocId, field: FieldDefinition, content: &str)
+        where TPipelineContainer: PipelineContainer<TContainer, TTerm>
+    {
+        self.pipeline_container.apply_pipeline(&mut self.index_container,field, doc_id, content);
+    }
+    
     pub fn get_next_doc_id(&mut self) -> DocId {
         self.doc_id_counter.inc();
         self.doc_id_counter
-    }
-
-    /// Indexes a field
-    pub fn index_field(&mut self, doc_id: DocId, field: FieldDefinition, content: &str)
-        where TContainer: TermIndexer<String>
-    {
-        if let Some(pipe) = self.pipelines.get(&field.0) {
-            let container = &mut self.index_container;
-            pipe(doc_id, field.0).apply(content, container);
-        } else {
-            panic!();
-        }
     }
 
     /// Commits this index
@@ -103,6 +104,7 @@ impl<TContainer: Default + Commitable> DocumentIndex<TContainer> {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,7 +115,8 @@ mod tests {
     use document::DocumentBuilder;
     use field::{FieldDefinition, FieldType, FieldId, Field};
     use language::*;
-
+    use language::integers::*;
+    
     use std::collections::BTreeMap;
 
     use perlin_core::index::vocabulary::SharedVocabulary;
@@ -122,8 +125,46 @@ mod tests {
 
     use std::borrow::Cow;
 
-    struct TestContainer {
-        cur_doc_id: DocId,
+    struct TestPipelineContainer {
+        text_pipelines: BTreeMap<FieldId, Pipeline<TestContainer, String>>,
+        num_pipelines: BTreeMap<FieldId, Pipeline<TestContainer, u64>>
+    }
+
+    impl Default for TestPipelineContainer {
+        fn default() -> Self {
+            TestPipelineContainer {
+                text_pipelines: BTreeMap::new(),
+                num_pipelines: BTreeMap::new()
+            }
+        }
+    }
+
+    impl PipelineContainer<TestContainer, String> for TestPipelineContainer {
+        fn manage_pipeline(&mut self, def: FieldDefinition, pipe: Pipeline<TestContainer, String>) {
+            self.text_pipelines.insert(def.0, pipe);
+        }
+
+        fn apply_pipeline(&mut self, cont: &mut TestContainer, def: FieldDefinition, doc_id: DocId, input: &str) {
+            if let Some(pipe) = self.text_pipelines.get(&def.0) {
+                pipe(doc_id, def.0).apply(input, cont);
+            }
+        }
+    }
+
+    impl PipelineContainer<TestContainer, u64> for TestPipelineContainer {
+        fn manage_pipeline(&mut self, def: FieldDefinition, pipe: Pipeline<TestContainer, u64>) {
+            self.num_pipelines.insert(def.0, pipe);
+        }
+
+        fn apply_pipeline(&mut self, cont: &mut TestContainer, def: FieldDefinition, doc_id: DocId, input: &str) {
+            if let Some(pipe) = self.num_pipelines.get(&def.0) {
+                pipe(doc_id, def.0).apply(input, cont);
+            }
+        }
+    }
+    
+    
+    struct TestContainer {    
         text_fields: BTreeMap<FieldId, Index<String>>,
         num_fields: BTreeMap<FieldId, Index<u64>>,
     }
@@ -138,7 +179,7 @@ mod tests {
     impl IndexContainer<u64> for TestContainer {
         fn manage_index(&mut self, def: FieldDefinition, index: Index<u64>) {
             self.num_fields.insert(def.0, index);
-        }
+        }       
     }
 
     impl TermIndexer<String> for TestContainer {
@@ -149,26 +190,10 @@ mod tests {
         }
     }
 
-    impl TermIndexer<usize> for TestContainer {
-        fn index_term(&mut self, field: FieldId, doc_id: DocId, term: usize) {
+    impl TermIndexer<u64> for TestContainer {
+        fn index_term(&mut self, field: FieldId, doc_id: DocId, term: u64) {
             if let Some(index) = self.num_fields.get_mut(&field) {
-                index.index_term(term as u64, doc_id);
-            }
-        }
-    }
-
-    impl<'a> TermIndexer<Cow<'a, str>> for TestContainer {
-        fn index_term(&mut self, field: FieldId, doc_id: DocId, term: Cow<'a, str>) {
-            if let Some(index) = self.text_fields.get_mut(&field) {
-                index.index_term(term.into_owned(), doc_id);
-            }
-        }
-    }
-
-    impl<'a> TermIndexer<&'a str> for TestContainer {
-        fn index_term(&mut self, field: FieldId, doc_id: DocId, term: &'a str) {
-            if let Some(index) = self.text_fields.get_mut(&field) {
-                index.index_term(term.to_owned(), doc_id);
+                index.index_term(term, doc_id);
             }
         }
     }
@@ -205,14 +230,13 @@ mod tests {
     impl Default for TestContainer {
         fn default() -> Self {
             TestContainer {
-                cur_doc_id: DocId::none(),
                 text_fields: BTreeMap::new(),
                 num_fields: BTreeMap::new(),
             }
         }
     }
 
-    fn new_index(name: &str) -> DocumentIndex<TestContainer> {
+    fn new_index(name: &str) -> DocumentIndex<TestContainer, TestPipelineContainer> {
         DocumentIndex::new(&create_test_dir(format!("perlin_index/{}", name).as_str()))
     }
 
@@ -226,8 +250,8 @@ mod tests {
                                              > Stemmer(rust_stemmers::Algorithm::English)));
                                       
  
-        index.index_field(DocId(0), text_field_def, "this is a TEST");
-        index.index_field(DocId(1), text_field_def, "THIS is a title");
+        index.index_field::<String>(DocId(0), text_field_def, "this is a TEST");
+        index.index_field::<String>(DocId(1), text_field_def, "THIS is a title");
         index.commit();
         assert_eq!(index.query_field(&Field(text_field_def, "test".to_owned())),
                    vec![DocId(0)]);
@@ -244,18 +268,19 @@ mod tests {
         let text_def2 = FieldDefinition(FieldId(1), FieldType::Text);
         index.add_field::<String>(text_def1,
                                   pipeline!( WhitespaceTokenizer
-                                             > LowercaseFilter ));
+                                             > LowercaseFilter
+                                             > Stemmer(rust_stemmers::Algorithm::English)));
         index.add_field::<String>(text_def2,
-                                  pipeline!( WhitespaceTokenizer ));                                             
-        index.index_field(DocId(0), text_def1, "THIS is a test");
-        index.index_field(DocId(1), text_def1, "this is a title");
-        index.index_field(DocId(0), text_def2, "THIS is a test");
-        index.index_field(DocId(1), text_def2, "this is a title");
+                                  pipeline!( WhitespaceTokenizer > LowercaseFilter ));
+        index.index_field::<String>(DocId(0), text_def1, "THIS is a title");
+        index.index_field::<String>(DocId(1), text_def1, "this is a titles");
+        index.index_field::<String>(DocId(0), text_def2, "THIS is a title");
+        index.index_field::<String>(DocId(1), text_def2, "this is a titles");
         index.commit();
-        assert_eq!(index.query_field(&Field(text_def1, "this".to_owned())),
+        assert_eq!(index.query_field(&Field(text_def1, "titl".to_owned())),
                    vec![DocId(0), DocId(1)]);
-        assert_eq!(index.query_field(&Field(text_def2, "this".to_owned())),
-                   vec![DocId(1)]);        
+        assert_eq!(index.query_field(&Field(text_def2, "title".to_owned())),
+                   vec![DocId(0)]);        
     }
 
     #[test]
@@ -266,12 +291,11 @@ mod tests {
         index.add_field::<String>(text_def1,
                                   pipeline!( WhitespaceTokenizer
                                              > NumberFilter
-                                                 | [FieldId(1)]
+                                             | [FieldId(1)]
                                              > LowercaseFilter ));
-        index.add_field::<u64>(num_def2,
-                               pipeline!( NumberFilter | [FieldId(1)] >  ));
-        index.index_field(DocId(0), text_def1, "These are 10 tests");
-        index.index_field(DocId(1), text_def1, "this is 1 single title");
+        index.add_field::<u64>(num_def2, pipeline!( ToU64 ));
+        index.index_field::<String>(DocId(0), text_def1, "These are 10 tests");
+        index.index_field::<String>(DocId(1), text_def1, "this is 1 single title");
         index.commit();
         assert_eq!(index.query_field(&Field(text_def1, "this".to_owned())),
                    vec![DocId(1)]);

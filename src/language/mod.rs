@@ -1,4 +1,3 @@
-use std::str::FromStr;
 use std::marker::PhantomData;
 
 use document_index::TermIndexer;
@@ -7,11 +6,14 @@ use field::FieldId;
 use perlin_core::index::posting::DocId;
 
 mod stemmers;
+pub mod integers;
 
 pub use language::stemmers::Stemmer;
 
-
+/// The single central trait of the push-based splittable pipeline!
+/// Any element in it can be called passing a typed and generic input and a common value
 pub trait CanApply<Input, T> {
+    type Output;
     fn apply(&self, Input, &mut T);
 }
 
@@ -31,7 +33,8 @@ impl<T, TCallback> WhitespaceTokenizer<T, TCallback> {
 }
 
 impl<'a, T, TCallback> CanApply<&'a str, T> for WhitespaceTokenizer<T, TCallback>
-    where TCallback: for<'r> CanApply<&'r str, T> {
+    where TCallback: CanApply<&'a str, T> {
+    type Output = TCallback::Output;
     fn apply(&self, input: &'a str, t: &mut T) {
         for token in input.split_whitespace() {
             self.callback.apply(token, t);
@@ -57,42 +60,12 @@ impl<T, TCallback> LowercaseFilter<T, TCallback> {
 impl<'a, T, TCallback> CanApply<&'a str, T> for LowercaseFilter<T, TCallback>
     where TCallback: CanApply<String, T>
 {
+    type Output = TCallback::Output;
     fn apply(&self, input: &str, t: &mut T) {
         self.callback.apply(input.to_lowercase(), t)
     }
 }
 
-pub struct NumberFilter<T, TStringCallback, TNumberCallback>
-{
-    string_callback: TStringCallback,
-    number_callback: TNumberCallback,
-    _ty: PhantomData<T>
-}
-
-impl<T, TSCB, TNCB>  NumberFilter<T, TSCB, TNCB> {
-    pub fn create(number_callback: TNCB,
-              string_callback: TSCB) -> Self {
-        NumberFilter{
-            string_callback: string_callback,
-            number_callback: number_callback,
-            _ty: PhantomData
-        }
-    }
-}
-
-impl<'a, T, TStringCallback, TNumberCallback> CanApply<&'a str, T>
-    for NumberFilter<T, TStringCallback, TNumberCallback>
-    where TStringCallback: for<'r> CanApply<&'r str, T>,
-          TNumberCallback: CanApply<usize, T>
-{
-    fn apply(&self, input: &str, t: &mut T) {
-        if let Ok(number) = usize::from_str(input) {
-            self.number_callback.apply(number, t);
-        } else {
-            self.string_callback.apply(input, t);
-        }
-    }
-}
 
 pub struct IndexerFunnel
 {
@@ -111,6 +84,9 @@ impl IndexerFunnel {
 
 impl<TTerm, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel
     where TContainer: TermIndexer<TTerm> {
+
+    type Output = TTerm;
+    
     fn apply(&self, input: TTerm, container: &mut TContainer) {
         container.index_term(self.field_id, self.doc_id, input);
     }
