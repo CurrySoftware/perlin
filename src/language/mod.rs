@@ -69,6 +69,17 @@ pub struct NumberFilter<T, TStringCallback, TNumberCallback>
     _ty: PhantomData<T>
 }
 
+impl<T, TSCB, TNCB>  NumberFilter<T, TSCB, TNCB> {
+    pub fn create(number_callback: TNCB,
+              string_callback: TSCB) -> Self {
+        NumberFilter{
+            string_callback: string_callback,
+            number_callback: number_callback,
+            _ty: PhantomData
+        }
+    }
+}
+
 impl<'a, T, TStringCallback, TNumberCallback> CanApply<&'a str, T>
     for NumberFilter<T, TStringCallback, TNumberCallback>
     where TStringCallback: for<'r> CanApply<&'r str, T>,
@@ -106,7 +117,19 @@ impl<TTerm, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel
 }
 
 
+macro_rules! funnel {
+    ($doc_id:expr, $field_id:expr) => {
+        IndexerFunnel::create(DocId(0), $field_id)
+    }
+}
+
 macro_rules! inner_pipeline {
+    ($element:ident($($param:expr),+) | [$doc_id:expr, $field_id:expr] > $($x:tt)*) => {
+        $element::create($($param),+ , funnel!($doc_id, $field_id), inner_pipeline!($($x)*))        
+    };
+    ($element:ident | [$doc_id:expr, $field_id:expr] > $($x:tt)*) => {
+        $element::create(funnel!($doc_id, $field_id), inner_pipeline!($($x)*))        
+    };
     ($element:ident($($param:expr),+) > $($x:tt)*) => {
         $element::create($($param),+ , inner_pipeline!($($x)*))        
     };

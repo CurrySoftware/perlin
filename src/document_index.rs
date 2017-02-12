@@ -149,6 +149,14 @@ mod tests {
         }
     }
 
+    impl TermIndexer<usize> for TestContainer {
+        fn index_term(&mut self, field: FieldId, doc_id: DocId, term: usize) {
+            if let Some(index) = self.num_fields.get_mut(&field) {
+                index.index_term(term as u64, doc_id);
+            }
+        }
+    }
+
     impl<'a> TermIndexer<Cow<'a, str>> for TestContainer {
         fn index_term(&mut self, field: FieldId, doc_id: DocId, term: Cow<'a, str>) {
             if let Some(index) = self.text_fields.get_mut(&field) {
@@ -195,6 +203,8 @@ mod tests {
         let text_field_def = FieldDefinition(FieldId(0), FieldType::Text);
         index.add_field::<String>(text_field_def,
                                   pipeline!( WhitespaceTokenizer
+                                             > NumberFilter
+                                                 | [doc_id, FieldId(1)]
                                              > LowercaseFilter                                             
                                              > Stemmer(rust_stemmers::Algorithm::English)));
                                       
