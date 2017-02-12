@@ -203,19 +203,19 @@ mod tests {
         let text_field_def = FieldDefinition(FieldId(0), FieldType::Text);
         index.add_field::<String>(text_field_def,
                                   pipeline!( WhitespaceTokenizer
-                                             > NumberFilter
-                                                 | [doc_id, FieldId(1)]
                                              > LowercaseFilter                                             
                                              > Stemmer(rust_stemmers::Algorithm::English)));
                                       
  
-        index.index_field(DocId(0), text_field_def, "this is a test");
-        index.index_field(DocId(1), text_field_def, "this is a title");
+        index.index_field(DocId(0), text_field_def, "this is a TEST");
+        index.index_field(DocId(1), text_field_def, "THIS is a title");
         index.commit();
         assert_eq!(index.query_field(&Field(text_field_def, "test".to_owned())),
                    vec![DocId(0)]);
         assert_eq!(index.query_field(&Field(text_field_def, "titl".to_owned() /*Because it is stemmed!*/)),
                    vec![DocId(1)]);
+        assert_eq!(index.query_field(&Field(text_field_def, "this".to_owned())),
+                   vec![DocId(0), DocId(1)]);
     }
 
     // #[test]

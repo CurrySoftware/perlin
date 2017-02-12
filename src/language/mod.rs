@@ -119,24 +119,51 @@ impl<TTerm, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel
 
 macro_rules! funnel {
     ($doc_id:expr, $field_id:expr) => {
-        IndexerFunnel::create(DocId(0), $field_id)
+        IndexerFunnel::create($doc_id, $field_id)
     }
 }
 
 macro_rules! inner_pipeline {
-    ($element:ident($($param:expr),+) | [$doc_id:expr, $field_id:expr] > $($x:tt)*) => {
-        $element::create($($param),+ , funnel!($doc_id, $field_id), inner_pipeline!($($x)*))        
+    (;$doc_id:expr; ;$field_id:expr;
+     $element:ident($($param:expr),+) | [$this_field_id:expr] > $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element(params) | [field] > Next
+    {
+        $element::create($($param),+ ,
+                         funnel!($doc_id, $this_field_id),
+                         inner_pipeline!(;$doc_id; ;$field_id; ($x)*))        
     };
-    ($element:ident | [$doc_id:expr, $field_id:expr] > $($x:tt)*) => {
-        $element::create(funnel!($doc_id, $field_id), inner_pipeline!($($x)*))        
+    (;$doc_id:expr; ;$field_id:expr;
+     $element:ident | [$this_field_id:expr] > $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element | [field] > Next
+    {
+        $element::create(
+            funnel!($doc_id, $this_field_id),
+            inner_pipeline!(;$doc_id; ;$field_id; $($x)*))        
     };
-    ($element:ident($($param:expr),+) > $($x:tt)*) => {
-        $element::create($($param),+ , inner_pipeline!($($x)*))        
+    (;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+) > $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element(params) > Next
+    {
+        $element::create($($param),+ , inner_pipeline!(;$doc_id; ;$field_id; $($x)*))        
     };
-    ($element:ident > $($x:tt)*) => {
-        $element::create(inner_pipeline!($($x)*))
+    (;$doc_id:expr; ;$field_id:expr; $element:ident > $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element > Next
+    {
+        $element::create(inner_pipeline!(;$doc_id; ;$field_id; $($x)*))
     };
-    ($doc_id:expr; $field_id:expr) => {
+    (;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+)) =>
+    // ;doc_id; ;field_id; Element(params)
+    {
+        $element::create(
+            $($param),+ ,
+            inner_pipeline!(;$doc_id; ;$field_id;))
+    };
+    (;$doc_id:expr; ;$field_id:expr; $element:ident) =>
+    // ;doc_id; ;field_id; Element
+    {
+        $element::create(inner_pipeline!(;$doc_id; ;$field_id;))
+    };
+    
+    (;$doc_id:expr; ;$field_id:expr;) => {
         IndexerFunnel::create($doc_id, $field_id)
     };
     () => {}
@@ -146,7 +173,7 @@ macro_rules! inner_pipeline {
 macro_rules! pipeline {
     ($($x:tt)*) => {
         Box::new(move |doc_id: DocId, field_id: FieldId| {
-            Box::new(inner_pipeline!($($x)* > doc_id; field_id))
+            Box::new(inner_pipeline!(;doc_id; ;field_id; $($x)*))
         })
     }
 }
