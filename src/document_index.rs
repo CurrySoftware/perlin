@@ -112,18 +112,15 @@ mod tests {
     use rust_stemmers;
 
     use test_utils::create_test_dir;
-    use document::DocumentBuilder;
     use field::{FieldDefinition, FieldType, FieldId, Field};
     use language::*;
     use language::integers::*;
     
     use std::collections::BTreeMap;
 
-    use perlin_core::index::vocabulary::SharedVocabulary;
     use perlin_core::index::posting::{Posting, DocId};
     use perlin_core::index::Index;
 
-    use std::borrow::Cow;
 
     struct TestPipelineContainer {
         text_pipelines: BTreeMap<FieldId, Pipeline<TestContainer, String>>,
@@ -292,127 +289,19 @@ mod tests {
                                   pipeline!( WhitespaceTokenizer
                                              > NumberFilter
                                              | [FieldId(1)]
-                                             > LowercaseFilter ));
-        index.add_field::<u64>(num_def2, pipeline!( ToU64 ));
+                                             > LowercaseFilter )).unwrap();
+        index.add_field::<u64>(num_def2, pipeline!( ToU64 )).unwrap();
         index.index_field::<String>(DocId(0), text_def1, "These are 10 tests");
         index.index_field::<String>(DocId(1), text_def1, "this is 1 single title");
+        index.index_field::<u64>(DocId(2), num_def2, "15");
         index.commit();
         assert_eq!(index.query_field(&Field(text_def1, "this".to_owned())),
                    vec![DocId(1)]);
+        assert_eq!(index.query_field(&Field(text_def1, "10".to_owned())),
+                   vec![]);
         assert_eq!(index.query_field(&Field(num_def2, 10)),
                    vec![DocId(0)]);
+        assert_eq!(index.query_field(&Field(num_def2, 15)),
+                   vec![DocId(2)]);
     }
-
-    // #[test]
-    // fn one_document() {
-    //     let mut index = new_index("one_document");
-    //     let text_field_def = FieldDefinition(FieldId(0), FieldType::Text);
-    //     // Add a field
-    //     index.add_field::<String>(text_field_def);
-    //     // Index a new documnet
-    //     index.index_field(DocId(0), Field(text_field_def, "title".to_string()));
-    //     // Commit the index.
-    //     index.commit();
-    // assert_eq!(index.query_field(&Field(text_field_def,
-    // "title".to_string())),
-    //                vec![DocId(0)]);
-    // }
-
-    // #[test]
-    // fn multiple_documents() {
-    //     let mut index = new_index("multiple_documents");
-    //     let text_field_def = FieldDefinition(FieldId(0), FieldType::Text);
-    //     // Add a field
-    //     index.add_field::<String>(FieldDefinition(FieldId(0), FieldType::Text));
-    //     // Index a new documnet
-    // index.index_field(DocId(0), Field(text_field_def, "This is a test
-    // title"));
-    // index.index_field(DocId(1), Field(text_field_def, "This is a test
-    // text"));
-
-    //     // Commit the index.
-    //     index.commit();
-    //     assert_eq!(index.query_field(&Field(text_field_def, "title")),
-    //                vec![DocId(0)]);
-    //     assert_eq!(index.query_field(&Field(text_field_def, "test")),
-    //                vec![DocId(0), DocId(1)]);
-    // }
-
-    // #[test]
-    // fn multiple_fields() {
-    //     let mut index = new_index("multiple_fields");
-    //     let text_field0 = FieldDefinition(FieldId(0), FieldType::Text);
-    //     let text_field1 = FieldDefinition(FieldId(1), FieldType::Text);
-    //     index.add_field::<String>(text_field0);
-    //     index.add_field::<String>(text_field1);
-
-    //     index.index_field(DocId(0), Field(text_field0, "This is a test title"));
-    // index.index_field(DocId(0), Field(text_field1, "This is a test
-    // content"));
-
-
-    //     index.index_field(DocId(1), Field(text_field0, "This is a test title"));
-    // index.index_field(DocId(1), Field(text_field1, "This is a test
-    // content"));
-
-    //     index.commit();
-    //     assert_eq!(index.query_field(&Field(text_field0, "content")), vec![]);
-    //     assert_eq!(index.query_field(&Field(text_field0, "title")),
-    //                vec![DocId(0), DocId(1)]);
-    //     assert_eq!(index.query_field(&Field(text_field1, "content")),
-    //                vec![DocId(0), DocId(1)]);
-    //     assert_eq!(index.query_field(&Field(text_field1, "title")), vec![])
-    // }
-
-    // #[test]
-    // fn multiple_fieldtypes() {
-    //     let mut index = new_index("multiple_fieldtypes");
-    //     let text_field0 = FieldDefinition(FieldId(0), FieldType::Text);
-    //     let text_field1 = FieldDefinition(FieldId(1), FieldType::Text);
-    //     // Planet Number in solar system
-    //     let num_field2 = FieldDefinition(FieldId(2), FieldType::Number);
-    //     // Object type. 1=star 2=planet 3=moon
-    //     let num_field3 = FieldDefinition(FieldId(3), FieldType::Number);
-    //     index.add_field::<String>(text_field0);
-    //     index.add_field::<String>(text_field1);
-    //     index.add_field::<u64>(num_field2);
-    //     index.add_field::<u64>(num_field3);
-    //     // Mars
-    //     index.index_field(DocId(0), Field(text_field0, "Mars"));
-    //     index.index_field(DocId(0),
-    //                       Field(text_field1,
-    // "Mars is the fourth planet from the Sun and the
-    // second-smallest \
-    //                              planet in the Solar System, after Mercury."));
-    //     index.index_field(DocId(0), Field(num_field2, 4));
-    //     index.index_field(DocId(0), Field(num_field3, 2));
-    //     // Sun
-    //     index.index_field(DocId(1), Field(text_field0, "Sun"));
-    //     index.index_field(DocId(1),
-    //                       Field(text_field1,
-    // "The Sun is the star at the center of the Solar
-    // System."));
-    //     index.index_field(DocId(1), Field(num_field3, 1));
-
-    //     // Moon
-
-    //     index.index_field(DocId(2), Field(text_field0, "Moon"));
-    //     index.index_field(DocId(2),
-    //                       Field(text_field1,
-    // "The Moon is an astronomical body that orbits
-    // planet Earth, \
-    // being Earth's only permanent natural
-    // satellite."));
-    //     index.index_field(DocId(2), Field(num_field3, 3));
-
-    //     index.commit();
-    //     assert_eq!(index.query_field(&Field(text_field0, "Moon")),
-    //                vec![DocId(2)]);
-    //     assert_eq!(index.query_field(&Field(num_field2, 4)), vec![DocId(0)]);
-    //     assert_eq!(index.query_field(&Field(num_field3, 1)), vec![DocId(1)]);
-    //     assert_eq!(index.query_field(&Field(text_field0, "is")), vec![]);
-    //     assert_eq!(index.query_field(&Field(text_field1, "is")),
-    //                vec![DocId(0), DocId(1), DocId(2)]);
-
-    // }
 }
