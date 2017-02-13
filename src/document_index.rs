@@ -8,7 +8,7 @@ use perlin_core::page_manager::{RamPageCache, FsPageManager};
 
 use language::CanApply;
 
-pub type Pipeline<T, Out> = Box<Fn(DocId) -> Box<for<'r> CanApply<&'r str, T, Output=Out>>>;
+pub type Pipeline<Out, T> = Box<Fn(DocId) -> Box<for<'r> CanApply<&'r str, T, Output=Out>>>;
 
 /// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
 /// and provides an abstraction that can be used to index and query documents
@@ -41,18 +41,30 @@ impl DocumentIndex{
 
 }
 
-#[cfg(test)]
+//#[cfg(test)]
 mod tests {
     use document::PerlinDocument;
+    use document_index::Pipeline;
     use perlin_core::index::posting::DocId;
     use field::Field;
-    
+
+    use test_utils::create_test_dir;
 
     #[derive(PerlinDocument)]
     struct Test {
         t: Field<String, Test>
     }
+   
+    use language::{LowercaseFilter, IndexerFunnel, WhitespaceTokenizer};
+    
 
-    #[test]
-    fn test() {}
+    //#[test]
+    fn test() {
+        let mut t = Test::create(
+            &create_test_dir("doc_index/test"),
+            Some(pipeline!(WhitespaceTokenizer
+                             > LowercaseFilter )));
+
+        t.index_field(DocId(0), "t", "hans WAR ein GrüßeEndef Vogl");
+    }
 }

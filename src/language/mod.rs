@@ -64,33 +64,32 @@ impl<'a, T, TCallback> CanApply<&'a str, T> for LowercaseFilter<T, TCallback>
 }
 
 
-// pub struct IndexerFunnel<'a, T>
-// {
-//     doc_id: DocId,
-// }
+pub struct IndexerFunnel<T>
+{
+    doc_id: DocId,
+}
 
-// impl IndexerFunnel {
-//     pub fn create(doc_id: DocId) -> Self {
-//         IndexerFunnel {
-//             doc_id: doc_id
-//         }
-//     }
-// }
+impl IndexerFunnel {
+    pub fn create(doc_id: DocId) -> Self {
+        IndexerFunnel {
+            doc_id: doc_id
+        }
+    }
+}
+use std::fmt::Debug;
+impl<TTerm: Debug, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel{
 
-// impl<TTerm, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel
-//     where TContainer: TermIndexer<TTerm> {
-
-//     type Output = TTerm;
+    type Output = TTerm;
     
-//     fn apply(&self, input: TTerm, container: &mut TContainer) {
-//         container.index_term(self.field_id, self.doc_id, input);
-//     }
-// }
+    fn apply(&self, input: TTerm) {
+        println!("{:?}", input);
+    }
+}
 
 
 macro_rules! funnel {
-    ($doc_id:expr, $field_id:expr) => {
-        //IndexerFunnel::create($doc_id, $field_id)
+    ($doc_id:expr, $index:expr) => {
+        IndexerFunnel::create($doc_id, $index)
     }
 }
 
@@ -135,15 +134,15 @@ macro_rules! inner_pipeline {
     };
     
     (;$doc_id:expr; ;$field_id:expr;) => {
-       // IndexerFunnel::create($doc_id, $field_id)
+        IndexerFunnel::create($doc_id, $INDEX.t)
     };
     () => {}
 }
 
 #[macro_export]
 macro_rules! pipeline {
-    ($($x:tt)*) => {
-        Box::new(move |doc_id: DocId, field_id: FieldId| {
+    ($INDEX:ident : $($x:tt)*) => {
+        Box::new(move |doc_id: DocId. index: &mut $INDEX | {
             Box::new(inner_pipeline!(;doc_id; ;field_id; $($x)*))
         })
     }
