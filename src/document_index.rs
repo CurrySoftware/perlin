@@ -50,6 +50,7 @@ mod tests {
     #[derive(PerlinDocument)]
     struct Test {
         text: Field<String, Test>,
+        title: Field<String, Test>,
         number: Field<u64, Test>,
         emails: Field<usize, Test>,
     }
@@ -66,6 +67,10 @@ mod tests {
                            WhitespaceTokenizer
                            > NumberFilter
                            | [number]
+                           > LowercaseFilter
+                           > Stemmer(Algorithm::English))),
+            Some(pipeline!(Test: title
+                           WhitespaceTokenizer
                            > LowercaseFilter
                            > Stemmer(Algorithm::English))),
             None, None);
