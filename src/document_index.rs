@@ -1,5 +1,6 @@
 use std::hash::Hash;
 use std::path::{PathBuf, Path};
+use std::marker::PhantomData;
 
 use perlin_core::index::Index;
 use perlin_core::index::vocabulary::SharedVocabulary;
@@ -8,7 +9,7 @@ use perlin_core::page_manager::{RamPageCache, FsPageManager};
 
 use language::CanApply;
 
-pub type Pipeline<Out, T> = Box<Fn(DocId, T) -> Box<for<'r> CanApply<&'r str, Output=Out>>>;
+pub type Pipeline<Out, T> = Box<Fn() -> Box<Fn(DocId, &mut T, &str) -> PhantomData<Out>>>;
 
 /// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
 /// and provides an abstraction that can be used to index and query documents
@@ -50,21 +51,57 @@ mod tests {
 
     use test_utils::create_test_dir;
 
-    #[derive(PerlinDocument)]
+//    #[derive(PerlinDocument)]
     struct Test {
         t: Field<String, Test>
     }
-   
+
+  use std::path::Path;
+        impl Test {
+            pub fn create(path: &Path, t: Option<Pipeline<String, Test>>) -> Self {
+                use perlin_core::page_manager::{RamPageCache, FsPageManager};
+                let t_page_cache =
+                    RamPageCache::new(FsPageManager::new(&path.join("t_page_cache")));
+                Test { t: Field::create(t_page_cache, t) }
+            }
+        }
+        impl PerlinDocument for Test {
+            fn commit(&mut self) {
+                self.t.index.commit();
+            }
+            fn index_field(&mut self, doc_id: DocId, field_name: &str, field_contents: &str) {
+                let pipe = match field_name {
+                    "t" => {
+                        if let Some(ref pipeline) = self.t.pipeline {
+                            pipeline()
+                        } else {
+                            {
+                               panic!()
+                            }
+                        }
+                    }
+                    _ => {
+                            panic!()                        
+                    }
+                };
+                pipe(doc_id, self, field_contents);
+            }
+        }
+
+    
     use language::{LowercaseFilter, IndexerFunnel, WhitespaceTokenizer};
     
 
-    //#[test]
+    #[test]
     fn test() {
+        use perlin_core::index::posting::Posting;
         let mut t = Test::create(
             &create_test_dir("doc_index/test"),
             Some(pipeline!(Test: WhitespaceTokenizer
-                           > LowercaseFilter )));
+                               > LowercaseFilter )));
 
         t.index_field(DocId(0), "t", "hans WAR ein GrüßeEndef Vogl");
+        t.commit();
+        assert_eq!(t.t.index.query_atom(&"hans".to_string()), vec![Posting(DocId(0))]);
     }
 }

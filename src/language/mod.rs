@@ -11,7 +11,7 @@ pub use language::stemmers::Stemmer;
 /// Any element in it can be called passing a typed and generic input and a common value
 pub trait CanApply<Input> {
     type Output;
-    fn apply(&self, Input);
+    fn apply(&mut self, Input);
 }
 
 pub struct WhitespaceTokenizer<TCallback>    
@@ -30,7 +30,7 @@ impl<TCallback> WhitespaceTokenizer<TCallback> {
 impl<'a, TCallback> CanApply<&'a str> for WhitespaceTokenizer<TCallback>
     where TCallback: CanApply<&'a str> {
     type Output = TCallback::Output;
-    fn apply(&self, input: &'a str) {
+    fn apply(&mut self, input: &'a str) {
         for token in input.split_whitespace() {
             self.callback.apply(token);
         }
@@ -54,7 +54,7 @@ impl<'a, TCallback> CanApply<&'a str> for LowercaseFilter<TCallback>
     where TCallback: CanApply<String>
 {
     type Output = TCallback::Output;
-    fn apply(&self, input: &str) {
+    fn apply(&mut self, input: &str) {
         self.callback.apply(input.to_lowercase())
     }
 }
@@ -81,7 +81,7 @@ impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<
 
     type Output = TTerm;
     
-    fn apply(&self, input: TTerm) {
+    fn apply(&mut self, input: TTerm) {
         println!("INDEX: {:?}", input);
         self.index.index_term(input, self.doc_id);
     }
@@ -143,9 +143,14 @@ macro_rules! inner_pipeline {
 #[macro_export]
 macro_rules! pipeline {
     ($INDEX:ident : $($x:tt)*) => {
-        Box::new(move |doc_id: DocId, index: &mut $INDEX | {
-            Box::new(inner_pipeline!(;index; ;doc_id; ;field_id; $($x)*))
-        })
+        Box::new(|| {
+        Box::new(|doc_id: DocId, index: &mut $INDEX, content: &str| {
+            use language::CanApply;
+            use std::marker::PhantomData;
+            let mut pipe = inner_pipeline!(;index; ;doc_id; ;field_id; $($x)*);
+            pipe.apply(content);
+            PhantomData
+        })})
     }
 }
 

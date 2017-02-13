@@ -14,7 +14,7 @@ impl<TCallback> CanApply<String> for Stemmer<TCallback>
     where TCallback: CanApply<String>
 {
     type Output = TCallback::Output;
-    fn apply(&self, input: String) {
+    fn apply(&mut self, input: String) {
         self.callback.apply(self.stemmer.stem(&input).into_owned());
     }
 }

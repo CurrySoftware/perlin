@@ -29,7 +29,7 @@ impl<'a, TStringCallback, TNumberCallback> CanApply<&'a str>
           TNumberCallback: CanApply<u64>
 {
     type Output = TStringCallback::Output;
-    fn apply(&self, input: &'a str) {
+    fn apply(&mut self, input: &'a str) {
         if let Ok(number) = u64::from_str(input) {
             self.number_callback.apply(number);
         } else {
@@ -56,7 +56,7 @@ impl<'a, TCallback> CanApply<&'a str> for ToU64<TCallback>
     where TCallback: CanApply<u64>{
     type Output = TCallback::Output;
 
-    fn apply(&self, input: &'a str) {
+    fn apply(&mut self, input: &'a str) {
         if let Ok(number) = u64::from_str(input) {
             self.callback.apply(number);
         }
