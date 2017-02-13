@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use perlin_core::index::posting::DocId;
 
 mod stemmers;

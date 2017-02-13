@@ -4,7 +4,6 @@ use perlin_core::index::Index;
 use perlin_core::page_manager::RamPageCache;
 use perlin_core::index::vocabulary::SharedVocabulary;
 
-use document::PerlinDocument;
 use document_index::Pipeline;
 
 pub struct Field<T: Hash + Eq, TCont>{

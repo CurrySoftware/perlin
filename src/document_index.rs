@@ -1,13 +1,7 @@
-use std::hash::Hash;
 use std::path::{PathBuf, Path};
 use std::marker::PhantomData;
 
-use perlin_core::index::Index;
-use perlin_core::index::vocabulary::SharedVocabulary;
-use perlin_core::index::posting::{Posting, DocId};
-use perlin_core::page_manager::{RamPageCache, FsPageManager};
-
-use language::CanApply;
+use perlin_core::index::posting::{DocId};
 
 pub type Pipeline<Out, T> = Box<Fn() -> Box<Fn(DocId, &mut T, &str) -> PhantomData<Out>>>;
 

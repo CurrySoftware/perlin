@@ -1,7 +1,5 @@
 use rust_stemmers::{Algorithm, Stemmer as RStemmer};
 
-use std::marker::PhantomData;
-
 use language::CanApply;
 
 pub struct Stemmer<TCallback>
