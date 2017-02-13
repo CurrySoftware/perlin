@@ -9,80 +9,81 @@ pub use language::stemmers::Stemmer;
 
 /// The single central trait of the push-based splittable pipeline!
 /// Any element in it can be called passing a typed and generic input and a common value
-pub trait CanApply<Input, T> {
+pub trait CanApply<Input> {
     type Output;
-    fn apply(&self, Input, &mut T);
+    fn apply(&self, Input);
 }
 
-pub struct WhitespaceTokenizer<T, TCallback>    
+pub struct WhitespaceTokenizer<TCallback>    
 {
     callback: TCallback,
-    _ty: PhantomData<T>
 }
 
-impl<T, TCallback> WhitespaceTokenizer<T, TCallback> {
+impl<TCallback> WhitespaceTokenizer<TCallback> {
     pub fn create(callback: TCallback) -> Self {
         WhitespaceTokenizer {
-            callback: callback,
-            _ty: PhantomData
+            callback: callback
         }
     }
 }
 
-impl<'a, T, TCallback> CanApply<&'a str, T> for WhitespaceTokenizer<T, TCallback>
-    where TCallback: CanApply<&'a str, T> {
+impl<'a, TCallback> CanApply<&'a str> for WhitespaceTokenizer<TCallback>
+    where TCallback: CanApply<&'a str> {
     type Output = TCallback::Output;
-    fn apply(&self, input: &'a str, t: &mut T) {
+    fn apply(&self, input: &'a str) {
         for token in input.split_whitespace() {
-            self.callback.apply(token, t);
+            self.callback.apply(token);
         }
     }
 }
 
-pub struct LowercaseFilter<T, TCallback>
+pub struct LowercaseFilter<TCallback>
 {
     callback: TCallback,
-    _ty: PhantomData<T>
 }
 
-impl<T, TCallback> LowercaseFilter<T, TCallback> {
+impl<TCallback> LowercaseFilter<TCallback> {
     pub fn create(callback: TCallback) -> Self {
         LowercaseFilter{
             callback: callback,
-            _ty: PhantomData
         }
     }
 }
 
-impl<'a, T, TCallback> CanApply<&'a str, T> for LowercaseFilter<T, TCallback>
-    where TCallback: CanApply<String, T>
+impl<'a, TCallback> CanApply<&'a str> for LowercaseFilter<TCallback>
+    where TCallback: CanApply<String>
 {
     type Output = TCallback::Output;
-    fn apply(&self, input: &str, t: &mut T) {
-        self.callback.apply(input.to_lowercase(), t)
+    fn apply(&self, input: &str) {
+        self.callback.apply(input.to_lowercase())
     }
 }
 
+use perlin_core::index::Index;
+use std::hash::Hash;
 
-pub struct IndexerFunnel<T>
+pub struct IndexerFunnel<'a, T: 'a + Hash + Eq>
 {
     doc_id: DocId,
+    index: &'a mut Index<T>
 }
 
-impl IndexerFunnel {
-    pub fn create(doc_id: DocId) -> Self {
+impl<'a, T: Hash + Eq> IndexerFunnel<'a, T> {
+    pub fn create(doc_id: DocId, index: &'a mut Index<T>) -> Self {
         IndexerFunnel {
-            doc_id: doc_id
+            doc_id: doc_id,
+            index: index
         }
     }
 }
 use std::fmt::Debug;
-impl<TTerm: Debug, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel{
+impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<'a, TTerm>{
 
     type Output = TTerm;
     
     fn apply(&self, input: TTerm) {
-        println!("{:?}", input);
+        println!("INDEX: {:?}", input);
+        self.index.index_term(input, self.doc_id);
     }
 }
 
@@ -94,47 +95,47 @@ macro_rules! funnel {
 }
 
 macro_rules! inner_pipeline {
-    (;$doc_id:expr; ;$field_id:expr;
+    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr;
      $element:ident($($param:expr),+) | [$this_field_id:expr] > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element(params) | [field] > Next
     {
         $element::create($($param),+ ,
                          funnel!($doc_id, $this_field_id),
-                         inner_pipeline!(;$doc_id; ;$field_id; ($x)*))        
+                         inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; ($x)*))        
     };
-    (;$doc_id:expr; ;$field_id:expr;
+    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr;
      $element:ident | [$this_field_id:expr] > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element | [field] > Next
     {
         $element::create(
             funnel!($doc_id, $this_field_id),
-            inner_pipeline!(;$doc_id; ;$field_id; $($x)*))        
+            inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; $($x)*))        
     };
-    (;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+) > $($x:tt)*) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+) > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element(params) > Next
     {
-        $element::create($($param),+ , inner_pipeline!(;$doc_id; ;$field_id; $($x)*))        
+        $element::create($($param),+ , inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; $($x)*))        
     };
-    (;$doc_id:expr; ;$field_id:expr; $element:ident > $($x:tt)*) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element > Next
     {
-        $element::create(inner_pipeline!(;$doc_id; ;$field_id; $($x)*))
+        $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; $($x)*))
     };
-    (;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+)) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+)) =>
     // ;doc_id; ;field_id; Element(params)
     {
         $element::create(
             $($param),+ ,
-            inner_pipeline!(;$doc_id; ;$field_id;))
+            inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id;))
     };
-    (;$doc_id:expr; ;$field_id:expr; $element:ident) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident) =>
     // ;doc_id; ;field_id; Element
     {
-        $element::create(inner_pipeline!(;$doc_id; ;$field_id;))
+        $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id;))
     };
     
-    (;$doc_id:expr; ;$field_id:expr;) => {
-        IndexerFunnel::create($doc_id, $INDEX.t)
+    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr;) => {
+        IndexerFunnel::create($doc_id, &mut $INDEX.t.index)
     };
     () => {}
 }
@@ -142,8 +143,8 @@ macro_rules! inner_pipeline {
 #[macro_export]
 macro_rules! pipeline {
     ($INDEX:ident : $($x:tt)*) => {
-        Box::new(move |doc_id: DocId. index: &mut $INDEX | {
-            Box::new(inner_pipeline!(;doc_id; ;field_id; $($x)*))
+        Box::new(move |doc_id: DocId, index: &mut $INDEX | {
+            Box::new(inner_pipeline!(;index; ;doc_id; ;field_id; $($x)*))
         })
     }
 }
