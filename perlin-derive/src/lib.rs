@@ -13,7 +13,6 @@ pub fn perlin_document(input: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input(&s).expect("AST: WHAT!?");
 
     let gen = impl_perlin_document(&ast);
-    println!("GEN:::\n\n {:#?}", gen);
     gen.parse().expect("GEN: WHAT!?")
 }
 
@@ -47,11 +46,10 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
                 }
                 
                 fn index_field(&mut self, doc_id: DocId, field_name: &str, field_contents: &str) {
-                    let pipeline = match field_name {                       
+                    match field_name {                       
                         #(#index_field,)*
                         _ => {panic!("WHAT!?")}
                     };
-                    pipeline.apply(field_contents, self);
                 }
             }            
         }
@@ -128,8 +126,17 @@ fn index_field(fields: &[syn::Field]) -> Vec<quote::Tokens> {
     for field in fields {
         let ident = &field.ident;
         result.push(quote! {
-            stringify!(#ident) => if let Some(ref pipeline) = self.#ident.pipeline { pipeline(doc_id) } else { panic!("No pipeline found for ") }
-            });
+            stringify!(#ident) =>
+            {
+                let pipe = if let Some(ref pipeline) = self.#ident.pipeline
+                {
+                    pipeline()
+                }
+                else {
+                    panic!(concat!("No pipeline found for ", stringify!(#ident)))
+                };
+                pipe(doc_id, self, field_contents);                
+            }});
     }
     result
 }

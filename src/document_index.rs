@@ -49,59 +49,39 @@ mod tests {
     use perlin_core::index::posting::DocId;
     use field::Field;
 
+    use rust_stemmers::Algorithm;
+
     use test_utils::create_test_dir;
 
-//    #[derive(PerlinDocument)]
+    #[derive(PerlinDocument)]
     struct Test {
-        t: Field<String, Test>
+        text: Field<String, Test>,
+        number: Field<u64, Test>,
+        emails: Field<usize, Test>,
     }
-
-  use std::path::Path;
-        impl Test {
-            pub fn create(path: &Path, t: Option<Pipeline<String, Test>>) -> Self {
-                use perlin_core::page_manager::{RamPageCache, FsPageManager};
-                let t_page_cache =
-                    RamPageCache::new(FsPageManager::new(&path.join("t_page_cache")));
-                Test { t: Field::create(t_page_cache, t) }
-            }
-        }
-        impl PerlinDocument for Test {
-            fn commit(&mut self) {
-                self.t.index.commit();
-            }
-            fn index_field(&mut self, doc_id: DocId, field_name: &str, field_contents: &str) {
-                let pipe = match field_name {
-                    "t" => {
-                        if let Some(ref pipeline) = self.t.pipeline {
-                            pipeline()
-                        } else {
-                            {
-                               panic!()
-                            }
-                        }
-                    }
-                    _ => {
-                            panic!()                        
-                    }
-                };
-                pipe(doc_id, self, field_contents);
-            }
-        }
-
     
-    use language::{LowercaseFilter, IndexerFunnel, WhitespaceTokenizer};
-    
+    use language::{Stemmer, LowercaseFilter, IndexerFunnel, WhitespaceTokenizer};
+    use language::integers::NumberFilter;
 
     #[test]
     fn test() {
         use perlin_core::index::posting::Posting;
         let mut t = Test::create(
             &create_test_dir("doc_index/test"),
-            Some(pipeline!(Test: WhitespaceTokenizer
-                               > LowercaseFilter )));
+            Some(pipeline!(Test: text
+                           WhitespaceTokenizer
+                           > NumberFilter
+                           | [number]
+                           > LowercaseFilter
+                           > Stemmer(Algorithm::English))),
+            None, None);
 
-        t.index_field(DocId(0), "t", "hans WAR ein GrüßeEndef Vogl");
+        t.index_field(DocId(0), "text", "10 birds flew over MT EVEREST");
+        t.index_field(DocId(1), "text", "125 birds flew accross THE ocean");
+        t.index_field(DocId(2), "text", "2514 unicorns drew a CAR on mars");
         t.commit();
-        assert_eq!(t.t.index.query_atom(&"hans".to_string()), vec![Posting(DocId(0))]);
+        assert_eq!(t.text.index.query_atom(&"bird".to_string()), vec![Posting(DocId(0)), Posting(DocId(1))]);
+        assert_eq!(t.text.index.query_atom(&"unicorn".to_string()), vec![Posting(DocId(2))]);
+        assert_eq!(t.number.index.query_atom(&2514), vec![Posting(DocId(2))]);        
     }
 }

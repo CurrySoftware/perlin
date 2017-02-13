@@ -95,59 +95,59 @@ macro_rules! funnel {
 }
 
 macro_rules! inner_pipeline {
-    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr;
-     $element:ident($($param:expr),+) | [$this_field_id:expr] > $($x:tt)*) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
+     $element:ident($($param:expr),+) | [$this_field:ident] > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element(params) | [field] > Next
     {
         $element::create($($param),+ ,
-                         funnel!($doc_id, $this_field_id),
+                         funnel!($doc_id, &mut $INDEX.$this_field.index),
                          inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; ($x)*))        
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr;
-     $element:ident | [$this_field_id:expr] > $($x:tt)*) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
+     $element:ident | [$this_field:ident] > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element | [field] > Next
     {
         $element::create(
-            funnel!($doc_id, $this_field_id),
-            inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; $($x)*))        
+            funnel!($doc_id, &mut $INDEX.$this_field.index),
+            inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))        
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+) > $($x:tt)*) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident($($param:expr),+) > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element(params) > Next
     {
-        $element::create($($param),+ , inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; $($x)*))        
+        $element::create($($param),+ , inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))        
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident > $($x:tt)*) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident > $($x:tt)*) =>
     // ;doc_id; ;field_id; Element > Next
     {
-        $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; $($x)*))
+        $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident($($param:expr),+)) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident($($param:expr),+)) =>
     // ;doc_id; ;field_id; Element(params)
     {
         $element::create(
             $($param),+ ,
-            inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id;))
+            inner_pipeline!(;$INDEX; ;$doc_id; ;$field;))
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr; $element:ident) =>
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident) =>
     // ;doc_id; ;field_id; Element
     {
-        $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id;))
+        $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field;))
     };
     
-    (;$INDEX:ident; ;$doc_id:expr; ;$field_id:expr;) => {
-        IndexerFunnel::create($doc_id, &mut $INDEX.t.index)
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;) => {
+        IndexerFunnel::create($doc_id, &mut $INDEX.text.index)
     };
     () => {}
 }
 
 #[macro_export]
 macro_rules! pipeline {
-    ($INDEX:ident : $($x:tt)*) => {
+    ($INDEX:ident : $field:ident $($x:tt)*) => {
         Box::new(|| {
         Box::new(|doc_id: DocId, index: &mut $INDEX, content: &str| {
             use language::CanApply;
             use std::marker::PhantomData;
-            let mut pipe = inner_pipeline!(;index; ;doc_id; ;field_id; $($x)*);
+            let mut pipe = inner_pipeline!(;index; ;doc_id; ;$field; $($x)*);
             pipe.apply(content);
             PhantomData
         })})
