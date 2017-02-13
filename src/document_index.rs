@@ -8,9 +8,7 @@ use perlin_core::page_manager::{RamPageCache, FsPageManager};
 
 use language::CanApply;
 
-use field::{FieldDefinition, Field, FieldId};
-
-type Pipeline<T, Out> = Box<Fn(DocId, FieldId) -> Box<for<'r> CanApply<&'r str, T, Output=Out>>>;
+pub type Pipeline<T, Out> = Box<Fn(DocId, FieldId) -> Box<for<'r> CanApply<&'r str, T, Output=Out>>>;
 
 /// `DocumentIndex` takes some of the basic building blocks in `perlin_core`
 /// and provides an abstraction that can be used to index and query documents

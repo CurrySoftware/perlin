@@ -1,37 +1,13 @@
-use std::borrow::Cow;
-
-use field::RawField;
+use perlin_core::index::posting::DocId;
 
 
-/// A document is represented by an abitrary number of fields
-#[derive(Debug, Eq, PartialEq)]
-pub struct Document<'a>(pub Vec<RawField<'a>>);
+/// Trait which is implemented by users of this library.
+/// Please try to use the `PerlinDocument` procedural macro to implement this trait if possible!
+pub trait PerlinDocument {
+    /// Commits all indices
+    fn commit(&mut self);
 
-/// This builder can be used to ergonomically (really?) build documents
-pub struct DocumentBuilder<'a> {
-    fields: Vec<RawField<'a>>,
+    /// Indexes a new field of a document
+    fn index_field(&mut self, doc_id: DocId, field_name: &str, field_contents: &str);
 }
 
-impl<'a> DocumentBuilder<'a> {
-    pub fn new() -> Self {
-        DocumentBuilder { fields: Vec::new() }
-    }
-
-    /// Add a new field to the document
-    pub fn add_field(mut self, field: RawField<'a>) -> Self {
-        self.fields.push(field);
-        self
-    }
-
-    pub fn build(self) -> Document<'a> {
-        Document(self.fields)
-    }
-}
-
-
-/// Implemented by an entity that has the ability to parse documents
-pub trait DocumentParser {
-    fn parse_document<'a>(&self,
-                          key_values: &'a [(Cow<'a, str>, Cow<'a, str>)])
-                          -> Result<Document<'a>, ()>;
-}
