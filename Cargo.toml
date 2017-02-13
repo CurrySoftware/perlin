@@ -16,5 +16,8 @@ path = "../perlin-core"
 [dependencies.rust-stemmers]
 path = "../rust-stemmers"
 
+[dependencies.perlin-derive]
+path = "perlin-derive"
+
 [features]
 bench=[]

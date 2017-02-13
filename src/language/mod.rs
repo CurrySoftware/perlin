@@ -1,8 +1,5 @@
 use std::marker::PhantomData;
 
-use document_index::TermIndexer;
-
-use field::FieldId;
 use perlin_core::index::posting::DocId;
 
 mod stemmers;
@@ -67,35 +64,33 @@ impl<'a, T, TCallback> CanApply<&'a str, T> for LowercaseFilter<T, TCallback>
 }
 
 
-pub struct IndexerFunnel
-{
-    doc_id: DocId,
-    field_id: FieldId
-}
+// pub struct IndexerFunnel<'a, T>
+// {
+//     doc_id: DocId,
+// }
 
-impl IndexerFunnel {
-    pub fn create(doc_id: DocId, field_id: FieldId) -> Self {
-        IndexerFunnel {
-            doc_id: doc_id,
-            field_id: field_id
-        }
-    }
-}
+// impl IndexerFunnel {
+//     pub fn create(doc_id: DocId) -> Self {
+//         IndexerFunnel {
+//             doc_id: doc_id
+//         }
+//     }
+// }
 
-impl<TTerm, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel
-    where TContainer: TermIndexer<TTerm> {
+// impl<TTerm, TContainer> CanApply<TTerm, TContainer> for IndexerFunnel
+//     where TContainer: TermIndexer<TTerm> {
 
-    type Output = TTerm;
+//     type Output = TTerm;
     
-    fn apply(&self, input: TTerm, container: &mut TContainer) {
-        container.index_term(self.field_id, self.doc_id, input);
-    }
-}
+//     fn apply(&self, input: TTerm, container: &mut TContainer) {
+//         container.index_term(self.field_id, self.doc_id, input);
+//     }
+// }
 
 
 macro_rules! funnel {
     ($doc_id:expr, $field_id:expr) => {
-        IndexerFunnel::create($doc_id, $field_id)
+        //IndexerFunnel::create($doc_id, $field_id)
     }
 }
 
@@ -140,7 +135,7 @@ macro_rules! inner_pipeline {
     };
     
     (;$doc_id:expr; ;$field_id:expr;) => {
-        IndexerFunnel::create($doc_id, $field_id)
+       // IndexerFunnel::create($doc_id, $field_id)
     };
     () => {}
 }

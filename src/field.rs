@@ -7,16 +7,16 @@ use perlin_core::index::vocabulary::SharedVocabulary;
 use document::PerlinDocument;
 use document_index::Pipeline;
 
-pub struct Field<T: Hash + Eq>{
-    index: Index<T>,
-    pipeline: Option<Pipeline<PerlinDocument, T>>
+pub struct Field<T: Hash + Eq, TCont>{
+    pub index: Index<T>,
+    pub pipeline: Option<Pipeline<TCont, T>>
 }
 
 
-impl<T: Hash + Eq + Ord> Field<T> {
+impl<T: Hash + Eq + Ord, TCont> Field<T, TCont> {
 
     /// Creates a new index by giving it a indexing pipeline and a page cache
-    fn create(page_cache: RamPageCache, pipeline: Option<Pipeline<PerlinDocument, T>>) -> Self {
+    fn create(page_cache: RamPageCache, pipeline: Option<Pipeline<TCont, T>>) -> Self {
         Field {
             index: Index::new(page_cache, SharedVocabulary::new()),
             pipeline: pipeline
