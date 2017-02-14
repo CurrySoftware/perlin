@@ -28,30 +28,35 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
         let field_creations = create_field_creations(variant_data.fields());
         
         quote! {
-            use std::path::Path;
-            impl #name {
-                pub fn create(path: &Path #(,#params)*) -> Self {
-                    use perlin_core::page_manager::{RamPageCache, FsPageManager};
-                    #(#page_caches)*
-
-                    #name {
-                        #(#field_creations,)*
+            pub mod perlin_document_impl {
+                use super::*;
+                
+                use std::path::Path;
+                
+                impl #name {
+                    pub fn create(path: &Path #(,#params)*) -> Self {
+                        use perlin_core::page_manager::{RamPageCache, FsPageManager};
+                        #(#page_caches)*
+                        
+                        #name {
+                            #(#field_creations,)*
+                        }
                     }
                 }
-            }
-            
-            impl PerlinDocument for #name {
-                fn commit(&mut self) {
-                    #(#commit)*
-                }
                 
-                fn index_field(&mut self, doc_id: DocId, field_name: &str, field_contents: &str) {
-                    match field_name {                       
-                        #(#index_field,)*
-                        _ => {panic!("WHAT!?")}
-                    };
-                }
-            }            
+                impl PerlinDocument for #name {
+                    fn commit(&mut self) {
+                        #(#commit)*
+                    }
+                    
+                    fn index_field(&mut self, doc_id: DocId, field_name: &str, field_contents: &str) {
+                        match field_name {                       
+                            #(#index_field,)*
+                            _ => {panic!("WHAT!?")}
+                        };
+                    }
+                }            
+            }
         }
     } else {
         panic!("PerlinDocument is only implemented for structs not enums!");
