@@ -98,7 +98,7 @@ macro_rules! inner_pipeline {
     // ;doc_id; ;field_id; Element(params) | [field] > Next
     {
         $element::create($($param),+ ,
-                         funnel!($doc_id, &mut $INDEX.$this_field.index),
+                         funnel!($doc_id, &mut $INDEX.$this_field),
                          inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; ($x)*))        
     };
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
@@ -106,7 +106,7 @@ macro_rules! inner_pipeline {
     // ;doc_id; ;field_id; Element | [field] > Next
     {
         $element::create(
-            funnel!($doc_id, &mut $INDEX.$this_field.index),
+            funnel!($doc_id, &mut $INDEX.$this_field),
             inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))        
     };
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident($($param:expr),+) > $($x:tt)*) =>
@@ -133,7 +133,7 @@ macro_rules! inner_pipeline {
     };
     
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;) => {
-        IndexerFunnel::create($doc_id, &mut $INDEX.text.index)
+        IndexerFunnel::create($doc_id, &mut $INDEX.text)
     };
     () => {}
 }
@@ -141,14 +141,13 @@ macro_rules! inner_pipeline {
 #[macro_export]
 macro_rules! pipeline {
     ($INDEX:ident : $field:ident $($x:tt)*) => {
-        Box::new(|| {
         Box::new(|doc_id: DocId, index: &mut $INDEX, content: &str| {
             use language::CanApply;
             use std::marker::PhantomData;
             let mut pipe = inner_pipeline!(;index; ;doc_id; ;$field; $($x)*);
             pipe.apply(content);
             PhantomData
-        })})
+        })
     }
 }
 

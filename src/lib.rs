@@ -15,10 +15,7 @@ extern crate rust_stemmers;
 #[macro_use]
 pub mod language;
 pub mod document_index;
-pub mod document;
 pub mod field;
-
-pub use document_index::DocumentIndex;
 
 #[cfg(test)]
 pub mod test_utils;
