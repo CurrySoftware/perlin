@@ -86,12 +86,14 @@ impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<
 }
 
 
+#[macro_export]
 macro_rules! funnel {
     ($doc_id:expr, $index:expr) => {
         IndexerFunnel::create($doc_id, $index)
     }
 }
 
+#[macro_export]
 macro_rules! inner_pipeline {
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
      $element:ident($($param:expr),+) | [$this_field:ident] > $($x:tt)*) =>
@@ -133,7 +135,7 @@ macro_rules! inner_pipeline {
     };
     
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;) => {
-        IndexerFunnel::create($doc_id, &mut $INDEX.text)
+        IndexerFunnel::create($doc_id, &mut $INDEX.$field)
     };
     () => {}
 }
@@ -142,7 +144,8 @@ macro_rules! inner_pipeline {
 macro_rules! pipeline {
     ($INDEX:ident : $field:ident $($x:tt)*) => {
         Box::new(|doc_id: DocId, index: &mut $INDEX, content: &str| {
-            use language::CanApply;
+            use $crate::language::CanApply;
+            use $crate::language::IndexerFunnel;
             use std::marker::PhantomData;
             let mut pipe = inner_pipeline!(;index; ;doc_id; ;$field; $($x)*);
             pipe.apply(content);

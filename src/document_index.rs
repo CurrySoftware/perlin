@@ -1,4 +1,3 @@
-use std::path::{PathBuf, Path};
 use std::marker::PhantomData;
 
 use perlin_core::index::posting::DocId;

@@ -24,7 +24,7 @@ pub fn perlin_document(input: TokenStream) -> TokenStream {
     gen.parse().expect("GEN: WHAT!?")
 }
 
-fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
+fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {    
     //We create three different things:
     //1. A struct that holds the pipelines
     // It looks like:
@@ -48,9 +48,26 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
     //3. the impl of PerlinDocument for Ident
     let perlin_doc_impl = generate_perlin_document_impl(ast);
 
-    let mut result = quote::Tokens::default();
-    result.append_all(vec![pipeline_struct, index_struct, perlin_doc_impl]);
-    return result;
+    let ident = &ast.ident;
+    let index_ident = syn::Ident::from(format!("{}Index", ident).to_string());
+    quote! {
+        pub use self::perlin_impl::#index_ident;
+        mod perlin_impl{            
+            use super::#ident;
+
+            use std::path::{Path, PathBuf};
+            use std::borrow::Cow;
+            
+            use perlin::document_index::Pipeline;
+            use perlin_core::index::posting::DocId;
+            
+            #pipeline_struct
+
+            #index_struct
+
+            #perlin_doc_impl
+        }
+    }
 }
 
 

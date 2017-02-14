@@ -20,6 +20,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     
     let field_matches = field_matches(variant_data.fields());
     quote!(
+        
         pub struct #index_ident {
             documents: #ident,
             pipelines: #pipes_ident,
@@ -44,16 +45,16 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                 self.documents.commit();                
             }
 
-            pub fn add_document(&mut self, key_values: &[(&str, &str)] #external_id_param) {
+            pub fn add_document(&mut self, key_values: &[(Cow<str>, Cow<str>)] #external_id_param) {
                 self.doc_counter.inc();
                 let doc_id = self.doc_counter;
 
-                for &(key, value) in key_values {
-                    match key {
+                for &(ref key, ref value) in key_values {
+                    match key.as_ref() {
                         //"field_name" =>  self.pipelines.field_name(doc_id, &mut self.documents, value);
                         #(#field_matches,)*
                         _ => {
-                           // panic!("#ident not found!")
+                            panic!("#ident not found!")
                         }
                     }
                 }
@@ -74,7 +75,7 @@ fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens
         let fn_ident = syn::Ident::from(format!("set_{}_pipeline", field_ident.clone().unwrap()).to_string());
         let ty = get_generics_from_field(&field.ty);
         result.push(quote!{
-            fn #fn_ident(&mut self, pipe: Pipeline<#ty, #ident>) {
+            pub fn #fn_ident(&mut self, pipe: Pipeline<#ty, #ident>) {
                 self.pipelines.#field_ident = Some(pipe);
             }
         });
@@ -105,9 +106,9 @@ fn field_matches(fields: &[syn::Field]) -> Vec<quote::Tokens> {
             quote!{
                 stringify!(#ident) => {
                     if let Some(ref pipeline) = self.pipelines.#ident {
-                        pipeline(doc_id, &mut self.documents, value);                       
+                        pipeline(doc_id, &mut self.documents, value.as_ref());                       
                     } else {
-                      // panic!("Tried to index field #ident without initialized pipeline!")
+                        panic!("Tried to index field #ident without initialized pipeline!")
                     }
                 }
             }
