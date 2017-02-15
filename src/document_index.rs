@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use perlin_core::index::posting::DocId;
 
-pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out>>;
+pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out> + Sync + Send>;
 
 #[cfg(test)]
 mod tests {
