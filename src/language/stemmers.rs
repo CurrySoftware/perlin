@@ -17,6 +17,16 @@ impl<TCallback> CanApply<String> for Stemmer<TCallback>
     }
 }
 
+impl<'a, TCallback> CanApply<&'a str> for Stemmer<TCallback>
+    where TCallback: CanApply<String>
+{
+    type Output = TCallback::Output;
+    fn apply(&mut self, input: &'a str) {
+        self.callback.apply(self.stemmer.stem(input).into_owned());
+    }
+}
+
+
 
 impl<TCallback> Stemmer<TCallback> {
     pub fn create(language: Algorithm, callback: TCallback) -> Self {

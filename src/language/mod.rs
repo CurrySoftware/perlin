@@ -80,7 +80,6 @@ impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<
     type Output = TTerm;
     
     fn apply(&mut self, input: TTerm) {
-        println!("INDEX: {:?}", input);
         self.index.index_term(input, self.doc_id);
     }
 }
