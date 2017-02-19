@@ -2,7 +2,9 @@ use perlin_core::index::posting::DocId;
 
 mod stemmers;
 pub mod integers;
+mod stopword_filter;
 
+pub use language::stopword_filter::StopwordFilter;
 pub use language::stemmers::Stemmer;
 
 /// The single central trait of the push-based splittable pipeline!
@@ -142,7 +144,7 @@ macro_rules! inner_pipeline {
 #[macro_export]
 macro_rules! pipeline {
     ($INDEX:ident : $field:ident $($x:tt)*) => {
-        Box::new(|doc_id: DocId, index: &mut $INDEX, content: &str| {
+        Box::new(move |doc_id: DocId, index: &mut $INDEX, content: &str| {
             use $crate::language::CanApply;
             use $crate::language::IndexerFunnel;
             use std::marker::PhantomData;
