@@ -39,7 +39,7 @@ impl<'a, TStringCallback, TNumberCallback> CanApply<&'a str>
 
 impl<'a, TStringCallback, TNumberCallback> ToOperand<'a> for NumberFilter<TStringCallback, TNumberCallback>
     where TStringCallback: ToOperand<'a>,
-          TNumberCallback: ToBinaryOperand
+          TNumberCallback: ToBinaryOperand<'a>
 {
     fn to_operand(self) -> Operand<'a> {
         self.number_callback.to_bin_operand(self.string_callback.to_operand())

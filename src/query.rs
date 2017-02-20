@@ -11,8 +11,8 @@ pub trait ToOperand<'a> {
     fn to_operand(self) -> Operand<'a>;
 }
 
-pub trait ToBinaryOperand {
-    fn to_bin_operand(self, other: Operand) -> Operand;
+pub trait ToBinaryOperand<'a> {
+    fn to_bin_operand(self, other: Operand<'a>) -> Operand<'a>;
 }
 
 pub enum Operator {
@@ -48,7 +48,7 @@ impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
 
 impl<'a, T: 'a + Hash + Eq> ToOperand<'a> for Funnel<'a, T> {
     fn to_operand(self) -> Operand<'a> {
-        Box::new(And {
+        Box::new(FunneledAnd {
             operands: self.result
                 .into_iter()
                 .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
@@ -58,14 +58,56 @@ impl<'a, T: 'a + Hash + Eq> ToOperand<'a> for Funnel<'a, T> {
 }
 
 
-pub struct And<'a> {
+pub struct FunneledAnd<'a> {
     operands: Vec<Operand<'a>>,
 }
 
-impl<'a> Iterator for And<'a> {
+impl<'a> Iterator for FunneledAnd<'a> {
     type Item = Posting;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.operands[0].next()
+    }
+}
+
+pub struct Or<'a> {
+    operands: Vec<Operand<'a>>
+}
+
+impl<'a> Iterator for Or<'a> {
+    type Item = Posting;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.operands[0].next()
+    }
+}
+
+pub struct BinaryOr<CB> {
+    cb: CB
+}
+
+impl<CB> BinaryOr<CB> {
+    pub fn create(cb: CB) -> Self {
+        BinaryOr {
+            cb: cb
+        }
+    }
+}
+
+impl<CB, T> CanApply<T> for BinaryOr<CB>
+    where CB: CanApply<T>
+{
+    type Output = CB::Output;
+    fn apply(&mut self, t: T) {
+        self.cb.apply(t)
+    }
+}
+
+impl<'a, CB> ToBinaryOperand<'a> for BinaryOr<CB>
+    where CB: ToOperand<'a>
+{
+    fn to_bin_operand(self, op: Operand<'a>) -> Operand<'a>{
+        Box::new(Or {
+            operands: vec![self.cb.to_operand(), op]                
+        })
     }
 }
