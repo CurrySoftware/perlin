@@ -13,6 +13,8 @@ extern crate perlin_core;
 extern crate rust_stemmers;
 
 #[macro_use]
+mod utils;
+#[macro_use]
 pub mod language;
 pub mod document_index;
 pub mod field;

@@ -58,7 +58,7 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
             use std::path::{Path, PathBuf};
             use std::borrow::Cow;
             
-            use perlin::document_index::Pipeline;
+            use_parent_crate!(document_index::Pipeline);
             use perlin_core::index::posting::DocId;
             
             #pipeline_struct
