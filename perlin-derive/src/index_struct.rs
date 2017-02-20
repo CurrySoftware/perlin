@@ -24,6 +24,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
         pub struct #index_ident {
             documents: #ident,
             pipelines: #pipes_ident,
+            query_pipeline: Option<QueryPipeline<#ident>>,
             base_path: PathBuf,
             doc_counter: DocId,
             #ext_id
@@ -35,6 +36,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                 #index_ident {
                     documents: #ident::create(&base_path),
                     pipelines: #pipes_ident::default(),
+                    query_pipeline: None,
                     base_path: base_path,
                     doc_counter: DocId::none(),
                     #create_external_ids
@@ -61,6 +63,18 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                 #add_external_id
             }
 
+            pub fn set_query_pipeline(&mut self, pipe: QueryPipeline<#ident>) {
+                self.query_pipeline = Some(pipe);
+            }
+
+            pub fn run_query<'a>(&'a self, query: &str) -> Operand<'a> {
+                if let Some(ref query_pipe) = self.query_pipeline {
+                    query_pipe(&self.documents, query)
+                } else {
+                    panic!();
+                }
+            }
+            
             //Pipeline setter
             //fn set_field_pipeline(&mut self, pipe: Pipeline<Type, Ident>)
             #(#pipeline_setters)*

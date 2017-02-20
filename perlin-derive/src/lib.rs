@@ -59,6 +59,9 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
             use std::borrow::Cow;
             
             use_parent_crate!(document_index::Pipeline);
+            use_parent_crate!(document_index::QueryPipeline);
+            use_parent_crate!(query::Operand);
+            
             use perlin_core::index::posting::DocId;
             
             #pipeline_struct
