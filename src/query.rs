@@ -12,7 +12,7 @@ pub trait ToOperand<'a> {
 }
 
 pub trait ToBinaryOperand {
-    fn to_operand(self, other: Operand) -> Operand;
+    fn to_bin_operand(self, other: Operand) -> Operand;
 }
 
 pub enum Operator {
@@ -27,7 +27,7 @@ pub struct Funnel<'a, T: 'a + Hash + Eq> {
 }
 
 impl<'a, T: 'a + Hash + Eq> Funnel<'a, T> {
-    fn create(operator: Operator, index: &'a Index<T>) -> Self {
+    pub fn create(operator: Operator, index: &'a Index<T>) -> Self {
         Funnel {
             index: index,
             operator: operator,

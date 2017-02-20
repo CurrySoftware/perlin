@@ -67,6 +67,15 @@ impl<'a, TCallback> CanApply<&'a str> for LowercaseFilter<TCallback>
     }
 }
 
+impl<'a, TCallback> ToOperand<'a> for LowercaseFilter<TCallback>
+    where TCallback: ToOperand<'a> {
+
+    fn to_operand(self) -> Operand<'a> {
+        self.callback.to_operand()
+    }
+}
+
+
 use perlin_core::index::Index;
 use std::hash::Hash;
 

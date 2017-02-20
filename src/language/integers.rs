@@ -42,7 +42,7 @@ impl<'a, TStringCallback, TNumberCallback> ToOperand<'a> for NumberFilter<TStrin
           TNumberCallback: ToBinaryOperand
 {
     fn to_operand(self) -> Operand<'a> {
-        self.number_callback.to_operand(self.string_callback.to_operand())
+        self.number_callback.to_bin_operand(self.string_callback.to_operand())
     }
 }
 

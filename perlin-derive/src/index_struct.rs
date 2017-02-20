@@ -54,7 +54,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                         //"field_name" =>  self.pipelines.field_name(doc_id, &mut self.documents, value);
                         #(#field_matches,)*
                         _ => {
-                            panic!("#ident not found!")
+                           // panic!("#ident not found!")
                         }
                     }
                 }
@@ -108,7 +108,7 @@ fn field_matches(fields: &[syn::Field]) -> Vec<quote::Tokens> {
                     if let Some(ref pipeline) = self.pipelines.#ident {
                         pipeline(doc_id, &mut self.documents, value.as_ref());                       
                     } else {
-                        panic!("Tried to index field #ident without initialized pipeline!")
+                        //panic!("Tried to index field #ident without initialized pipeline!")
                     }
                 }
             }
