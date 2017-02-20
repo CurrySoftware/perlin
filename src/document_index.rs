@@ -173,9 +173,9 @@ mod tests {
                                        > Stemmer(Algorithm::English)));
         t.set_query_pipeline(Box::new(|docs, query| {
             use language::CanApply;
-            use query::{BinaryOr};
+            use query::{OrConstructor};
             let mut to_op = WhitespaceTokenizer::create(
-                NumberFilter::create(BinaryOr::create(Funnel::create(Operator::And, &docs.number)),
+                NumberFilter::create(OrConstructor::create(Funnel::create(Operator::And, &docs.number)),
                                         LowercaseFilter::create(
                                             Stemmer::create(Algorithm::English,
                                                             Funnel::create(Operator::And, &docs.text)))));
