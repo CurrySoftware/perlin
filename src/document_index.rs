@@ -191,6 +191,8 @@ mod tests {
                           Cow::from("2567 unicorns flew from phobos to deimos"))],
                        10);
         t.commit();
-        assert_eq!(t.run_query("deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
+        assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(2))]);
+        assert_eq!(t.run_query("birds deimos").collect::<Vec<_>>(), vec![]);
+        assert_eq!(t.run_query("birds").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(1))]);        
     }
 }

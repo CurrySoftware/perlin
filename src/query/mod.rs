@@ -1,9 +1,6 @@
 mod operators;
 
-use std::hash::Hash;
-
-use perlin_core::index::Index;
-use perlin_core::index::posting::{Posting, PostingIterator};
+use perlin_core::index::posting::{Posting};
 
 use language::CanApply;
 

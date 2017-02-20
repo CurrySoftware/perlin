@@ -1,10 +1,10 @@
 use std::hash::Hash;
 
-use perlin_core::index::posting::{DocId, Posting, PostingIterator};
+use perlin_core::index::posting::{Posting, PostingIterator};
 use perlin_core::index::Index;
 
 use language::CanApply;
-use query::{ToOperand, ToBinaryOperand, Operand};
+use query::{ToOperand, Operand};
 
 /// Mimics the functionality of the `try!` macro for `Option`s.
 /// Evaluates `Some(x)` to x. Else it returns `None`.
@@ -54,12 +54,23 @@ impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
 
 impl<'a, T: 'a + Hash + Eq> ToOperand<'a> for Funnel<'a, T> {
     fn to_operand(self) -> Operand<'a> {
-        Box::new(And {
-            operands: self.result
-                .into_iter()
-                .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
-                .collect::<Vec<_>>(),
-        })
+        match self.operator {
+            Operator::And => {
+                Box::new(And {
+                    operands: self.result
+                        .into_iter()
+                        .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
+                        .collect::<Vec<_>>(),
+                })
+            }
+            Operator::Or => {
+                Box::new(Or::create(self.result
+                    .into_iter()
+                    .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
+                    .collect::<Vec<_>>()))
+            }
+        }
+
     }
 }
 /// END FUNNEL
@@ -134,7 +145,7 @@ impl<'a> Iterator for Or<'a> {
             .map(|op| op.next())
             .filter(|val| val.is_some())
             .map(|val| val.unwrap())
-                        .collect());
+            .collect());
         self.buf.sort();
         if self.buf.is_empty() {
             None
