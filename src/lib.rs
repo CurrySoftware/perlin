@@ -18,6 +18,7 @@ mod utils;
 pub mod language;
 pub mod document_index;
 pub mod field;
+pub mod query;
 
 #[cfg(test)]
 pub mod test_utils;

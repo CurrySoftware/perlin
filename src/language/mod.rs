@@ -1,4 +1,5 @@
 use perlin_core::index::posting::DocId;
+use query::{Operand, ToOperand};
 
 mod stemmers;
 pub mod integers;
@@ -34,6 +35,13 @@ impl<'a, TCallback> CanApply<&'a str> for WhitespaceTokenizer<TCallback>
         for token in input.split_whitespace() {
             self.callback.apply(token);
         }
+    }
+}
+
+impl<'a, TCallback> ToOperand<'a> for WhitespaceTokenizer<TCallback>
+    where TCallback: ToOperand<'a> {
+    fn to_operand(self) -> Operand<'a> {
+        self.callback.to_operand()
     }
 }
 
