@@ -29,13 +29,13 @@ mod tests {
     fn test() {
         use std::borrow::Cow;
         let mut t = TestIndex::create(create_test_dir("doc_index/test"));
-        t.set_text_pipeline(pipeline!(Test: text
+        t.set_text_pipeline(pipeline!(text
                            WhitespaceTokenizer
                            > NumberFilter
                            | [number]
                            > LowercaseFilter
                       > Stemmer(Algorithm::English)));
-        t.set_title_pipeline(pipeline!(Test: title
+        t.set_title_pipeline(pipeline!(title
                       WhitespaceTokenizer
                       > LowercaseFilter
                       > Stemmer(Algorithm::English)));

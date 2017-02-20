@@ -143,8 +143,8 @@ macro_rules! inner_pipeline {
 
 #[macro_export]
 macro_rules! pipeline {
-    ($INDEX:ident : $field:ident $($x:tt)*) => {
-        Box::new(move |doc_id: DocId, index: &mut $INDEX, content: &str| {
+    ($field:ident $($x:tt)*) => {
+        Box::new(move |doc_id, index, content| {
             use $crate::language::CanApply;
             use $crate::language::IndexerFunnel;
             use std::marker::PhantomData;
