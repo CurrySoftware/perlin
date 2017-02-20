@@ -4,7 +4,7 @@ use query::Operand;
 use perlin_core::index::posting::DocId;
 
 pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out> + Sync + Send>;
-pub type QueryPipeline<T> = Box<Fn(&T, &str) -> Operand>;
+pub type QueryPipeline<T> = Box<for<'r, 'x> Fn(&'r T, &'x str) -> Operand<'r>>;
 
 #[cfg(test)]
 mod tests {
@@ -159,6 +159,7 @@ mod tests {
     fn test() {
         use std::borrow::Cow;
         use query::{Funnel, Operator, ToOperand};
+        use perlin_core::index::posting::Posting;
         let mut t = TestIndex::create(create_test_dir("doc_index/test"));
         t.set_text_pipeline(pipeline!(text
                            WhitespaceTokenizer
@@ -170,11 +171,13 @@ mod tests {
                       WhitespaceTokenizer
                       > LowercaseFilter
                                        > Stemmer(Algorithm::English)));
-        t.set_query_pipeline(Box::new(|docs: &Test, query: &str| {
-            let to_op = WhitespaceTokenizer::create(
+        t.set_query_pipeline(Box::new(|docs, query| {
+            use language::CanApply;
+            let mut to_op = WhitespaceTokenizer::create(
                 LowercaseFilter::create(
                     Stemmer::create(Algorithm::English,
                                     Funnel::create(Operator::And, &docs.text))));
+            to_op.apply(query);
             to_op.to_operand()
         }));
 
@@ -186,5 +189,6 @@ mod tests {
                           Cow::from("2567 unicorns flew from phobos to deimos"))],
                        10);
         t.commit();
+        assert_eq!(t.run_query("deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
     }
 }
