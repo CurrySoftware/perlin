@@ -1,3 +1,6 @@
+#[macro_use]
+pub mod query_pipeline;
+
 mod operators;
 
 use perlin_core::index::posting::{Posting};
@@ -6,7 +9,7 @@ use language::CanApply;
 
 pub use query::operators::{Or, And, Funnel, Operator}; 
 
-
+/// An Operand is just something emmiting postings!
 pub type Operand<'a> = Box<Iterator<Item = Posting> + 'a>;
 
 pub trait ToOperand<'a> {
