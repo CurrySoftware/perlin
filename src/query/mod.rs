@@ -34,13 +34,13 @@ impl<CB1, CB2> Chain<CB1, CB2>  {
     }
 }
 
-impl<CB1, CB2, T: Copy> CanApply<T> for Chain<CB1, CB2>
+impl<CB1, CB2, T> CanApply<T> for Chain<CB1, CB2>
     where CB1: CanApply<T>,
           CB2: CanApply<T> {
     type Output = CB1::Output;
 
     fn apply(&mut self, input: T) {
-        self.cb1.apply(input);
+//        self.cb1.apply(input);
         self.cb2.apply(input);
     }
 }

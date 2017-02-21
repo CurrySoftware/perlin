@@ -22,17 +22,15 @@ mod tests {
         title: Field<String>,
         number: Field<u64>,
         emails: Field<usize>,
-    }    
+    }
 
     use language::{Stemmer, LowercaseFilter, WhitespaceTokenizer};
     use language::integers::NumberFilter;
+    use std::borrow::Cow;
+    use perlin_core::index::posting::Posting;
 
-    #[test]
-    fn basic_test() {
-        use std::borrow::Cow;
-        use query::{Funnel, Operator, ToOperand};
-        use perlin_core::index::posting::Posting;
-        let mut t = TestIndex::create(create_test_dir("doc_index/basic_test"));
+    fn create_and_fill_index(name: &str) -> TestIndex {
+        let mut t = TestIndex::create(create_test_dir(name));
         t.set_text_pipeline(pipeline!(text
                            WhitespaceTokenizer
                            > NumberFilter
@@ -40,41 +38,46 @@ mod tests {
                            > LowercaseFilter
                            > Stemmer(Algorithm::English)));
         t.set_title_pipeline(pipeline!(title
-                      WhitespaceTokenizer
-                      > LowercaseFilter
+                                       WhitespaceTokenizer
+                                       > LowercaseFilter
                                        > Stemmer(Algorithm::English)));
-        t.set_query_pipeline(Box::new(|docs, query| {
-            use language::CanApply;
-            use query::{OrConstructor};
-            let mut to_op = WhitespaceTokenizer::create(
-                NumberFilter::create(OrConstructor::create(Funnel::create(Operator::All, &docs.number)),
-                                        LowercaseFilter::create(
-                                            Stemmer::create(Algorithm::English,
-                                                            Funnel::create(Operator::All, &docs.text)))));
-            to_op.apply(query);
-            to_op.to_operand()
-        }));
-
         t.add_document(&[(Cow::from("text"), Cow::from("10 birds flew over MT EVEREST"))],
                        10);
         t.add_document(&[(Cow::from("text"), Cow::from("125 birds flew accross THE ocean"))],
                        10);
-        t.add_document(&[(Cow::from("text"),
+        t.add_document(&[(Cow::from("title"), Cow::from("Unicorns on Deimos")),
+                         (Cow::from("text"),
                           Cow::from("2567 unicorns flew from phobos to deimos"))],
                        10);
         t.commit();
-        assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(2))]);
-        assert_eq!(t.run_query("birds deimos").collect::<Vec<_>>(), vec![]);
-        assert_eq!(t.run_query("birds").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(1))]);
-        t.set_query_pipeline(
-            query_pipeline!( WhitespaceTokenizer
+        t
+    }
+
+    #[test]
+    fn basic_test() {
+        let mut t = create_and_fill_index("doc_index/basic_test");
+        t.set_query_pipeline(query_pipeline!( WhitespaceTokenizer
                              > NumberFilter
                              | Must [Any in number]
                              > LowercaseFilter
                              > Stemmer(Algorithm::English)
                              > Must [All in text]
             ));
-        // (AND (any in number) (Or [All in text] [Any in title]) [Any in text]
+        assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
+        assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
+    }
+
+    #[test]
+    fn empty_query() {
+        let mut t = create_and_fill_index("doc_index/empty");
+        t.set_query_pipeline(query_pipeline!(
+            WhitespaceTokenizer
+                > NumberFilter
+                | Must [Any in number]
+                > LowercaseFilter
+                > Stemmer(Algorithm::English)
+                > Must [All in text]
+                > Must [Any in title]));
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
         assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
     }
