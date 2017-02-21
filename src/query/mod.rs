@@ -9,15 +9,18 @@ use language::CanApply;
 
 pub use query::operators::{Or, And, Funnel, Operator};
 
-/// An Operand is just something emmiting postings!
-pub type Operand<'a> = Box<Iterator<Item = Posting> + 'a>;
-
-pub trait ToOperand<'a> {
-    fn to_operand(self) -> Operand<'a>;
+pub enum ChainingOperator {
+    Must,
+    May,
+    MustNot
 }
 
-pub trait ToBinaryOperand<'a> {
-    fn to_bin_operand(self, other: Operand<'a>) -> Operand<'a>;
+/// An Operand is just something emmiting postings!
+pub type Operand<'a> = Box<Iterator<Item = Posting> + 'a>;
+pub type ChainedOperand<'a> = (ChainingOperator, Box<Iterator<Item = Posting> + 'a>);
+
+pub trait ToOperands<'a> {
+    fn to_operands(self) -> Vec<ChainedOperand<'a>>;
 }
 
 pub struct Chain<CB1, CB2> {
@@ -46,65 +49,13 @@ impl<CB1, CB2, T> CanApply<T> for Chain<CB1, CB2>
     }
 }
 
-impl<'a, CB1, CB2> ToOperand<'a> for Chain<CB1, CB2>
-    where CB1: ToBinaryOperand<'a>,
-          CB2: ToOperand<'a>
+impl<'a, CB1, CB2> ToOperands<'a> for Chain<CB1, CB2>
+    where CB1: ToOperands<'a>,
+          CB2: ToOperands<'a>
 {
-    fn to_operand(self) -> Operand<'a> {
-        self.cb1.to_bin_operand(self.cb2.to_operand())
-    }
-}
-
-pub struct AndConstructor<CB> {
-    cb: CB,
-}
-
-impl<CB> AndConstructor<CB> {
-    pub fn create(cb: CB) -> Self {
-        AndConstructor { cb: cb }
-    }
-}
-
-impl<CB, T> CanApply<T> for AndConstructor<CB>
-    where CB: CanApply<T>
-{
-    type Output = CB::Output;
-    fn apply(&mut self, t: T) {
-        self.cb.apply(t)
-    }
-}
-
-impl<'a, CB> ToBinaryOperand<'a> for AndConstructor<CB>
-    where CB: ToOperand<'a>
-{
-    fn to_bin_operand(self, op: Operand<'a>) -> Operand<'a> {
-        Box::new(And::create(vec![self.cb.to_operand(), op]))
-    }
-}
-
-pub struct OrConstructor<CB> {
-    cb: CB,
-}
-
-impl<CB> OrConstructor<CB> {
-    pub fn create(cb: CB) -> Self {
-        OrConstructor { cb: cb }
-    }
-}
-
-impl<CB, T> CanApply<T> for OrConstructor<CB>
-    where CB: CanApply<T>
-{
-    type Output = CB::Output;
-    fn apply(&mut self, t: T) {
-        self.cb.apply(t)
-    }
-}
-
-impl<'a, CB> ToBinaryOperand<'a> for OrConstructor<CB>
-    where CB: ToOperand<'a>
-{
-    fn to_bin_operand(self, op: Operand<'a>) -> Operand<'a> {
-        Box::new(Or::create(vec![self.cb.to_operand(), op]))
+    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+        let mut result = self.cb1.to_operands();
+        result.append(&mut self.cb2.to_operands());
+        result
     }
 }

@@ -1,5 +1,5 @@
 use perlin_core::index::posting::DocId;
-use query::{Operand, ToOperand};
+use query::{ChainedOperand, ToOperands};
 
 mod stemmers;
 pub mod integers;
@@ -38,10 +38,10 @@ impl<'a, TCallback> CanApply<&'a str> for WhitespaceTokenizer<TCallback>
     }
 }
 
-impl<'a, TCallback> ToOperand<'a> for WhitespaceTokenizer<TCallback>
-    where TCallback: ToOperand<'a> {
-    fn to_operand(self) -> Operand<'a> {
-        self.callback.to_operand()
+impl<'a, TCallback> ToOperands<'a> for WhitespaceTokenizer<TCallback>
+    where TCallback: ToOperands<'a> {
+    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+        self.callback.to_operands()
     }
 }
 
@@ -67,11 +67,11 @@ impl<'a, TCallback> CanApply<&'a str> for LowercaseFilter<TCallback>
     }
 }
 
-impl<'a, TCallback> ToOperand<'a> for LowercaseFilter<TCallback>
-    where TCallback: ToOperand<'a> {
+impl<'a, TCallback> ToOperands<'a> for LowercaseFilter<TCallback>
+    where TCallback: ToOperands<'a> {
 
-    fn to_operand(self) -> Operand<'a> {
-        self.callback.to_operand()
+    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+        self.callback.to_operands()
     }
 }
 

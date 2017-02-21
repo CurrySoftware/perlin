@@ -1,11 +1,8 @@
 #[macro_export]
 macro_rules! operand {
-    (;$INDEX:ident; Must [$operator:ident in $this_field:ident]) => {
-        AndConstructor::create(Funnel::create(Operator::$operator, &$INDEX.$this_field))
+    (;$INDEX:ident; $chaining_op:ident [$operator:ident in $this_field:ident]) => {
+        Funnel::create(ChainingOperator::$chaining_op, Operator::$operator, &$INDEX.$this_field)
     };
-    (;$INDEX:ident; May [$operator:ident in $this_field:ident]) => {
-        OrConstructor::create(Funnel::create(Operator::$operator, &$INDEX.$this_field))
-    }
 }
 #[macro_export]
 macro_rules! inner_query_pipe {
@@ -39,7 +36,7 @@ macro_rules! inner_query_pipe {
     };
     (;$INDEX:ident;
      $chain:ident [$operator:ident in $this_field:ident]) => {
-        Funnel::create(Operator::$operator, &$INDEX.$this_field)
+        Funnel::create(ChainingOperator::$chain, Operator::$operator, &$INDEX.$this_field)
     };
     (;$INDEX:ident;
      $chain:ident [$operator:ident in $this_field:ident] $($x:tt)*) => {
@@ -61,11 +58,11 @@ macro_rules! query_pipeline {
     ($($x:tt)*) => {
         Box::new(move |index, query| {
             use $crate::language::CanApply;
-            use $crate::query::{ToOperand, Funnel, Operator, Operand, Chain, AndConstructor, OrConstructor};
+            use $crate::query::{ToOperands, Funnel, Operator, Operand, Chain, ChainingOperator};
 
             let mut pipeline = inner_query_pipe!(;index; $($x)*);
             pipeline.apply(query);
-            pipeline.to_operand()
+            pipeline.to_operands()
         })
     }
 }

@@ -1,6 +1,6 @@
 use rust_stemmers::{Algorithm, Stemmer as RStemmer};
 
-use query::{Operand, ToOperand};
+use query::{ChainedOperand, ToOperands};
 use language::CanApply;
 
 pub struct Stemmer<TCallback>
@@ -27,10 +27,10 @@ impl<'a, TCallback> CanApply<&'a str> for Stemmer<TCallback>
     }
 }
 
-impl<'a, TCallback> ToOperand<'a> for Stemmer<TCallback>
-    where TCallback: ToOperand<'a> {
-    fn to_operand(self) -> Operand<'a> {
-        self.callback.to_operand()
+impl<'a, TCallback> ToOperands<'a> for Stemmer<TCallback>
+    where TCallback: ToOperands<'a> {
+    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+        self.callback.to_operands()
     }
 }
 

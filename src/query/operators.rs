@@ -4,7 +4,7 @@ use perlin_core::index::posting::{Posting, PostingIterator};
 use perlin_core::index::Index;
 
 use language::CanApply;
-use query::{ToOperand, Operand};
+use query::{ToOperands, Operand, ChainedOperand, ChainingOperator};
 
 /// Mimics the functionality of the `try!` macro for `Option`s.
 /// Evaluates `Some(x)` to x. Else it returns `None`.
@@ -29,14 +29,16 @@ pub enum Operator {
 pub struct Funnel<'a, T: 'a + Hash + Eq> {
     index: &'a Index<T>,
     operator: Operator,
+    chaining_operator: ChainingOperator,
     result: Vec<PostingIterator<'a>>,
 }
 
 impl<'a, T: 'a + Hash + Eq> Funnel<'a, T> {
-    pub fn create(operator: Operator, index: &'a Index<T>) -> Self {
+    pub fn create(chaining_operator: ChainingOperator, operator: Operator, index: &'a Index<T>) -> Self {
         Funnel {
             index: index,
             operator: operator,
+            chaining_operator: chaining_operator,
             result: Vec::new(),
         }
     }
@@ -62,22 +64,22 @@ impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
     }
 }
 
-impl<'a, T: 'a + Hash + Eq> ToOperand<'a> for Funnel<'a, T> {
-    fn to_operand(self) -> Operand<'a> {
+impl<'a, T: 'a + Hash + Eq> ToOperands<'a> for Funnel<'a, T> {
+    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
         match self.operator {
             Operator::All => {
-                Box::new(And {
+                vec![(self.chaining_operator, Box::new(And {
                     operands: self.result
                         .into_iter()
                         .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
                         .collect::<Vec<_>>(),
-                })
+                }))]
             }
             Operator::Any => {
-                Box::new(Or::create(self.result
+                vec![(self.chaining_operator, Box::new(Or::create(self.result
                     .into_iter()
                     .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
-                    .collect::<Vec<_>>()))
+                    .collect::<Vec<_>>())))]
             }
         }
 

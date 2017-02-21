@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use language::CanApply;
 
-use query::{Operand, ToOperand, ToBinaryOperand};
+use query::{ChainedOperand, ToOperands};
 
 /// Numberfilter.
 /// Takes an string as input and tries to convert it to usize
@@ -37,12 +37,14 @@ impl<'a, TStringCallback, TNumberCallback> CanApply<&'a str>
     }
 }
 
-impl<'a, TStringCallback, TNumberCallback> ToOperand<'a> for NumberFilter<TStringCallback, TNumberCallback>
-    where TStringCallback: ToOperand<'a>,
-          TNumberCallback: ToBinaryOperand<'a>
+impl<'a, TStringCallback, TNumberCallback> ToOperands<'a> for NumberFilter<TStringCallback, TNumberCallback>
+    where TStringCallback: ToOperands<'a>,
+          TNumberCallback: ToOperands<'a>
 {
-    fn to_operand(self) -> Operand<'a> {
-        self.number_callback.to_bin_operand(self.string_callback.to_operand())
+    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+        let mut result = self.number_callback.to_operands();
+        result.append(&mut self.string_callback.to_operands());
+        result
     }
 }
 
