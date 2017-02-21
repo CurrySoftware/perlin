@@ -47,10 +47,10 @@ mod tests {
             use language::CanApply;
             use query::{OrConstructor};
             let mut to_op = WhitespaceTokenizer::create(
-                NumberFilter::create(OrConstructor::create(Funnel::create(Operator::And, &docs.number)),
+                NumberFilter::create(OrConstructor::create(Funnel::create(Operator::All, &docs.number)),
                                         LowercaseFilter::create(
                                             Stemmer::create(Algorithm::English,
-                                                            Funnel::create(Operator::And, &docs.text)))));
+                                                            Funnel::create(Operator::All, &docs.text)))));
             to_op.apply(query);
             to_op.to_operand()
         }));
@@ -66,17 +66,15 @@ mod tests {
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(2))]);
         assert_eq!(t.run_query("birds deimos").collect::<Vec<_>>(), vec![]);
         assert_eq!(t.run_query("birds").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(1))]);
-        t.set_query_pipeline(Box::new(|docs, query| {
-            use language::CanApply;
-            use query::AndConstructor;
-            let mut to_op = WhitespaceTokenizer::create(
-                NumberFilter::create(AndConstructor::create(Funnel::create(Operator::And, &docs.number)),
-                                     LowercaseFilter::create(
-                                         Stemmer::create(Algorithm::English,
-                                                         Funnel::create(Operator::And, &docs.text)))));
-            to_op.apply(query);
-            to_op.to_operand()
-        }));
+        t.set_query_pipeline(
+            query_pipeline!( WhitespaceTokenizer
+                             > NumberFilter
+                             | Must [Any in number]
+                             > LowercaseFilter
+                             > Stemmer(Algorithm::English)
+                             > Must [All in text]
+            ));
+        // (AND (any in number) (Or [All in text] [Any in title]) [Any in text]
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
         assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
     }

@@ -19,8 +19,8 @@ macro_rules! try_option{
 }
 
 pub enum Operator {
-    And,
-    Or,
+    All,
+    Any,
 }
 
 /// This funnel is used at an end of a query pipeline
@@ -55,7 +55,7 @@ impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
 impl<'a, T: 'a + Hash + Eq> ToOperand<'a> for Funnel<'a, T> {
     fn to_operand(self) -> Operand<'a> {
         match self.operator {
-            Operator::And => {
+            Operator::All => {
                 Box::new(And {
                     operands: self.result
                         .into_iter()
@@ -63,7 +63,7 @@ impl<'a, T: 'a + Hash + Eq> ToOperand<'a> for Funnel<'a, T> {
                         .collect::<Vec<_>>(),
                 })
             }
-            Operator::Or => {
+            Operator::Any => {
                 Box::new(Or::create(self.result
                     .into_iter()
                     .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)

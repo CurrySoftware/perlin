@@ -20,6 +20,40 @@ pub trait ToBinaryOperand<'a> {
     fn to_bin_operand(self, other: Operand<'a>) -> Operand<'a>;
 }
 
+pub struct Chain<CB1, CB2> {
+    cb1: CB1,
+    cb2: CB2
+}
+
+impl<CB1, CB2> Chain<CB1, CB2>  {
+    pub fn create(cb1: CB1, cb2: CB2) -> Self {
+        Chain {
+            cb1: cb1,
+            cb2: cb2
+        }
+    }
+}
+
+impl<CB1, CB2, T: Copy> CanApply<T> for Chain<CB1, CB2>
+    where CB1: CanApply<T>,
+          CB2: CanApply<T> {
+    type Output = CB1::Output;
+
+    fn apply(&mut self, input: T) {
+        self.cb1.apply(input);
+        self.cb2.apply(input);
+    }
+}
+
+impl<'a, CB1, CB2> ToOperand<'a> for  Chain<CB1, CB2> 
+    where CB1: ToBinaryOperand<'a>,
+          CB2: ToOperand<'a>
+    {
+    fn to_operand(self) -> Operand<'a> {
+        self.cb1.to_bin_operand(self.cb2.to_operand())
+    }
+}
+
 pub struct AndConstructor<CB> {
     cb: CB
 }
