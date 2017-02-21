@@ -80,6 +80,14 @@ pub struct And<'a> {
     operands: Vec<Operand<'a>>,
 }
 
+impl<'a> And<'a>{
+    pub fn create(operands: Vec<Operand<'a>>) -> And {
+        And {
+            operands: operands
+        }
+    }
+}
+
 impl<'a> Iterator for And<'a> {
     type Item = Posting;
 

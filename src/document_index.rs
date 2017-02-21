@@ -28,17 +28,17 @@ mod tests {
     use language::integers::NumberFilter;
 
     #[test]
-    fn test() {
+    fn basic_test() {
         use std::borrow::Cow;
         use query::{Funnel, Operator, ToOperand};
         use perlin_core::index::posting::Posting;
-        let mut t = TestIndex::create(create_test_dir("doc_index/test"));
+        let mut t = TestIndex::create(create_test_dir("doc_index/basic_test"));
         t.set_text_pipeline(pipeline!(text
                            WhitespaceTokenizer
                            > NumberFilter
-                           | [number]
+                             | [number]
                            > LowercaseFilter
-                      > Stemmer(Algorithm::English)));
+                           > Stemmer(Algorithm::English)));
         t.set_title_pipeline(pipeline!(title
                       WhitespaceTokenizer
                       > LowercaseFilter
@@ -65,6 +65,19 @@ mod tests {
         t.commit();
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(2))]);
         assert_eq!(t.run_query("birds deimos").collect::<Vec<_>>(), vec![]);
-        assert_eq!(t.run_query("birds").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(1))]);        
+        assert_eq!(t.run_query("birds").collect::<Vec<_>>(), vec![Posting(DocId(0)), Posting(DocId(1))]);
+        t.set_query_pipeline(Box::new(|docs, query| {
+            use language::CanApply;
+            use query::AndConstructor;
+            let mut to_op = WhitespaceTokenizer::create(
+                NumberFilter::create(AndConstructor::create(Funnel::create(Operator::And, &docs.number)),
+                                     LowercaseFilter::create(
+                                         Stemmer::create(Algorithm::English,
+                                                         Funnel::create(Operator::And, &docs.text)))));
+            to_op.apply(query);
+            to_op.to_operand()
+        }));
+        assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
+        assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
     }
 }

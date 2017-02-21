@@ -17,6 +17,35 @@ pub trait ToBinaryOperand<'a> {
     fn to_bin_operand(self, other: Operand<'a>) -> Operand<'a>;
 }
 
+pub struct AndConstructor<CB> {
+    cb: CB
+}
+
+impl<CB> AndConstructor<CB> {
+    pub fn create(cb: CB) -> Self {
+        AndConstructor {
+            cb: cb
+        }
+    }
+}
+
+impl<CB, T> CanApply<T> for AndConstructor<CB>
+    where CB: CanApply<T>
+{
+    type Output = CB::Output;
+    fn apply(&mut self, t: T) {
+        self.cb.apply(t)
+    }
+}
+
+impl<'a, CB> ToBinaryOperand<'a> for AndConstructor<CB>
+    where CB: ToOperand<'a>
+{
+    fn to_bin_operand(self, op: Operand<'a>) -> Operand<'a> {
+        Box::new(And::create(vec![self.cb.to_operand(), op]))
+    }
+}
+
 pub struct OrConstructor<CB> {
     cb: CB
 }
