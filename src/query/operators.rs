@@ -42,6 +42,16 @@ impl<'a, T: 'a + Hash + Eq> Funnel<'a, T> {
     }
 }
 
+impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord> CanApply<&'b T> for Funnel<'a, T> {
+    type Output = T;
+
+    fn apply(&mut self, term: &T) {
+        if let Some(posting_iter) = self.index.query_atom(term) {
+            self.result.push(posting_iter);
+        }
+    }
+}
+
 impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
     type Output = T;
 

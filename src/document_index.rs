@@ -56,13 +56,14 @@ mod tests {
     #[test]
     fn basic_test() {
         let mut t = create_and_fill_index("doc_index/basic_test");
-        t.set_query_pipeline(query_pipeline!( WhitespaceTokenizer
-                             > NumberFilter
-                             | Must [Any in number]
-                             > LowercaseFilter
-                             > Stemmer(Algorithm::English)
-                             > Must [All in text]
-            ));
+        t.set_query_pipeline(query_pipeline!(
+            WhitespaceTokenizer
+                > NumberFilter
+                | Must [Any in number]
+                > LowercaseFilter
+                > Stemmer(Algorithm::English)
+                > Must [All in text]
+        ));
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
         assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
     }
@@ -76,9 +77,9 @@ mod tests {
                 | Must [Any in number]
                 > LowercaseFilter
                 > Stemmer(Algorithm::English)
-                > Must [All in text]
-                > Must [Any in title]));
+                > May [Any in title]));
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
         assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
+        assert_eq!(t.run_query("10").collect::<Vec<_>>(), vec![Posting(DocId(0))]);
     }
 }
