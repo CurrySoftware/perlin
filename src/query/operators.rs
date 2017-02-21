@@ -34,7 +34,10 @@ pub struct Funnel<'a, T: 'a + Hash + Eq> {
 }
 
 impl<'a, T: 'a + Hash + Eq> Funnel<'a, T> {
-    pub fn create(chaining_operator: ChainingOperator, operator: Operator, index: &'a Index<T>) -> Self {
+    pub fn create(chaining_operator: ChainingOperator,
+                  operator: Operator,
+                  index: &'a Index<T>)
+                  -> Self {
         Funnel {
             index: index,
             operator: operator,
@@ -66,20 +69,25 @@ impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
 
 impl<'a, T: 'a + Hash + Eq> ToOperands<'a> for Funnel<'a, T> {
     fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+        if self.result.is_empty() {
+            return vec![];
+        }
         match self.operator {
             Operator::All => {
-                vec![(self.chaining_operator, Box::new(And {
-                    operands: self.result
-                        .into_iter()
-                        .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
-                        .collect::<Vec<_>>(),
-                }))]
+                vec![(self.chaining_operator,
+                      Box::new(And {
+                          operands: self.result
+                              .into_iter()
+                              .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
+                              .collect::<Vec<_>>(),
+                      }))]
             }
             Operator::Any => {
-                vec![(self.chaining_operator, Box::new(Or::create(self.result
-                    .into_iter()
-                    .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
-                    .collect::<Vec<_>>())))]
+                vec![(self.chaining_operator,
+                      Box::new(Or::create(self.result
+                          .into_iter()
+                          .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
+                          .collect::<Vec<_>>())))]
             }
         }
 
@@ -92,11 +100,9 @@ pub struct And<'a> {
     operands: Vec<Operand<'a>>,
 }
 
-impl<'a> And<'a>{
+impl<'a> And<'a> {
     pub fn create(operands: Vec<Operand<'a>>) -> And {
-        And {
-            operands: operands
-        }
+        And { operands: operands }
     }
 }
 
@@ -104,6 +110,7 @@ impl<'a> Iterator for And<'a> {
     type Item = Posting;
 
     fn next(&mut self) -> Option<Self::Item> {
+        println!("AND Next");
         let mut focus = None; //Acts as temporary to be compared against
         let mut last_iter = self.operands.len() + 1; //The iterator that last set 'focus'
         'possible_documents: loop {
@@ -159,6 +166,7 @@ impl<'a> Or<'a> {
 impl<'a> Iterator for Or<'a> {
     type Item = Posting;
     fn next(&mut self) -> Option<Self::Item> {
+        println!("Or Next");
         // Find the smallest current value of all operands
         self.buf.append(&mut self.operands
             .iter_mut()

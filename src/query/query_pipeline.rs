@@ -58,11 +58,30 @@ macro_rules! query_pipeline {
     ($($x:tt)*) => {
         Box::new(move |index, query| {
             use $crate::language::CanApply;
-            use $crate::query::{ToOperands, Funnel, Operator, Operand, Chain, ChainingOperator};
+            use $crate::query::{And, Or, ToOperands, Funnel, Operator, Operand, Chain, ChainingOperator};
 
             let mut pipeline = inner_query_pipe!(;index; $($x)*);
             pipeline.apply(query);
-            pipeline.to_operands()
+            let operands = pipeline.to_operands();
+            let mut must_bucket = Vec::new();
+            let mut may_bucket = Vec::new();
+            for (op, operand) in operands {
+                match op {
+                    ChainingOperator::Must => {
+                        must_bucket.push(operand);
+                    },
+                    ChainingOperator::May => {
+                        may_bucket.push(operand);
+                    },
+                    _ => {panic!()}
+                }
+            };
+            println!("Mays: {:?}", may_bucket.len());
+            if !may_bucket.is_empty() {
+                must_bucket.push(Box::new(Or::create(may_bucket)));
+            }
+            println!("Musts: {:?}", must_bucket.len());
+            Box::new(And::create(must_bucket))
         })
     }
 }

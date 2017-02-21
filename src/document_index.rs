@@ -81,5 +81,6 @@ mod tests {
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
         assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
         assert_eq!(t.run_query("10").collect::<Vec<_>>(), vec![Posting(DocId(0))]);
+        assert_eq!(t.run_query("10 pizza").collect::<Vec<_>>(), vec![]);
     }
 }
