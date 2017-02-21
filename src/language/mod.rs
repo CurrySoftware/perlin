@@ -86,55 +86,41 @@ impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<
     }
 }
 
-
-#[macro_export]
-macro_rules! funnel {
-    ($doc_id:expr, $index:expr) => {
-        IndexerFunnel::create($doc_id, $index)
-    }
-}
-
 #[macro_export]
 macro_rules! inner_pipeline {
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
-     $element:ident($($param:expr),+) | [$this_field:ident] > $($x:tt)*) =>
-    // ;doc_id; ;field_id; Element(params) | [field] > Next
-    {
-        $element::create($($param),+ ,
-                         funnel!($doc_id, &mut $INDEX.$this_field),
-                         inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; ($x)*))        
+     > $($x:tt)*) => {
+        // >
+        inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*)
     };
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
-     $element:ident | [$this_field:ident] > $($x:tt)*) =>
-    // ;doc_id; ;field_id; Element | [field] > Next
+     $element:ident($($param:expr),+) | [$this_field:ident] $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element(params) | [field]
     {
-        $element::create(
-            funnel!($doc_id, &mut $INDEX.$this_field),
-            inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))        
+        $element::create($($param),+ ,
+                         IndexerFunnel::create($doc_id, &mut $INDEX.$this_field),
+                         inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; ($x)*))
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident($($param:expr),+) > $($x:tt)*) =>
-    // ;doc_id; ;field_id; Element(params) > Next
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
+     $element:ident($($param:expr),+) $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element(params)
     {
         $element::create($($param),+ , inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))        
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident > $($x:tt)*) =>
-    // ;doc_id; ;field_id; Element > Next
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
+     $element:ident | [$this_field:ident] $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element | [field]
+    {
+        $element::create(
+            IndexerFunnel::create($doc_id, &mut $INDEX.$this_field),
+            inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))
+    };
+    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
+     $element:ident $($x:tt)*) =>
+    // ;doc_id; ;field_id; Element
     {
         $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))
     };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident($($param:expr),+)) =>
-    // ;doc_id; ;field_id; Element(params)
-    {
-        $element::create(
-            $($param),+ ,
-            inner_pipeline!(;$INDEX; ;$doc_id; ;$field;))
-    };
-    (;$INDEX:ident; ;$doc_id:expr; ;$field:ident; $element:ident) =>
-    // ;doc_id; ;field_id; Element
-    {
-        $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field;))
-    };
-    
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;) => {
         IndexerFunnel::create($doc_id, &mut $INDEX.$field)
     };
