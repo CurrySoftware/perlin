@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::fmt::Debug;
 
 use perlin_core::index::posting::{Posting, PostingIterator};
 use perlin_core::index::Index;
@@ -18,6 +19,7 @@ macro_rules! try_option{
     }
 }
 
+#[derive(Debug)]
 pub enum Operator {
     All,
     Any,
@@ -57,11 +59,12 @@ impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord> CanApply<&'b T> for Funnel<'a, T> {
     }
 }
 
-impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
+impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T> {
     type Output = T;
 
     fn apply(&mut self, term: T) {
         if let Some(posting_iter) = self.index.query_atom(&term) {
+            println!("{:?}: {:?}", self.operator, term); 
             self.result.push(posting_iter);
         }
     }
@@ -70,6 +73,7 @@ impl<'a, T: 'a + Hash + Eq + Ord> CanApply<T> for Funnel<'a, T> {
 impl<'a, T: 'a + Hash + Eq> ToOperands<'a> for Funnel<'a, T> {
     fn to_operands(self) -> Vec<ChainedOperand<'a>> {
         if self.result.is_empty() {
+            println!("Empty Funnel!");
             return vec![];
         }
         match self.operator {
@@ -110,7 +114,6 @@ impl<'a> Iterator for And<'a> {
     type Item = Posting;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("AND Next");
         let mut focus = None; //Acts as temporary to be compared against
         let mut last_iter = self.operands.len() + 1; //The iterator that last set 'focus'
         'possible_documents: loop {

@@ -4,7 +4,7 @@ use query::Operand;
 use perlin_core::index::posting::DocId;
 
 pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out> + Sync + Send>;
-pub type QueryPipeline<T> = Box<for<'r, 'x> Fn(&'r T, &'x str) -> Operand<'r>>;
+pub type QueryPipeline<T> = Box<for<'r, 'x> Fn(&'r T, &'x str) -> Operand<'r> + Sync + Send>;
 
 #[cfg(test)]
 mod tests {

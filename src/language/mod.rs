@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use perlin_core::index::posting::DocId;
 use query::{ChainedOperand, ToOperands};
 
@@ -14,6 +16,70 @@ pub trait CanApply<Input> {
     type Output;
     fn apply(&mut self, Input);
 }
+
+pub struct AlphaNumericTokenizer<TCB> {
+    cb: TCB
+}
+impl<TCB> AlphaNumericTokenizer<TCB> {
+    pub fn create(cb: TCB) -> Self {
+        AlphaNumericTokenizer{
+            cb: cb
+        }
+    }
+}
+impl<'a, TCB> CanApply<&'a str> for AlphaNumericTokenizer<TCB>
+    where TCB: CanApply<&'a str>
+{
+    type Output = TCB::Output;
+    fn apply(&mut self, input: &'a str) {
+        for token in input.split(|c: char| !c.is_alphanumeric()) {
+            self.cb.apply(token);
+        }
+    }
+}
+
+impl<'a, TCB> ToOperands<'a> for AlphaNumericTokenizer<TCB>
+    where TCB: ToOperands<'a>
+{
+    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+        self.cb.to_operands()
+    }
+}
+
+
+pub struct Debugger<TCallback>
+{
+    callback: TCallback,
+}
+impl<TCallback> Debugger<TCallback> {
+    pub fn create(callback: TCallback) -> Self {
+        Debugger{
+            callback: callback
+        }
+    }
+}
+
+impl<TCallback, T: Debug> CanApply<T> for Debugger<TCallback>
+    where TCallback: CanApply<T>
+{
+    type Output = TCallback::Output;
+
+    fn apply(&mut self, input: T) {
+        println!("{:?}", input);
+        self.callback.apply(input);
+    }
+}
+
+impl<'a, TCB> ToOperands<'a> for Debugger<TCB>
+    where TCB: ToOperands<'a>
+{
+    fn to_operands(self) -> Vec<ChainedOperand<'a>>
+    {
+        self.callback.to_operands()
+    }
+}
+
+
 
 pub struct WhitespaceTokenizer<TCallback>    
 {
@@ -93,7 +159,7 @@ impl<'a, T: Hash + Eq> IndexerFunnel<'a, T> {
         }
     }
 }
-use std::fmt::Debug;
+
 impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<'a, TTerm>{
 
     type Output = TTerm;
