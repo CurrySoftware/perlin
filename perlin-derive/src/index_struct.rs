@@ -83,7 +83,7 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
                 if let Some(ref query_pipe) = self.query_pipeline {
                     query_pipe(&self.documents, query)
                         .map(|Posting(DocId(doc_id))| {
-                            if let Ok(index) = self.external_keys.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
+                            if let Ok(index) = self.external_ids.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
                                 self.external_keys[index].1
                             } else {
                                 panic!("DocId unknown!");
