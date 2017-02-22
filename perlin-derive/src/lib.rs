@@ -1,3 +1,5 @@
+#![recursion_limit="100"]
+
 extern crate proc_macro;
 extern crate syn;
 #[macro_use]

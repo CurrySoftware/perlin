@@ -80,15 +80,16 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
     if let Some(ext_id_type) = get_external_id_type(&ast.attrs) {
         quote!{
             pub fn run_query<'a>(&'a self, query: &str) -> Box<Iterator<Item=#ext_id_type> +'a> {
+                use perlin_core::index::posting::Posting;
                 if let Some(ref query_pipe) = self.query_pipeline {
-                    query_pipe(&self.documents, query)
-                        .map(|Posting(DocId(doc_id))| {
+                    Box::new(query_pipe(&self.documents, query)
+                        .map(move |Posting(doc_id)| {
                             if let Ok(index) = self.external_ids.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
-                                self.external_keys[index].1
+                                self.external_ids[index].1
                             } else {
                                 panic!("DocId unknown!");
                             }
-                        })
+                        })) as Box<Iterator<Item=#ext_id_type>>
                 } else {
                     panic!("Query Pipe not set!");
                 }
