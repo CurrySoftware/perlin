@@ -17,7 +17,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     let add_external_id = add_external_id(ast);
     let create_external_ids = create_external_ids(ast);
     let pipeline_setters = set_pipelines(variant_data.fields(), ident);
-    
+    let run_query = run_query(ast);
     let field_matches = field_matches(variant_data.fields());
     quote!(
         
@@ -67,19 +67,44 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                 self.query_pipeline = Some(pipe);
             }
 
-            pub fn run_query<'a>(&'a self, query: &str) -> Operand<'a> {
-                if let Some(ref query_pipe) = self.query_pipeline {
-                    query_pipe(&self.documents, query)
-                } else {
-                    panic!();
-                }
-            }
+            #run_query
             
             //Pipeline setter
             //fn set_field_pipeline(&mut self, pipe: Pipeline<Type, Ident>)
             #(#pipeline_setters)*
         }        
     )
+}
+
+fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
+    if let Some(ext_id_type) = get_external_id_type(&ast.attrs) {
+        quote!{
+            pub fn run_query<'a>(&'a self, query: &str) -> Box<Iterator<Item=#ext_id_type> +'a> {
+                if let Some(ref query_pipe) = self.query_pipeline {
+                    query_pipe(&self.documents, query)
+                        .map(|Posting(DocId(doc_id))| {
+                            if let Ok(index) = self.external_keys.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
+                                self.external_keys[index].1
+                            } else {
+                                panic!("DocId unknown!");
+                            }
+                        })
+                } else {
+                    panic!("Query Pipe not set!");
+                }
+            }
+        }
+    } else {
+        quote!{
+            pub fn run_query<'a>(&'a self, query: &str) -> Operand<'a> {
+                if let Some(ref query_pipe) = self.query_pipeline {
+                    query_pipe(&self.documents, query)
+                } else {
+                    panic!("Query Pipe not set!");
+                }
+            }
+        }
+    }
 }
 
 fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens> {

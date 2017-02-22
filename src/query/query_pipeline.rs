@@ -58,7 +58,7 @@ macro_rules! query_pipeline {
     ($($x:tt)*) => {
         Box::new(move |index, query| {
             use $crate::language::CanApply;
-            use $crate::query::{And, Or, ToOperands, Funnel, Operator, Operand, Chain, ChainingOperator};
+            use $crate::query::{And, Or, ToOperands, Funnel, Operator, Chain, ChainingOperator};
 
             let mut pipeline = inner_query_pipe!(;index; $($x)*);
             pipeline.apply(query);

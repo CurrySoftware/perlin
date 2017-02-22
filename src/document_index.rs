@@ -16,7 +16,6 @@ mod tests {
     use test_utils::create_test_dir;
 
     #[derive(PerlinDocument)]
-    #[ExternalId(usize)]
     pub struct Test {
         text: Field<String>,
         title: Field<String>,
@@ -41,14 +40,11 @@ mod tests {
                                        WhitespaceTokenizer
                                        > LowercaseFilter
                                        > Stemmer(Algorithm::English)));
-        t.add_document(&[(Cow::from("text"), Cow::from("10 birds flew over MT EVEREST"))],
-                       10);
-        t.add_document(&[(Cow::from("text"), Cow::from("125 birds flew accross THE ocean"))],
-                       10);
+        t.add_document(&[(Cow::from("text"), Cow::from("10 birds flew over MT EVEREST"))]);
+        t.add_document(&[(Cow::from("text"), Cow::from("125 birds flew accross THE ocean"))]);
         t.add_document(&[(Cow::from("title"), Cow::from("Unicorns on Deimos")),
                          (Cow::from("text"),
-                          Cow::from("2567 unicorns flew from phobos to deimos"))],
-                       10);
+                          Cow::from("2567 unicorns flew from phobos to deimos"))]);
         t.commit();
         t
     }
@@ -77,7 +73,7 @@ mod tests {
                 | Must [Any in number]
                 > LowercaseFilter
                 > Stemmer(Algorithm::English)
-                > May [Any in title]));
+                > Must [Any in title]));
         assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
         assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
         assert_eq!(t.run_query("10").collect::<Vec<_>>(), vec![Posting(DocId(0))]);
