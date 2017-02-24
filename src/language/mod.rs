@@ -33,7 +33,9 @@ impl<'a, TCB> CanApply<&'a str> for AlphaNumericTokenizer<TCB>
     type Output = TCB::Output;
     fn apply(&mut self, input: &'a str) {
         for token in input.split(|c: char| !c.is_alphanumeric()) {
-            self.cb.apply(token);
+            if !token.is_empty() {
+                self.cb.apply(token);
+            }
         }
     }
 }
