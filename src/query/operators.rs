@@ -25,6 +25,73 @@ pub enum Operator {
     Any,
 }
 
+
+pub struct SplitFunnel<'a, T: 'a + Hash + Eq, CB> {
+    index: &'a Index<T>,
+    operator: Operator,
+    chaining_operator: ChainingOperator,
+    result: Vec<PostingIterator<'a>>,
+    callback: CB,
+}
+
+impl<'a, T: 'a + Hash + Eq, CB> SplitFunnel<'a, T, CB> {
+    pub fn create(chaining_operator: ChainingOperator,
+                  operator: Operator,
+                  index: &'a Index<T>,
+                  cb: CB)
+                  -> Self {
+        SplitFunnel {
+            index: index,
+            operator: operator,
+            chaining_operator: chaining_operator,
+            callback: cb,
+            result: Vec::new(),
+        }
+    }
+}
+
+impl<'a, T: 'a + Hash + Eq + Ord, CB> CanApply<T> for SplitFunnel<'a, T, CB>
+    where CB: CanApply<T>
+{
+    type Output = CB::Output;
+
+    fn apply(&mut self, term: T) {
+        if let Some(posting_iter) = self.index.query_atom(&term) {
+            self.result.push(posting_iter);
+        }
+        self.callback.apply(term);
+    }
+}
+
+
+impl<'a, T: 'a + Hash + Eq, CB> ToOperands<'a> for SplitFunnel<'a, T, CB>
+    where CB: ToOperands<'a>
+{
+    fn to_operands(self) -> Vec<ChainedOperand<'a>>{
+        let mut other = self.callback.to_operands();
+        match self.operator {
+            Operator::All => {
+                other.push(
+                    (self.chaining_operator,
+                      Box::new(And {
+                          operands: self.result
+                              .into_iter()
+                              .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
+                              .collect::<Vec<_>>(),
+                      })))
+            },
+            Operator::Any => {
+                other.push((self.chaining_operator,
+                      Box::new(Or::create(self.result
+                          .into_iter()
+                          .map(|piter| Box::new(piter) as Box<Iterator<Item = Posting>>)
+                          .collect::<Vec<_>>()))))
+            }
+        }
+        other
+    }
+}
+
 /// This funnel is used at an end of a query pipeline
 /// It calls `index.query_atom` and stores the result, which is lazy
 /// When `to_operand` is then called, it packs everything into an operator!
@@ -64,7 +131,7 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T> {
 
     fn apply(&mut self, term: T) {
         if let Some(posting_iter) = self.index.query_atom(&term) {
-            println!("{:?}: {:?}", self.operator, term); 
+            println!("{:?}: {:?}", self.operator, term);
             self.result.push(posting_iter);
         }
     }

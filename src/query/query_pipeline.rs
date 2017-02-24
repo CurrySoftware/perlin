@@ -40,8 +40,8 @@ macro_rules! inner_query_pipe {
     };
     (;$INDEX:ident;
      $chain:ident [$operator:ident in $this_field:ident] $($x:tt)*) => {
-        Chain::create(
-            operand!(;$INDEX; $chain [$operator in $this_field]),
+        SplitFunnel::create(
+            ChainingOperator::$chain, Operator::$operator, &$INDEX.$this_field,
             inner_query_pipe!(;$INDEX; $($x)*))
     };
     (;$INDEX:ident;
@@ -58,7 +58,7 @@ macro_rules! query_pipeline {
     ($($x:tt)*) => {
         Box::new(move |index, query| {
             use $crate::language::CanApply;
-            use $crate::query::{And, Or, ToOperands, Funnel, Operator, Chain, ChainingOperator};
+            use $crate::query::{And, Or, ToOperands, SplitFunnel, Funnel, Operator, ChainingOperator};
 
             let mut pipeline = inner_query_pipe!(;index; $($x)*);
             pipeline.apply(query);
