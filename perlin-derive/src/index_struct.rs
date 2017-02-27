@@ -25,7 +25,6 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
             documents: #ident,
             pipelines: #pipes_ident,
             query_pipeline: Option<QueryPipeline<#ident>>,
-            base_path: PathBuf,
             doc_counter: DocId,
             #ext_id
         }
@@ -37,7 +36,6 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                     documents: #ident::create(&base_path),
                     pipelines: #pipes_ident::default(),
                     query_pipeline: None,
-                    base_path: base_path,
                     doc_counter: DocId::none(),
                     #create_external_ids
                 }
