@@ -106,9 +106,16 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
     }
 }
 
+/// Generates typed setters for indexing pipelines
+/// Runs over all fields of the derived struct and implements a setter for
+/// each of them
+/// Ignores fields with a #[NoPipe]-Attribute
 fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens> {
     let mut result = Vec::new();
     for field in fields {
+        if field.attrs.iter().any(|attr| attr.name() == "NoPipe") {
+            continue;
+        }
         let field_ident = &field.ident;
         let fn_ident = syn::Ident::from(format!("set_{}_pipeline", field_ident.clone().unwrap()).to_string());
         let ty = get_generics_from_field(&field.ty);
