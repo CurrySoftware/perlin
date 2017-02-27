@@ -42,6 +42,14 @@ mod tests {
                                        WhitespaceTokenizer
                                        > LowercaseFilter
                                        > Stemmer(Algorithm::English)));
+        t.set_query_pipeline(query_pipeline!(
+            WhitespaceTokenizer
+                > NumberFilter
+                | Must [Any in number]
+                > LowercaseFilter
+                > Stemmer(Algorithm::English)
+                > Must [All in text]
+        ));
         t.add_document(&[(Cow::from("text"), Cow::from("10 birds flew over MT EVEREST"))]);
         t.add_document(&[(Cow::from("text"), Cow::from("125 birds flew accross THE ocean"))]);
         t.add_document(&[(Cow::from("title"), Cow::from("Unicorns on Deimos")),
@@ -51,19 +59,30 @@ mod tests {
         t
     }
 
+    fn should_yield(index: &TestIndex, query: &str, ids: &[u64]) {
+        if index.run_query(query).collect::<Vec<_>>() !=
+           ids.iter().map(|id| Posting(DocId(*id))).collect::<Vec<_>>() {
+            assert!(false,
+                    format!("{} resulted in {:?} expexted {:?}",
+                            query,
+                            index.run_query(query).collect::<Vec<_>>(),
+                            ids.iter().map(|id| Posting(DocId(*id))).collect::<Vec<_>>()))
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn negative_test() {
+        let t = create_and_fill_index("doc_index/basic_test");
+        should_yield(&t, "10 deimos", &[]);
+        should_yield(&t, "2567 deimos", &[22]);
+    }
+
     #[test]
     fn basic_test() {
-        let mut t = create_and_fill_index("doc_index/basic_test");
-        t.set_query_pipeline(query_pipeline!(
-            WhitespaceTokenizer
-                > NumberFilter
-                | Must [Any in number]
-                > LowercaseFilter
-                > Stemmer(Algorithm::English)
-                > Must [All in text]
-        ));
-        assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
-        assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
+        let t = create_and_fill_index("doc_index/basic_test");
+        should_yield(&t, "10 deimos", &[]);
+        should_yield(&t, "2567 deimos", &[2]);
     }
 
     #[test]
@@ -76,11 +95,11 @@ mod tests {
                 > LowercaseFilter
                 > Stemmer(Algorithm::English)
                 > Must [Any in title]));
-        assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
-        assert_eq!(t.run_query("2567 deimos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
-        assert_eq!(t.run_query("10").collect::<Vec<_>>(), vec![Posting(DocId(0))]);
-        //Need empty PostingIterator for that to work!
-        assert_eq!(t.run_query("10 pizza").collect::<Vec<_>>(), vec![]);
+        // No term to funnel -> no operator -> only numberfunnel returns
+        should_yield(&t, "10", &[0]);
+        // Unkown term to funnel -> empty iterator -> empty result
+        should_yield(&t, "10 pizza", &[]);
+        should_yield(&t, "deimos", &[2]);        
     }
 
     #[test]
@@ -94,9 +113,8 @@ mod tests {
                 > Stemmer(Algorithm::English)
                 > Must [Any in title]
                 > Must [All in text]));
-        assert_eq!(t.run_query("10 deimos").collect::<Vec<_>>(), vec![]);
-        assert_eq!(t.run_query("2567 deimos phobos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
-        assert_eq!(t.run_query("deimos phobos").collect::<Vec<_>>(), vec![Posting(DocId(2))]);
-        assert_eq!(t.run_query("ocean").collect::<Vec<_>>(), vec![]);        
+        should_yield(&t, "2567 deimos phobos", &[2]);
+        should_yield(&t, "deimos phobos", &[2]);
+        should_yield(&t, "ocean", &[]);
     }
 }
