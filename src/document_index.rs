@@ -73,7 +73,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn negative_test() {
-        let t = create_and_fill_index("doc_index/basic_test");
+        let t = create_and_fill_index("doc_index/negative_test");
         should_yield(&t, "10 deimos", &[]);
         should_yield(&t, "2567 deimos", &[22]);
     }
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn nested_query() {
-        let mut t = create_and_fill_index("doc_index/empty");
+        let mut t = create_and_fill_index("doc_index/nested");
         t.set_query_pipeline(query_pipeline!(
             WhitespaceTokenizer
                 > NumberFilter

@@ -56,9 +56,9 @@ impl<'a, T: 'a + Hash + Eq + Ord, CB> CanApply<T> for SplitFunnel<'a, T, CB>
     type Output = CB::Output;
 
     fn apply(&mut self, term: T) {
-        if let Some(posting_iter) = self.index.query_atom(&term) {
-            self.result.push(posting_iter);
-        }
+        // Query index
+        self.result.push(self.index.query_atom(&term));
+        // And keep going
         self.callback.apply(term);
     }
 }
@@ -95,6 +95,10 @@ impl<'a, T: 'a + Hash + Eq, CB> ToOperands<'a> for SplitFunnel<'a, T, CB>
 /// This funnel is used at an end of a query pipeline
 /// It calls `index.query_atom` and stores the result, which is lazy
 /// When `to_operand` is then called, it packs everything into an operator!
+//TODO: In this struct lies an opportunity to optimize
+//If the operator is AND and one term returns an empty posting iterator
+//We could skip the rest
+//If the operator is Or and one term returns an empty posting iterator we could discard it
 pub struct Funnel<'a, T: 'a + Hash + Eq> {
     index: &'a Index<T>,
     operator: Operator,
@@ -120,9 +124,7 @@ impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord> CanApply<&'b T> for Funnel<'a, T> {
     type Output = T;
 
     fn apply(&mut self, term: &T) {
-        if let Some(posting_iter) = self.index.query_atom(term) {
-            self.result.push(posting_iter);
-        }
+        self.result.push(self.index.query_atom(term));
     }
 }
 
@@ -130,10 +132,7 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T> {
     type Output = T;
 
     fn apply(&mut self, term: T) {
-        if let Some(posting_iter) = self.index.query_atom(&term) {
-            //println!("{:?}: {:?}", self.operator, term);
-            self.result.push(posting_iter);
-        }
+        self.result.push(self.index.query_atom(&term));
     }
 }
 
