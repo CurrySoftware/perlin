@@ -6,8 +6,8 @@ use query::{ChainedOperand, ToOperands};
 
 /// Numberfilter.
 /// Takes an string as input and tries to convert it to usize
-/// If this is possible it calls the number_callback with the resulting usize
-/// Otherwise it calls the string_callback with the original input
+/// If this is possible it calls the `number_callback` with the resulting usize
+/// Otherwise it calls the `string_callback` with the original input
 pub struct NumberFilter<TStringCallback, TNumberCallback> {
     string_callback: TStringCallback,
     number_callback: TNumberCallback,

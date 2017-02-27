@@ -1,5 +1,6 @@
 use language::CanApply;
 
+/// Proof of concept stopword filter!
 pub struct StopwordFilter<CB> {
     stopwords: Vec<String>,
     callback: CB
@@ -19,7 +20,7 @@ impl<CB: CanApply<String>> CanApply<String> for StopwordFilter<CB> {
     type Output = CB::Output;
     
     fn apply(&mut self, input: String) {
-        if let Err(_) = self.stopwords.binary_search(&input) {
+        if self.stopwords.binary_search(&input).is_err() {
             self.callback.apply(input);
         }
     }
