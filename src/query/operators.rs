@@ -131,7 +131,7 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T> {
 
     fn apply(&mut self, term: T) {
         if let Some(posting_iter) = self.index.query_atom(&term) {
-            println!("{:?}: {:?}", self.operator, term);
+            //println!("{:?}: {:?}", self.operator, term);
             self.result.push(posting_iter);
         }
     }
@@ -140,7 +140,6 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T> {
 impl<'a, T: 'a + Hash + Eq> ToOperands<'a> for Funnel<'a, T> {
     fn to_operands(self) -> Vec<ChainedOperand<'a>> {
         if self.result.is_empty() {
-            println!("Empty Funnel!");
             return vec![];
         }
         match self.operator {
@@ -236,7 +235,6 @@ impl<'a> Or<'a> {
 impl<'a> Iterator for Or<'a> {
     type Item = Posting;
     fn next(&mut self) -> Option<Self::Item> {
-        println!("Or Next");
         // Find the smallest current value of all operands
         self.buf.append(&mut self.operands
             .iter_mut()

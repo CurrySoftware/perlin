@@ -85,7 +85,7 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
                     Box::new(query_pipe(&self.documents, query)
                         .map(move |Posting(doc_id)| {
                             if let Ok(index) = self.external_ids.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
-                                self.external_ids[index].1
+                                self.external_ids[index].1.clone()
                             } else {
                                 panic!("DocId unknown!");
                             }

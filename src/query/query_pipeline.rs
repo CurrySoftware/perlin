@@ -76,11 +76,11 @@ macro_rules! query_pipeline {
                     _ => {panic!()}
                 }
             };
-            println!("Mays: {:?}", may_bucket.len());
+         //   println!("Mays: {:?}", may_bucket.len());
             if !may_bucket.is_empty() {
                 must_bucket.push(Box::new(Or::create(may_bucket)));
             }
-            println!("Musts: {:?}", must_bucket.len());
+         //   println!("Musts: {:?}", must_bucket.len());
             Box::new(And::create(must_bucket))
         })
     }
