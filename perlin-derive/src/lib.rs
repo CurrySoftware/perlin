@@ -15,7 +15,7 @@ use perlin_document::generate_perlin_document_impl;
 
 use proc_macro::TokenStream;
 
-#[proc_macro_derive(PerlinDocument, attributes(ExternalId, NoPipe))]
+#[proc_macro_derive(PerlinDocument, attributes(ExternalId, no_pipe))]
 pub fn perlin_document(input: TokenStream) -> TokenStream {
     // Standard procedure when it comes to custom derive
     // See https://doc.rust-lang.org/book/procedural-macros.html

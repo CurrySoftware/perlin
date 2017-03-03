@@ -113,7 +113,7 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
 fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens> {
     let mut result = Vec::new();
     for field in fields {
-        if field.attrs.iter().any(|attr| attr.name() == "NoPipe") {
+        if field.attrs.iter().any(|attr| attr.name() == "no_pipe") {
             continue;
         }
         let field_ident = &field.ident;
