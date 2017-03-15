@@ -58,16 +58,18 @@ macro_rules! inner_query_pipe {
 #[macro_export]
 macro_rules! query_pipeline {
     ($($x:tt)*) => {
-        Box::new(move |index, query| {
+        Box::new(move |index, mut query| {
             use $crate::language::CanApply;
             use $crate::query::{And, Or, ToOperands, SplitFunnel, Funnel, Operator, ChainingOperator};
 
             // Build the pipeline
             let mut pipeline = inner_query_pipe!(;index; $($x)*);
             // Run the query-string through it
-            pipeline.apply(query);
-            // And retrieve all operands
-            let operands = pipeline.to_operands();
+            pipeline.apply(&query.query);
+            // And retrieve all operands            
+            let mut operands = pipeline.to_operands();
+            // Append the filters
+            operands.append(&mut query.filter);
             // Put them in must or may buckets
             let mut must_bucket = Vec::new();
             let mut may_bucket = Vec::new();

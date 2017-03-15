@@ -19,6 +19,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     let pipeline_setters = set_pipelines(variant_data.fields(), ident);
     let run_query = run_query(ast);
     let field_matches = field_matches(variant_data.fields());
+    let query_fields = query_fields(variant_data.fields());
     quote!(
         
         pub struct #index_ident {
@@ -70,6 +71,10 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
             //Pipeline setter
             //fn set_field_pipeline(&mut self, pipe: Pipeline<Type, Ident>)
             #(#pipeline_setters)*
+
+            //Query Fields
+            //fn query_field(&self, value: TTerm) -> QueryTerm<T>
+            #(#query_fields)*            
         }        
     )
 }
@@ -77,7 +82,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
 fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
     if let Some(ext_id_type) = get_external_id_type(&ast.attrs) {
         quote!{
-            pub fn run_query<'a>(&'a self, query: &str) -> Box<Iterator<Item=#ext_id_type> +'a> {
+            pub fn run_query<'a>(&'a self, query: Query<'a>) -> Box<Iterator<Item=#ext_id_type> +'a> {
                 use perlin_core::index::posting::Posting;
                 if let Some(ref query_pipe) = self.query_pipeline {
                     Box::new(query_pipe(&self.documents, query)
@@ -95,7 +100,7 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
         }
     } else {
         quote!{
-            pub fn run_query<'a>(&'a self, query: &str) -> Operand<'a> {
+            pub fn run_query<'a>(&'a self, query: Query<'a>) -> Operand<'a> {
                 if let Some(ref query_pipe) = self.query_pipeline {
                     query_pipe(&self.documents, query)
                 } else {
@@ -109,7 +114,7 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
 /// Generates typed setters for indexing pipelines
 /// Runs over all fields of the derived struct and implements a setter for
 /// each of them
-/// Ignores fields with a #[NoPipe]-Attribute
+/// Ignores fields with a #[no_pipe]-Attribute
 fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens> {
     let mut result = Vec::new();
     for field in fields {
@@ -126,6 +131,23 @@ fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens
         });
     }
 
+    result
+}
+
+/// Generates typed methods to query individual fields with single terms
+/// This is usefull for filters!
+fn query_fields(fields: &[syn::Field]) -> Vec<quote::Tokens> {
+    let mut result = Vec::new();
+    for field in fields {
+        let field_ident = &field.ident;
+        let fn_ident = syn::Ident::from(format!("query_{}", field_ident.clone().unwrap()).to_string());
+        let ty = get_generics_from_field(&field.ty);
+        result.push(quote! {
+            pub fn #fn_ident(&self, term: #ty) -> QueryTerm<#ty> {
+                QueryTerm::create(&self.documents.#field_ident, term)
+            }
+        });
+    }
     result
 }
 

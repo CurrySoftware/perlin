@@ -1,10 +1,10 @@
 use std::marker::PhantomData;
 
-use query::Operand;
+use query::{Query, Operand};
 use perlin_core::index::posting::DocId;
 
 pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out> + Sync + Send>;
-pub type QueryPipeline<T> = Box<for<'r, 'x> Fn(&'r T, &'x str) -> Operand<'r> + Sync + Send>;
+pub type QueryPipeline<T> = Box<for<'r> Fn(&'r T, Query<'r>) -> Operand<'r> + Sync + Send>;
 
 #[cfg(test)]
 mod tests {
@@ -29,6 +29,8 @@ mod tests {
     use language::integers::NumberFilter;
     use std::borrow::Cow;
     use perlin_core::index::posting::Posting;
+    use query::{Query};
+    
 
     fn create_and_fill_index(name: &str) -> TestIndex {
         let mut t = TestIndex::create(create_test_dir(name));
@@ -60,12 +62,12 @@ mod tests {
     }
 
     fn should_yield(index: &TestIndex, query: &str, ids: &[u64]) {
-        if index.run_query(query).collect::<Vec<_>>() !=
+        if index.run_query(Query::new(query.to_string())).collect::<Vec<_>>() !=
            ids.iter().map(|id| Posting(DocId(*id))).collect::<Vec<_>>() {
             assert!(false,
                     format!("{} resulted in {:?} expexted {:?}",
                             query,
-                            index.run_query(query).collect::<Vec<_>>(),
+                            index.run_query(Query::new(query.to_string())).collect::<Vec<_>>(),
                             ids.iter().map(|id| Posting(DocId(*id))).collect::<Vec<_>>()))
         }
     }
@@ -116,5 +118,16 @@ mod tests {
         should_yield(&t, "2567 deimos phobos", &[2]);
         should_yield(&t, "deimos phobos", &[2]);
         should_yield(&t, "ocean", &[]);
+    }
+
+    #[test]
+    fn filtered_query() {
+        let t = create_and_fill_index("doc_index/filtered_query");
+        let unfiltered = Query::new("flew".to_string());
+        let filtered = Query::new("flew".to_string()).filter(&t.query_number(2567));
+
+        assert_eq!(t.run_query(unfiltered).collect::<Vec<_>>(),
+                   vec![Posting(DocId(0)), Posting(DocId(1)), Posting(DocId(2))]);
+        assert_eq!(t.run_query(filtered).collect::<Vec<_>>(), vec![Posting(DocId(2))]);
     }
 }
