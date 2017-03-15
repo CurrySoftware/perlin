@@ -55,7 +55,7 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
     quote! {
         pub use self::perlin_impl::#index_ident;
         mod perlin_impl{            
-            use super::#ident;
+            use super::*;
 
             use std::path::{Path, PathBuf};
             use std::borrow::Cow;

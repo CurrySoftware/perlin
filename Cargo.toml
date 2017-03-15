@@ -14,7 +14,7 @@ license = "MIT"
 path = "../perlin-core"
 
 [dependencies.rust-stemmers]
-path = "../rust-stemmers"
+git = "https://github.com/JDemler/rust-stemmers.git"
 
 [dependencies.perlin-derive]
 path = "perlin-derive"
