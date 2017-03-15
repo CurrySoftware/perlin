@@ -19,9 +19,9 @@ mod tests {
     pub struct Test {
         text: Field<String>,
         title: Field<String>,
-        #[NoPipe]
+        #[no_pipe]
         number: Field<u64>,
-        #[NoPipe]
+        #[no_pipe]
         emails: Field<usize>,
     }
 
