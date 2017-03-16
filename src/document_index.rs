@@ -124,7 +124,7 @@ mod tests {
     fn filtered_query() {
         let t = create_and_fill_index("doc_index/filtered_query");
         let unfiltered = Query::new("flew".to_string());
-        let filtered = Query::new("flew".to_string()).filter(&t.query_number(2567));
+        let filtered = Query::new("flew".to_string()).filter(t.documents.number.query_atom(&2567));
 
         assert_eq!(t.run_query(unfiltered).collect::<Vec<_>>(),
                    vec![Posting(DocId(0)), Posting(DocId(1)), Posting(DocId(2))]);

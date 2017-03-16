@@ -54,8 +54,8 @@ impl<'a> Query<'a> {
         }
     }
 
-    pub fn filter<T: Hash + Eq + Ord>(mut self, filter: &QueryTerm<'a, T>) -> Self {
-        self.filter.push((ChainingOperator::Must, Box::new(filter.apply()) as Box<Iterator<Item = Posting>>));
+    pub fn filter(mut self, filter: PostingIterator<'a>) -> Self {
+        self.filter.push((ChainingOperator::Must, Box::new(filter) as Box<Iterator<Item = Posting>>));
         self
     }
 }
