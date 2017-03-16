@@ -19,11 +19,10 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     let pipeline_setters = set_pipelines(variant_data.fields(), ident);
     let run_query = run_query(ast);
     let field_matches = field_matches(variant_data.fields());
-    let query_fields = query_fields(variant_data.fields());
     quote!(
         
         pub struct #index_ident {
-            documents: #ident,
+            pub documents: #ident,
             pipelines: #pipes_ident,
             query_pipeline: Option<QueryPipeline<#ident>>,
             doc_counter: DocId,
@@ -71,10 +70,6 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
             //Pipeline setter
             //fn set_field_pipeline(&mut self, pipe: Pipeline<Type, Ident>)
             #(#pipeline_setters)*
-
-            //Query Fields
-            //fn query_field(&self, value: TTerm) -> QueryTerm<T>
-            #(#query_fields)*            
         }        
     )
 }
@@ -131,23 +126,6 @@ fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens
         });
     }
 
-    result
-}
-
-/// Generates typed methods to query individual fields with single terms
-/// This is usefull for filters!
-fn query_fields(fields: &[syn::Field]) -> Vec<quote::Tokens> {
-    let mut result = Vec::new();
-    for field in fields {
-        let field_ident = &field.ident;
-        let fn_ident = syn::Ident::from(format!("query_{}", field_ident.clone().unwrap()).to_string());
-        let ty = get_generics_from_field(&field.ty);
-        result.push(quote! {
-            pub fn #fn_ident(&self, term: #ty) -> QueryTerm<#ty> {
-                QueryTerm::create(&self.documents.#field_ident, term)
-            }
-        });
-    }
     result
 }
 
