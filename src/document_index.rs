@@ -20,6 +20,7 @@ mod tests {
         text: Field<String>,
         title: Field<String>,
         #[no_pipe]
+        #[filter]
         number: Field<u64>,
         #[no_pipe]
         emails: Field<usize>,
@@ -29,8 +30,8 @@ mod tests {
     use language::integers::NumberFilter;
     use std::borrow::Cow;
     use perlin_core::index::posting::Posting;
-    use query::{Query};
-    
+    use query::Query;
+
 
     fn create_and_fill_index(name: &str) -> TestIndex {
         let mut t = TestIndex::create(create_test_dir(name));
@@ -61,7 +62,7 @@ mod tests {
         t
     }
 
-    fn should_yield(index: &TestIndex, query: &str, ids: &[u64]) {
+    fn should_yield(index: &TestIndex, query: &str, ids: &[u32]) {
         if index.run_query(Query::new(query.to_string())).collect::<Vec<_>>() !=
            ids.iter().map(|id| Posting(DocId(*id))).collect::<Vec<_>>() {
             assert!(false,
@@ -101,7 +102,7 @@ mod tests {
         should_yield(&t, "10", &[0]);
         // Unkown term to funnel -> empty iterator -> empty result
         should_yield(&t, "10 pizza", &[]);
-        should_yield(&t, "deimos", &[2]);        
+        should_yield(&t, "deimos", &[2]);
     }
 
     #[test]
@@ -128,6 +129,18 @@ mod tests {
 
         assert_eq!(t.run_query(unfiltered).collect::<Vec<_>>(),
                    vec![Posting(DocId(0)), Posting(DocId(1)), Posting(DocId(2))]);
-        assert_eq!(t.run_query(filtered).collect::<Vec<_>>(), vec![Posting(DocId(2))]);
+        assert_eq!(t.run_query(filtered).collect::<Vec<_>>(),
+                   vec![Posting(DocId(2))]);
+    }
+
+    #[test]
+    fn iterate_filters() {
+        let mut t = create_and_fill_index("doc_index/iterate_filters");
+        t.add_document(&[(Cow::from("text"), Cow::from("125 10"))]);
+        t.add_document(&[(Cow::from("text"), Cow::from("10"))]);
+        t.add_document(&[(Cow::from("text"), Cow::from("10"))]);
+        t.commit();
+        assert_eq!(t.frequent_terms_number().map(|(df, t, _)| (df, *t)).collect::<Vec<_>>(),
+                   vec![(5, 10), (3, 125), (1, 2567)]);
     }
 }

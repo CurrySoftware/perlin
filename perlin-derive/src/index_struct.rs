@@ -5,27 +5,31 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     let ident = &ast.ident;
     let index_ident = syn::Ident::from(format!("{}Index", ident).to_string());
     let pipes_ident = syn::Ident::from(format!("{}Pipes", ident).to_string());
-    
+
     let variant_data = if let syn::Body::Struct(ref variant_data) = ast.body {
         variant_data
     } else {
         panic!("derive(PerlinDocument) only implemented for Structs!");
     };
-    
-    let ext_id = external_id_field(ast);    
+
+    let ext_id = external_id_field(ast);
     let external_id_param = external_id_param(ast);
     let add_external_id = add_external_id(ast);
     let create_external_ids = create_external_ids(ast);
     let pipeline_setters = set_pipelines(variant_data.fields(), ident);
     let run_query = run_query(ast);
     let field_matches = field_matches(variant_data.fields());
+    let frequent_terms = frequent_terms(variant_data.fields());
+    let create_sorted_fields = create_sorted_fields(variant_data.fields());
+    let sorted_fields_param = sorted_fields_param(variant_data.fields());
+    let construct_sorted_fields = construct_sorted_fields(variant_data.fields());
     quote!(
-        
         pub struct #index_ident {
             pub documents: #ident,
             pipelines: #pipes_ident,
             query_pipeline: Option<QueryPipeline<#ident>>,
             doc_counter: DocId,
+            #(#sorted_fields_param)*
             #ext_id
         }
 
@@ -37,12 +41,15 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                     pipelines: #pipes_ident::default(),
                     query_pipeline: None,
                     doc_counter: DocId::none(),
+                    #(#create_sorted_fields)*
                     #create_external_ids
                 }
             }
-            
+
             pub fn commit(&mut self) {
-                self.documents.commit();                
+                self.documents.commit();
+
+                #(#construct_sorted_fields)*
             }
 
             pub fn add_document(&mut self, key_values: &[(Cow<str>, Cow<str>)] #external_id_param) {
@@ -51,7 +58,8 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
 
                 for &(ref key, ref value) in key_values {
                     match key.as_ref() {
-                        //"field_name" =>  self.pipelines.field_name(doc_id, &mut self.documents, value);
+                        //"field_name" =>
+                        //self.pipelines.field_name(doc_id, &mut self.documents, value);
                         #(#field_matches,)*
                         _ => {
                            // panic!("#ident not found!")
@@ -66,23 +74,30 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
             }
 
             #run_query
-            
+
             //Pipeline setter
             //fn set_field_pipeline(&mut self, pipe: Pipeline<Type, Ident>)
             #(#pipeline_setters)*
-        }        
+
+            //Frequent terms
+            //fn frequent_terms_field(&self) ->
+            //Box<Iterator<Item = (usize, &TTerm, PostingIterator)>>
+            #(#frequent_terms)*
+        }
     )
 }
 
 fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
     if let Some(ext_id_type) = get_external_id_type(&ast.attrs) {
         quote!{
-            pub fn run_query<'a>(&'a self, query: Query<'a>) -> Box<Iterator<Item=#ext_id_type> +'a> {
+            pub fn run_query<'a>(&'a self, query: Query<'a>) ->
+                Box<Iterator<Item=#ext_id_type> +'a> {
                 use perlin_core::index::posting::Posting;
                 if let Some(ref query_pipe) = self.query_pipeline {
                     Box::new(query_pipe(&self.documents, query)
                         .map(move |Posting(doc_id)| {
-                            if let Ok(index) = self.external_ids.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
+                            if let Ok(index) = self.external_ids.
+                                binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
                                 self.external_ids[index].1.clone()
                             } else {
                                 panic!("DocId unknown!");
@@ -117,7 +132,8 @@ fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens
             continue;
         }
         let field_ident = &field.ident;
-        let fn_ident = syn::Ident::from(format!("set_{}_pipeline", field_ident.clone().unwrap()).to_string());
+        let fn_ident = syn::Ident::from(format!("set_{}_pipeline", field_ident.clone().unwrap())
+                                            .to_string());
         let ty = get_generics_from_field(&field.ty);
         result.push(quote!{
             pub fn #fn_ident(&mut self, pipe: Pipeline<#ty, #ident>) {
@@ -128,6 +144,37 @@ fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens
 
     result
 }
+
+
+/// Generates the frequent_terms method for all fields with a `filter`
+/// attribute!
+fn frequent_terms(fields: &[syn::Field]) -> Vec<quote::Tokens> {
+    let mut result = Vec::new();
+    for field in fields {
+        if !field.attrs.iter().any(|attr| attr.name() == "filter") {
+            continue;
+        }
+        let field_ident = &field.ident;
+        let fn_ident = syn::Ident::from(format!("frequent_terms_{}", field_ident.clone().unwrap())
+                                            .to_string());
+        let sorted_ident = syn::Ident::from(format!("sorted_{}", field_ident.clone().unwrap())
+                                                .to_string());
+        let ty = get_generics_from_field(&field.ty);
+
+        result.push(quote!{
+            pub fn #fn_ident<'a>(&'a self) ->
+                Box<Iterator<Item = (usize, &#ty, PostingIterator)> + 'a> {
+                Box::new(self.#sorted_ident.iter().map(move |&(ref df, ref t, ref term_id)| {
+                    (*df, t, self.documents.#field_ident.query_term(term_id))
+                }))
+            }
+        });
+    }
+    result
+}
+
+
+
 
 fn get_generics_from_field(field: &syn::Ty) -> quote::Tokens {
     if let &syn::Ty::Path(_, ref path) = field {
@@ -147,17 +194,15 @@ fn field_matches(fields: &[syn::Field]) -> Vec<quote::Tokens> {
     let mut result = Vec::new();
     for field in fields {
         let ident = &field.ident;
-        result.push(
-            quote!{
+        result.push(quote!{
                 stringify!(#ident) => {
                     if let Some(ref pipeline) = self.pipelines.#ident {
-                        pipeline(doc_id, &mut self.documents, value.as_ref());                       
+                        pipeline(doc_id, &mut self.documents, value.as_ref());
                     } else {
                         //panic!("Tried to index field #ident without initialized pipeline!")
                     }
                 }
-            }
-        );
+            });
     }
     result
 }
@@ -171,7 +216,67 @@ fn create_external_ids(ast: &syn::MacroInput) -> quote::Tokens {
         quote!()
     }
 }
-    
+
+// For struct creation
+fn create_sorted_fields(fields: &[syn::Field]) -> Vec<quote::Tokens> {
+    let mut result = Vec::new();
+    for field in fields {
+        if !field.attrs.iter().any(|attr| attr.name() == "filter") {
+            continue;
+        }
+
+        let field_ident = &field.ident;
+        let sorted_ident = syn::Ident::from(format!("sorted_{}", field_ident.clone().unwrap()).to_string());
+
+        result.push(quote!{
+            #sorted_ident: Vec::new(),
+        })
+
+    }
+    result
+}
+
+// For use inside of the commit function
+fn construct_sorted_fields(fields: &[syn::Field]) -> Vec<quote::Tokens> {
+    let mut result = Vec::new();
+    for field in fields {
+        if !field.attrs.iter().any(|attr| attr.name() == "filter") {
+            continue;
+        }
+        let field_ident = &field.ident;
+        let sorted_ident = syn::Ident::from(format!("sorted_{}", field_ident.clone().unwrap())
+                                                .to_string());
+        result.push(quote!{
+            let mut #sorted_ident = self.documents.#field_ident.iterate_terms().map(|(t, term_id)| {
+                (self.documents.#field_ident.term_df(term_id), t.clone(), *term_id)
+            }).collect::<Vec<_>>();
+
+            #sorted_ident.sort_by(|a, b| a.0.cmp(&b.0).reverse());
+            self.#sorted_ident = #sorted_ident;
+        });
+    }
+    result
+}
+
+// For Struct definition
+fn sorted_fields_param(fields: &[syn::Field]) -> Vec<quote::Tokens> {
+    let mut result = Vec::new();
+    for field in fields {
+        if !field.attrs.iter().any(|attr| attr.name() == "filter") {
+            continue;
+        }
+        let field_ident = &field.ident;
+        let sorted_ident = syn::Ident::from(format!("sorted_{}", field_ident.clone().unwrap())
+                                                .to_string());
+        let ty = get_generics_from_field(&field.ty);
+
+        result.push(quote!{
+            #sorted_ident: Vec<(usize, #ty, TermId)>,
+        });
+    }
+    result
+}
+
 fn add_external_id(ast: &syn::MacroInput) -> quote::Tokens {
     if let Some(_) = get_external_id_type(&ast.attrs) {
         quote!{
@@ -201,7 +306,7 @@ fn external_id_field(ast: &syn::MacroInput) -> quote::Tokens {
 fn get_external_id_type(attributes: &[syn::Attribute]) -> Option<syn::NestedMetaItem> {
     for attribute in attributes {
         if attribute.name() == "ExternalId" {
-            if let syn::MetaItem::List(_, ref nested_items) = attribute.value {                
+            if let syn::MetaItem::List(_, ref nested_items) = attribute.value {
                 return Some(nested_items[0].clone());
             }
         }

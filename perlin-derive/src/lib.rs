@@ -15,7 +15,7 @@ use perlin_document::generate_perlin_document_impl;
 
 use proc_macro::TokenStream;
 
-#[proc_macro_derive(PerlinDocument, attributes(ExternalId, no_pipe))]
+#[proc_macro_derive(PerlinDocument, attributes(ExternalId, no_pipe, filter))]
 pub fn perlin_document(input: TokenStream) -> TokenStream {
     // Standard procedure when it comes to custom derive
     // See https://doc.rust-lang.org/book/procedural-macros.html
@@ -65,7 +65,8 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
             use_parent_crate!(query::Operand);
             use_parent_crate!(query::Query);
             
-            use perlin_core::index::posting::DocId;
+            use perlin_core::index::posting::{PostingIterator, DocId};
+            use perlin_core::index::vocabulary::TermId;
             
             #pipeline_struct
 
