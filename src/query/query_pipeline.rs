@@ -71,6 +71,7 @@ macro_rules! query_pipeline {
             let mut operands = pipeline.to_operands();
             // Append the filters
             operands.append(&mut query.filter);
+
             // Put them in must or may buckets
             let mut must_bucket = Vec::new();
             let mut may_bucket = Vec::new();

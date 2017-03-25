@@ -10,6 +10,7 @@ pub use query::operators::{Or, And, SplitFunnel, Funnel, Combinator};
 pub mod query_pipeline;
 mod operators;
 
+#[derive(Debug)]
 pub enum ChainingOperator {
     Must,
     May,

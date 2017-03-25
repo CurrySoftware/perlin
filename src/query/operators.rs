@@ -20,6 +20,7 @@ macro_rules! try_option{
     }
 }
 
+#[derive(Debug)]
 pub enum Combinator {
     All,
     Any,
@@ -162,7 +163,7 @@ impl<'a, T: 'a + Hash + Eq> ToOperands<'a> for Funnel<'a, T> {
 }
 /// END FUNNEL
 
-
+#[derive(Debug)]
 pub struct And;
 
 impl Operator for And {
@@ -193,12 +194,17 @@ impl Operator for And {
 
     fn next_seek(&mut self,
                  operands: &mut [PeekableSeekable<Operand>],
-                 other: &Posting)
+                 target: &Posting)
                  -> Option<Posting> {
-        None
+       //Advance operands to `target`
+        for op in operands.iter_mut() {
+            op.peek_seek(target);
+        }
+        self.next(operands)
     }
 }
 
+#[derive(Debug)]
 pub struct Or;
 
 impl Operator for Or {
@@ -217,10 +223,7 @@ impl Operator for Or {
             let mut tmp = None;
             while i < operands.len() {
                 let v = operands[i].peek().map(|p| p.doc_id());
-                if v.is_none() {
-                    // TODO: Kick out the empty ones!
-                    continue;
-                } else if v == min_doc_id {
+                if !v.is_none() && v == min_doc_id {
                     tmp = operands[i].next();
                 }
                 i += 1;
@@ -232,9 +235,13 @@ impl Operator for Or {
     }
 
     fn next_seek(&mut self,
-                 operand: &mut [PeekableSeekable<Operand>],
-                 other: &Posting)
+                 operands: &mut [PeekableSeekable<Operand>],
+                 target: &Posting)
                  -> Option<Posting> {
-        None
+        //Advance operands to `target`
+        for op in operands.iter_mut() {
+            op.peek_seek(target);
+        }
+        self.next(operands)
     }
 }

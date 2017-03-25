@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
+use perlin_core::utils::seeking_iterator::{PeekableSeekable};
 
 use language::CanApply;
 
