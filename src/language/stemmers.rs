@@ -1,10 +1,12 @@
+use perlin_core::utils::seeking_iterator::PeekableSeekable;
+
+
 use rust_stemmers::{Algorithm, Stemmer as RStemmer};
 
-use query::{ChainedOperand, ToOperands};
+use query::{Operand, ChainingOperator, ToOperands};
 use language::CanApply;
 
-pub struct Stemmer<TCallback>
-{
+pub struct Stemmer<TCallback> {
     stemmer: RStemmer,
     callback: TCallback,
 }
@@ -28,15 +30,16 @@ impl<'a, TCallback> CanApply<&'a str> for Stemmer<TCallback>
 }
 
 impl<'a, TCallback> ToOperands<'a> for Stemmer<TCallback>
-    where TCallback: ToOperands<'a> {
-    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+    where TCallback: ToOperands<'a>
+{
+    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         self.callback.to_operands()
     }
 }
 
 impl<TCallback> Stemmer<TCallback> {
     pub fn create(language: Algorithm, callback: TCallback) -> Self {
-        Stemmer{
+        Stemmer {
             stemmer: RStemmer::create(language),
             callback: callback,
         }

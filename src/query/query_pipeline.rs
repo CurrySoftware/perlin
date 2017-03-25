@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! operand {
     (;$INDEX:ident; $chaining_op:ident [$operator:ident in $this_field:ident]) => {
-        Funnel::create(ChainingOperator::$chaining_op, Operator::$operator, &$INDEX.$this_field)
+        Funnel::create(ChainingOperator::$chaining_op, Combinator::$operator, &$INDEX.$this_field)
     };
 }
 #[macro_export]
@@ -37,13 +37,13 @@ macro_rules! inner_query_pipe {
     (;$INDEX:ident;
      $chain:ident [$operator:ident in $this_field:ident]) => {
         // Must [All in field]
-        Funnel::create(ChainingOperator::$chain, Operator::$operator, &$INDEX.$this_field)
+        Funnel::create(ChainingOperator::$chain, Combinator::$operator, &$INDEX.$this_field)
     };
     (;$INDEX:ident;
      $chain:ident [$operator:ident in $this_field:ident] $($x:tt)*) => {
         // Must [All in field]
         SplitFunnel::create(
-            ChainingOperator::$chain, Operator::$operator, &$INDEX.$this_field,
+            ChainingOperator::$chain, Combinator::$operator, &$INDEX.$this_field,
             inner_query_pipe!(;$INDEX; $($x)*))
     };
     (;$INDEX:ident;
@@ -60,7 +60,8 @@ macro_rules! query_pipeline {
     ($($x:tt)*) => {
         Box::new(move |index, mut query| {
             use $crate::language::CanApply;
-            use $crate::query::{And, Or, ToOperands, SplitFunnel, Funnel, Operator, ChainingOperator};
+            use $crate::query::{And, Or, ToOperands, SplitFunnel, Funnel, Operand, Combinator, ChainingOperator};
+            use perlin_core::utils::seeking_iterator::PeekableSeekable;
 
             // Build the pipeline
             let mut pipeline = inner_query_pipe!(;index; $($x)*);
@@ -86,10 +87,10 @@ macro_rules! query_pipeline {
             };
             if !may_bucket.is_empty() {
                 // Append the result of the may buckets to the must bucket
-                must_bucket.push(Box::new(Or::create(may_bucket)));
+                must_bucket.push(PeekableSeekable::new(Operand::Operated(Box::new(Or {}), may_bucket)));
             }
             // Return a boxed iterator
-            Box::new(And::create(must_bucket))
+            Operand::Operated(Box::new(And {}), must_bucket)
         })
     }
 }

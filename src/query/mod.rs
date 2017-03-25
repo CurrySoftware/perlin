@@ -1,9 +1,10 @@
 use std::hash::Hash;
 
-use perlin_core::index::posting::{Posting, PostingIterator};
+use perlin_core::index::posting::{Posting, PostingIterator, PostingDecoder};
+use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 
 use field::Field;
-pub use query::operators::{Or, And, SplitFunnel, Funnel, Operator};
+pub use query::operators::{Or, And, SplitFunnel, Funnel, Combinator};
 
 #[macro_use]
 pub mod query_pipeline;
@@ -12,27 +13,64 @@ mod operators;
 pub enum ChainingOperator {
     Must,
     May,
-    MustNot
+    MustNot,
 }
 
-/// An Operand is just something emmiting postings!
-pub type Operand<'a> = Box<Iterator<Item = Posting> + 'a>;
-pub type ChainedOperand<'a> = (ChainingOperator, Box<Iterator<Item = Posting> + 'a>);
+
+pub enum Operand<'a> {
+    Empty,
+    Term(PostingDecoder<'a>),
+    Operated(Box<Operator + 'a>, Vec<PeekableSeekable<Operand<'a>>>),
+}
+
+impl<'a> Iterator for Operand<'a> {
+    type Item = Posting;
+
+    fn next(&mut self) -> Option<Posting> {
+        match *self {
+            Operand::Empty => None,
+            Operand::Term(ref mut decoder) => decoder.next(),
+            Operand::Operated(ref mut operator, ref mut operands) => operator.next(operands),
+        }
+    }
+}
+
+impl<'a> SeekingIterator for Operand<'a> {
+    type Item = Posting;
+
+    fn next_seek(&mut self, other: &Posting) -> Option<Posting> {
+        match *self {
+            Operand::Empty => None,
+            Operand::Term(ref mut decoder) => decoder.next_seek(other),
+            Operand::Operated(ref mut operator, ref mut operands) => {
+                operator.next_seek(operands, other)
+            }
+        }
+    }
+}
+
+pub trait Operator {
+    fn next(&mut self, operands: &mut [PeekableSeekable<Operand>]) -> Option<Posting>;
+    fn next_seek(&mut self,
+                 operands: &mut [PeekableSeekable<Operand>],
+                 other: &Posting)
+                 -> Option<Posting>;
+}
 
 pub trait ToOperands<'a> {
-    fn to_operands(self) -> Vec<ChainedOperand<'a>>;
+    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)>;
 }
 
 pub struct QueryTerm<'a, T: 'a + Hash + Eq> {
     field: &'a Field<T>,
-    value: T
+    value: T,
 }
 
 impl<'a, T: 'a + Hash + Eq + Ord> QueryTerm<'a, T> {
     pub fn create(field: &'a Field<T>, value: T) -> Self {
         QueryTerm {
             field: field,
-            value: value
+            value: value,
         }
     }
 
@@ -43,19 +81,26 @@ impl<'a, T: 'a + Hash + Eq + Ord> QueryTerm<'a, T> {
 
 pub struct Query<'a> {
     pub query: String,
-    pub filter: Vec<ChainedOperand<'a>>
+    pub filter: Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)>,
 }
 
 impl<'a> Query<'a> {
     pub fn new(query: String) -> Self {
-        Query{
+        Query {
             query: query,
-            filter: vec![]
+            filter: vec![],
         }
     }
 
-    pub fn filter(mut self, filter: PostingIterator<'a>) -> Self {
-        self.filter.push((ChainingOperator::Must, Box::new(filter) as Box<Iterator<Item = Posting>>));
+    pub fn filter_by(mut self, operator: ChainingOperator, filter: PostingIterator<'a>) -> Self {
+        match filter {
+            PostingIterator::Empty => {
+                self.filter.push((operator, PeekableSeekable::new(Operand::Empty)))
+            }
+            PostingIterator::Decoder(decoder) => {
+                self.filter.push((operator, PeekableSeekable::new(Operand::Term(decoder))))
+            }
+        }
         self
     }
 }

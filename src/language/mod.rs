@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 
+use perlin_core::utils::seeking_iterator::{PeekableSeekable};
 use perlin_core::index::posting::DocId;
-use query::{ChainedOperand, ToOperands};
+
+use query::{Operand, ChainingOperator, ToOperands};
 
 mod stemmers;
 pub mod integers;
@@ -43,7 +45,7 @@ impl<'a, TCB> CanApply<&'a str> for AlphaNumericTokenizer<TCB>
 impl<'a, TCB> ToOperands<'a> for AlphaNumericTokenizer<TCB>
     where TCB: ToOperands<'a>
 {
-    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         self.cb.to_operands()
     }
 }
@@ -75,8 +77,7 @@ impl<TCallback, T: Debug> CanApply<T> for Debugger<TCallback>
 impl<'a, TCB> ToOperands<'a> for Debugger<TCB>
     where TCB: ToOperands<'a>
 {
-    fn to_operands(self) -> Vec<ChainedOperand<'a>>
-    {
+    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         self.callback.to_operands()
     }
 }
@@ -108,7 +109,7 @@ impl<'a, TCallback> CanApply<&'a str> for WhitespaceTokenizer<TCallback>
 
 impl<'a, TCallback> ToOperands<'a> for WhitespaceTokenizer<TCallback>
     where TCallback: ToOperands<'a> {
-    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         self.callback.to_operands()
     }
 }
@@ -138,7 +139,7 @@ impl<'a, TCallback> CanApply<&'a str> for LowercaseFilter<TCallback>
 impl<'a, TCallback> ToOperands<'a> for LowercaseFilter<TCallback>
     where TCallback: ToOperands<'a> {
 
-    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         self.callback.to_operands()
     }
 }
@@ -165,7 +166,7 @@ impl<'a, T: Hash + Eq> IndexerFunnel<'a, T> {
 impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<'a, TTerm>{
 
     type Output = TTerm;
-    
+
     fn apply(&mut self, input: TTerm) {
         self.index.index_term(input, self.doc_id);
     }

@@ -1,8 +1,10 @@
 use std::str::FromStr;
 
+use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
+
 use language::CanApply;
 
-use query::{ChainedOperand, ToOperands};
+use query::{Operand, ChainingOperator, ToOperands};
 
 /// Numberfilter.
 /// Takes an string as input and tries to convert it to usize
@@ -37,11 +39,12 @@ impl<'a, TStringCallback, TNumberCallback> CanApply<&'a str>
     }
 }
 
-impl<'a, TStringCallback, TNumberCallback> ToOperands<'a> for NumberFilter<TStringCallback, TNumberCallback>
+impl<'a, TStringCallback, TNumberCallback> ToOperands<'a>
+    for NumberFilter<TStringCallback, TNumberCallback>
     where TStringCallback: ToOperands<'a>,
           TNumberCallback: ToOperands<'a>
 {
-    fn to_operands(self) -> Vec<ChainedOperand<'a>> {
+    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         let mut result = self.number_callback.to_operands();
         result.append(&mut self.string_callback.to_operands());
         result
