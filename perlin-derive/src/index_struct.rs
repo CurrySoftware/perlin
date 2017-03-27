@@ -27,7 +27,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
         pub struct #index_ident {
             pub documents: #ident,
             pipelines: #pipes_ident,
-            query_pipeline: Option<QueryPipeline<#ident>>,
+            pub query_pipeline: Option<QueryPipeline<#ident>>,
             doc_counter: DocId,
             #(#sorted_fields_param)*
             #ext_id
@@ -91,18 +91,10 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
     if let Some(ext_id_type) = get_external_id_type(&ast.attrs) {
         quote!{
             pub fn run_query<'a>(&'a self, query: Query<'a>) ->
-                Box<Iterator<Item=#ext_id_type> +'a> {
+                QueryResultIterator<'a, #ext_id_type> {
                 use perlin_core::index::posting::Posting;
                 if let Some(ref query_pipe) = self.query_pipeline {
-                    Box::new(query_pipe(&self.documents, query)
-                        .map(move |Posting(doc_id)| {
-                            if let Ok(index) = self.external_ids.
-                                binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
-                                self.external_ids[index].1.clone()
-                            } else {
-                                panic!("DocId unknown!");
-                            }
-                        })) as Box<Iterator<Item=#ext_id_type>>
+                    QueryResultIterator::new(query_pipe(&self.documents, query), &self.external_ids)
                 } else {
                     panic!("Query Pipe not set!");
                 }

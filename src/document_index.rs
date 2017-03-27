@@ -1,10 +1,41 @@
 use std::marker::PhantomData;
 
 use query::{Query, Operand};
-use perlin_core::index::posting::DocId;
+use perlin_core::index::posting::{Posting, DocId};
 
 pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out> + Sync + Send>;
 pub type QueryPipeline<T> = Box<for<'r> Fn(&'r T, Query<'r>) -> Operand<'r> + Sync + Send>;
+
+pub struct QueryResultIterator<'a, T: 'a>(Operand<'a>, &'a [(DocId, T)]);
+
+impl<'a, T: 'a + Clone> QueryResultIterator<'a, T> {
+    pub fn new(op: Operand<'a>, ext_ids: &'a [(DocId, T)]) -> Self {
+        QueryResultIterator(op, ext_ids)
+    }
+}
+
+impl<'a, T: 'a + Clone> Iterator for QueryResultIterator<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(Posting(doc_id)) = self.0.next() {
+            if let Ok(index) = self.1.binary_search_by_key(&doc_id, |&(d_id, _)| d_id) {
+                Some(self.1[index].1.clone())
+            } else {
+                panic!("DocId unkown!");
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, T: 'a> AsRef<Operand<'a>> for QueryResultIterator<'a, T> {
+    fn as_ref(&self) -> &Operand<'a> {
+        &self.0
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -25,7 +56,7 @@ mod tests {
         #[no_pipe]
         emails: Field<usize>,
     }
-
+    
     use language::{Stemmer, LowercaseFilter, WhitespaceTokenizer};
     use language::integers::NumberFilter;
     use std::borrow::Cow;

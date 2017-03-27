@@ -70,7 +70,7 @@ impl<'a> SeekingIterator for Operand<'a> {
 }
 
 impl<'a> Operand<'a> {
-    fn progress(&self) -> Progress {
+    pub fn progress(&self) -> Progress {
         match *self {
             Operand::Empty => Progress::done(),
             Operand::Term(ref decoder) => decoder.progress(),
@@ -115,6 +115,7 @@ impl<'a, T: 'a + Hash + Eq + Ord> QueryTerm<'a, T> {
     }
 }
 
+#[derive(Clone)]
 pub struct Query<'a> {
     pub query: String,
     pub filter: Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)>,

@@ -62,6 +62,7 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
             
             use_parent_crate!(document_index::Pipeline);
             use_parent_crate!(document_index::QueryPipeline);
+            use_parent_crate!(document_index::QueryResultIterator);
             use_parent_crate!(query::Operand);
             use_parent_crate!(query::Query);
             
