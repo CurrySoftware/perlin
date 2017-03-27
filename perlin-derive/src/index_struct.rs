@@ -155,9 +155,9 @@ fn frequent_terms(fields: &[syn::Field]) -> Vec<quote::Tokens> {
 
         result.push(quote!{
             pub fn #fn_ident<'a>(&'a self) ->
-                Box<Iterator<Item = (usize, &#ty, PostingIterator)> + 'a> {
+                Box<Iterator<Item = (usize, &#ty, TermId)> + 'a> {
                 Box::new(self.#sorted_ident.iter().map(move |&(ref df, ref t, ref term_id)| {
-                    (*df, t, self.documents.#field_ident.query_term(term_id))
+                    (*df, t, *term_id)
                 }))
             }
         });
