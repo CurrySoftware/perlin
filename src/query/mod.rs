@@ -2,6 +2,7 @@ use std::hash::Hash;
 
 use perlin_core::index::posting::{Posting, PostingIterator, PostingDecoder};
 use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
+use perlin_core::utils::progress::Progress;
 
 use field::Field;
 pub use query::operators::{Or, And, SplitFunnel, Funnel, Combinator};
@@ -10,19 +11,37 @@ pub use query::operators::{Or, And, SplitFunnel, Funnel, Combinator};
 pub mod query_pipeline;
 mod operators;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum ChainingOperator {
     Must,
     May,
     MustNot,
 }
 
-
+#[derive(Clone)]
 pub enum Operand<'a> {
     Empty,
     Term(PostingDecoder<'a>),
-    Operated(Box<Operator + 'a>, Vec<PeekableSeekable<Operand<'a>>>),
+    Operated(Box<Operator>, Vec<PeekableSeekable<Operand<'a>>>),
 }
+
+//Stolen from SO: https://stackoverflow.com/questions/30353462/how-to-clone-a-struct-storing-a-trait-object
+pub trait OperatorClone {
+    fn clone_box(&self) -> Box<Operator>;
+}
+
+impl<T> OperatorClone for T where T: 'static + Operator + Clone {
+    fn clone_box(&self) -> Box<Operator> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<Operator> {
+    fn clone(&self) -> Box<Operator> {
+        self.clone_box()
+    }
+}
+
 
 impl<'a> Iterator for Operand<'a> {
     type Item = Posting;
@@ -50,12 +69,28 @@ impl<'a> SeekingIterator for Operand<'a> {
     }
 }
 
-pub trait Operator {
+impl<'a> Operand<'a> {
+    fn progress(&self) -> Progress {
+        match *self {
+            Operand::Empty => Progress::done(),
+            Operand::Term(ref decoder) => decoder.progress(),
+            Operand::Operated(ref operator, ref operands) => {
+                operator.progress(operands)
+            }
+
+        }
+    }
+}
+
+pub trait Operator: OperatorClone {
     fn next(&mut self, operands: &mut [PeekableSeekable<Operand>]) -> Option<Posting>;
     fn next_seek(&mut self,
                  operands: &mut [PeekableSeekable<Operand>],
                  other: &Posting)
                  -> Option<Posting>;
+
+    fn progress(&self,
+                    operands: &[PeekableSeekable<Operand>]) -> Progress;
 }
 
 pub trait ToOperands<'a> {

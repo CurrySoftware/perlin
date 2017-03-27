@@ -3,6 +3,7 @@ use std::fmt::Debug;
 
 use perlin_core::index::posting::{Posting, PostingIterator};
 use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
+use perlin_core::utils::progress::Progress;
 use perlin_core::index::Index;
 
 use language::CanApply;
@@ -163,7 +164,7 @@ impl<'a, T: 'a + Hash + Eq> ToOperands<'a> for Funnel<'a, T> {
 }
 /// END FUNNEL
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct And;
 
 impl Operator for And {
@@ -202,9 +203,14 @@ impl Operator for And {
         }
         self.next(operands)
     }
+
+    fn progress(&self,
+                operands: &[PeekableSeekable<Operand>]) -> Progress {
+        operands.iter().map(|op| op.inner().progress()).max().unwrap_or(Progress::done())
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Or;
 
 impl Operator for Or {
@@ -243,5 +249,10 @@ impl Operator for Or {
             op.peek_seek(target);
         }
         self.next(operands)
+    }
+
+    fn progress(&self,
+                operands: &[PeekableSeekable<Operand>]) -> Progress {
+        operands.iter().map(|op| op.inner().progress()).min().unwrap_or(Progress::done())
     }
 }
