@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use perlin_core::utils::seeking_iterator::{PeekableSeekable};
 use perlin_core::index::posting::DocId;
@@ -17,6 +18,10 @@ pub use language::stemmers::Stemmer;
 pub trait CanApply<Input> {
     type Output;
     fn apply(&mut self, Input);
+}
+
+pub trait PipelineBucket<Term> {
+    fn put(&mut self, DocId, Term);
 }
 
 pub struct AlphaNumericTokenizer<TCB> {
@@ -145,30 +150,31 @@ impl<'a, TCallback> ToOperands<'a> for LowercaseFilter<TCallback>
 }
 
 
-use perlin_core::index::Index;
-use std::hash::Hash;
-
-pub struct IndexerFunnel<'a, T: 'a + Hash + Eq>
+pub struct Funnel<'a, TTerm, TBucket: 'a>
 {
     doc_id: DocId,
-    index: &'a mut Index<T>
+    bucket: &'a mut TBucket,
+    _term: PhantomData<TTerm>
 }
 
-impl<'a, T: Hash + Eq> IndexerFunnel<'a, T> {
-    pub fn create(doc_id: DocId, index: &'a mut Index<T>) -> Self {
-        IndexerFunnel {
+impl<'a, TTerm, TBucket> Funnel<'a, TTerm, TBucket> {
+    pub fn create(doc_id: DocId, bucket: &'a mut TBucket) -> Self {
+        Funnel {
             doc_id: doc_id,
-            index: index
+            bucket: bucket,
+            _term: PhantomData
         }
     }
 }
 
-impl<'a, TTerm: 'a + Debug + Hash + Ord + Eq> CanApply<TTerm> for IndexerFunnel<'a, TTerm>{
+impl<'a, TTerm, TBucket> CanApply<TTerm> for Funnel<'a, TTerm, TBucket>
+    where TBucket: PipelineBucket<TTerm>
+{
 
     type Output = TTerm;
 
     fn apply(&mut self, input: TTerm) {
-        self.index.index_term(input, self.doc_id);
+        self.bucket.put(self.doc_id, input);
     }
 }
 
@@ -184,7 +190,7 @@ macro_rules! inner_pipeline {
     // ;doc_id; ;field_id; Element(params) | [field]
     {
         $element::create($($param),+ ,
-                         IndexerFunnel::create($doc_id, &mut $INDEX.$this_field),
+                         Funnel::create($doc_id, &mut $INDEX.$this_field),
                          inner_pipeline!(;$INDEX; ;$doc_id; ;$field_id; ($x)*))
     };
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
@@ -198,7 +204,7 @@ macro_rules! inner_pipeline {
     // ;doc_id; ;field_id; Element | [field]
     {
         $element::create(
-            IndexerFunnel::create($doc_id, &mut $INDEX.$this_field),
+            Funnel::create($doc_id, &mut $INDEX.$this_field),
             inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))
     };
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
@@ -208,7 +214,7 @@ macro_rules! inner_pipeline {
         $element::create(inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))
     };
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;) => {
-        IndexerFunnel::create($doc_id, &mut $INDEX.$field)
+        Funnel::create($doc_id, &mut $INDEX.$field)
     };
     () => {}
 }
@@ -218,7 +224,7 @@ macro_rules! pipeline {
     ($field:ident $($x:tt)*) => {
         Box::new(move |doc_id, index, content| {
             use $crate::language::CanApply;
-            use $crate::language::IndexerFunnel;
+            use $crate::language::Funnel;
             use std::marker::PhantomData;
             let mut pipe = inner_pipeline!(;index; ;doc_id; ;$field; $($x)*);
             pipe.apply(content);
