@@ -94,12 +94,12 @@ mod tests {
     }
 
     fn should_yield(index: &TestIndex, query: &str, ids: &[u32]) {
-        if index.run_query(Query::new(query.to_string())).collect::<Vec<_>>() !=
+        if index.run_query(Query::new(query)).collect::<Vec<_>>() !=
            ids.iter().map(|id| Posting(DocId(*id))).collect::<Vec<_>>() {
             assert!(false,
                     format!("{} resulted in {:?} expexted {:?}",
                             query,
-                            index.run_query(Query::new(query.to_string())).collect::<Vec<_>>(),
+                            index.run_query(Query::new(query)).collect::<Vec<_>>(),
                             ids.iter().map(|id| Posting(DocId(*id))).collect::<Vec<_>>()))
         }
     }
@@ -155,9 +155,9 @@ mod tests {
     #[test]
     fn filtered_query() {
         let t = create_and_fill_index("doc_index/filtered_query");
-        let unfiltered = Query::new("flew".to_string());
+        let unfiltered = Query::new("flew");
         let filtered =
-            Query::new("flew".to_string()).filter_by(ChainingOperator::Must,
+            Query::new("flew").filter_by(ChainingOperator::Must,
                                                      t.documents.number.query_atom(&2567));
 
         assert_eq!(t.run_query(unfiltered).collect::<Vec<_>>(),

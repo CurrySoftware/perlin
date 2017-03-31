@@ -117,12 +117,12 @@ impl<'a, T: 'a + Hash + Eq + Ord> QueryTerm<'a, T> {
 
 #[derive(Clone)]
 pub struct Query<'a> {
-    pub query: String,
+    pub query: &'a str,
     pub filter: Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)>,
 }
 
 impl<'a> Query<'a> {
-    pub fn new(query: String) -> Self {
+    pub fn new(query: &'a str) -> Self {
         Query {
             query: query,
             filter: vec![],
