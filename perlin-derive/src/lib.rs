@@ -27,13 +27,7 @@ pub fn perlin_document(input: TokenStream) -> TokenStream {
 }
 
 fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {    
-    //We create three different things:
-    //1. A struct that holds the pipelines
-    // It looks like:
-    // IdentPipes {
-    //   text: Option<Pipeline<String, Ident>>
-    // }
-    let pipeline_struct = generate_pipeline_struct(ast);
+
 
     //2. A Wrapping struct that holds the indices as well as the pipes
     // Plus additional information
@@ -69,8 +63,6 @@ fn impl_perlin_document(ast: &syn::MacroInput) -> quote::Tokens {
             use perlin_core::index::posting::{PostingIterator, DocId};
             use perlin_core::index::vocabulary::TermId;
             
-            #pipeline_struct
-
             #index_struct
 
             #perlin_doc_impl

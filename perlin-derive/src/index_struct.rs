@@ -4,7 +4,6 @@ use quote;
 pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     let ident = &ast.ident;
     let index_ident = syn::Ident::from(format!("{}Index", ident).to_string());
-    let pipes_ident = syn::Ident::from(format!("{}Pipes", ident).to_string());
 
     let variant_data = if let syn::Body::Struct(ref variant_data) = ast.body {
         variant_data
@@ -16,7 +15,6 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     let external_id_param = external_id_param(ast);
     let add_external_id = add_external_id(ast);
     let create_external_ids = create_external_ids(ast);
-    let pipeline_setters = set_pipelines(variant_data.fields(), ident);
     let run_query = run_query(ast);
     let field_matches = field_matches(variant_data.fields());
     let frequent_terms = frequent_terms(variant_data.fields());
@@ -26,7 +24,6 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
     quote!(
         pub struct #index_ident {
             pub documents: #ident,
-            pipelines: #pipes_ident,
             pub query_pipeline: Option<QueryPipeline<#ident>>,
             pub doc_counter: DocId,
             #(#sorted_fields_param)*
@@ -73,11 +70,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
                 self.query_pipeline = Some(pipe);
             }
 
-            #run_query
-
-            //Pipeline setter
-            //fn set_field_pipeline(&mut self, pipe: Pipeline<Type, Ident>)
-            #(#pipeline_setters)*
+            #run_query           
 
             //Frequent terms
             //fn frequent_terms_field(&self) ->
@@ -112,31 +105,6 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
         }
     }
 }
-
-/// Generates typed setters for indexing pipelines
-/// Runs over all fields of the derived struct and implements a setter for
-/// each of them
-/// Ignores fields with a #[no_pipe]-Attribute
-fn set_pipelines(fields: &[syn::Field], ident: &syn::Ident) -> Vec<quote::Tokens> {
-    let mut result = Vec::new();
-    for field in fields {
-        if field.attrs.iter().any(|attr| attr.name() == "no_pipe") {
-            continue;
-        }
-        let field_ident = &field.ident;
-        let fn_ident = syn::Ident::from(format!("set_{}_pipeline", field_ident.clone().unwrap())
-                                            .to_string());
-        let ty = get_generics_from_field(&field.ty);
-        result.push(quote!{
-            pub fn #fn_ident(&mut self, pipe: Pipeline<#ty, #ident>) {
-                self.pipelines.#field_ident = Some(pipe);
-            }
-        });
-    }
-
-    result
-}
-
 
 /// Generates the frequent_terms method for all fields with a `filter`
 /// attribute!
