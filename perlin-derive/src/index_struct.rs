@@ -28,7 +28,7 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
             pub documents: #ident,
             pipelines: #pipes_ident,
             pub query_pipeline: Option<QueryPipeline<#ident>>,
-            doc_counter: DocId,
+            pub doc_counter: DocId,
             #(#sorted_fields_param)*
             #ext_id
         }
@@ -289,7 +289,7 @@ fn external_id_param(ast: &syn::MacroInput) -> quote::Tokens {
 
 fn external_id_field(ast: &syn::MacroInput) -> quote::Tokens {
     if let Some(ext_id) = get_external_id_type(&ast.attrs) {
-        quote!(external_ids: Vec<(DocId, #ext_id)>,)
+        quote!(pub external_ids: Vec<(DocId, #ext_id)>,)
     } else {
         quote!()
     }
