@@ -5,11 +5,9 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
-mod pipeline_struct;
 mod index_struct;
 mod perlin_document;
 
-use pipeline_struct::generate_pipeline_struct;
 use index_struct::generate_index_struct;
 use perlin_document::generate_perlin_document_impl;
 
