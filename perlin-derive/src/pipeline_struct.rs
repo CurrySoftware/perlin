@@ -45,6 +45,9 @@ fn generate_declarations(ast: &syn::MacroInput) -> Vec<quote::Tokens> {
     };
 
     for field in variant_data.fields() {
+        if field.attrs.iter().any(|attr| attr.name() == "no_pipe") {
+            continue;
+        }
         let field_ident = &field.ident;
         let ty = get_generics_from_field(&field.ty);
         result.push(quote!{
