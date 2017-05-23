@@ -1,5 +1,7 @@
 use std::hash::Hash;
 use std::fmt::Debug;
+use std::borrow::Borrow;
+use std::marker::PhantomData;
 
 use perlin_core::index::posting::{Posting, PostingIterator};
 use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
@@ -97,32 +99,37 @@ impl<'a, T: 'a + Hash + Eq, CB> ToOperands<'a> for SplitFunnel<'a, T, CB>
 // We could skip the rest
 // If the operator is Or and one term returns an empty posting iterator we
 // could discard it
-pub struct Funnel<'a, T: 'a + Hash + Eq> {
-    index: &'a Index<T>,
+pub struct Funnel<'a, T:'a, TIndex: 'a> {
+    index: &'a TIndex,
     combinator: Combinator,
     chaining_operator: ChainingOperator,
     result: Vec<PeekableSeekable<Operand<'a>>>,
+    _term: PhantomData<T>
 }
 
-impl<'a, T: 'a + Hash + Eq> Funnel<'a, T> {
+impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
     pub fn create(chaining_operator: ChainingOperator,
                   combinator: Combinator,
-                  index: &'a Index<T>)
+                  index: &'a TIndex)
                   -> Self {
         Funnel {
             index: index,
             combinator: combinator,
             chaining_operator: chaining_operator,
             result: Vec::new(),
+            _term: PhantomData,
         }
     }
 }
 
-impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord> CanApply<&'b T> for Funnel<'a, T> {
+
+impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug, TIndex> CanApply<&'b T> for Funnel<'a, T, TIndex>
+    where TIndex: Borrow<Index<T>>
+{
     type Output = T;
 
-    fn apply(&mut self, term: &T) {
-        match self.index.query_atom(&term) {
+    fn apply(&mut self, term: &'b T) {
+        match (self.index.borrow()).query_atom(&term) {
             PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
             PostingIterator::Decoder(decoder) => {
                 self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
@@ -131,11 +138,14 @@ impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord> CanApply<&'b T> for Funnel<'a, T> {
     }
 }
 
-impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T> {
+
+impl<'a, T: 'a + Hash + Eq + Ord + Debug, TIndex> CanApply<T> for Funnel<'a, T, TIndex>
+    where TIndex: Borrow<Index<T>>
+{
     type Output = T;
 
     fn apply(&mut self, term: T) {
-        match self.index.query_atom(&term) {
+        match (self.index.borrow()).query_atom(&term) {
             PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
             PostingIterator::Decoder(decoder) => {
                 self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
@@ -144,7 +154,9 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T> {
     }
 }
 
-impl<'a, T: 'a + Hash + Eq> ToOperands<'a> for Funnel<'a, T> {
+
+
+impl<'a, T:'a,  TIndex> ToOperands<'a> for Funnel<'a, T, TIndex> {
     fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         if self.result.is_empty() {
             return vec![];
