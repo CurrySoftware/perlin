@@ -1,106 +1,17 @@
 use std::hash::Hash;
-use std::ops::{Deref, DerefMut};
-use std::collections::HashMap;
 
 use perlin_core::index::Index;
 use perlin_core::index::posting::DocId;
-use perlin_core::index::vocabulary::TermId;
 
 use language::PipelineBucket;
 
+mod filter_field;
+mod hierarchy_field;
+
+pub use field::filter_field::FilterField;
+pub use field::hierarchy_field::HierarchyField;
+
 pub type Field<T> = Index<T>;
-
-pub struct FilterField<T: Hash + Eq> {
-    pub sorted_terms: Vec<(usize, T, TermId)>,
-    pub index: Index<T>,
-}
-
-impl<T: Hash + Eq + Ord + Clone + 'static> FilterField<T> {
-    pub fn commit(&mut self) {
-        self.index.commit();
-
-        let mut sorted_terms: Vec<(usize, T, TermId)> = self.index
-            .iterate_terms()
-            .map(|(t, term_id)| (self.index.term_df(term_id), t.clone(), *term_id))
-            .collect::<Vec<_>>();
-
-        sorted_terms.sort_by(|a, b| a.0.cmp(&b.0).reverse());
-        self.sorted_terms = sorted_terms;
-    }
-
-    pub fn frequent_terms<'a>(&'a self) -> Box<Iterator<Item = (usize, &T, TermId)> + 'a> {
-                    Box::new(self.sorted_terms
-                             .iter()
-                             .map(move |&(ref df, ref t, ref term_id)| (*df, t, *term_id)))
-    }
-        
-
-    pub fn new(index: Index<T>) -> Self {
-        FilterField {
-            index,
-            sorted_terms: vec![]
-        }
-    }
-}
-
-
-
-impl<T: Hash + Eq> DerefMut for FilterField<T> {
-    fn deref_mut(&mut self) -> &mut Index<T> {
-        &mut self.index
-    }
-}
-
-impl<T: Hash + Eq> Deref for FilterField<T> {
-    type Target = Index<T>;
-    fn deref(&self) -> &Index<T> {
-        &self.index
-    }
-}
-
-
-pub struct HierarchyField<T: Hash + Eq> {
-    pub hierarchy: Hierarchy<T>,
-    pub index: Index<T>,
-}
-
-pub struct Hierarchy<T>(HashMap<T, Vec<T>>, Vec<T>);
-
-impl<T: Hash + Eq + Clone> Hierarchy<T> {
-    pub fn new() -> Self {
-        Hierarchy(HashMap::new(), vec![])
-    }
-
-    pub fn add_element(&mut self, term: T, parent: Option<T>) {
-        if self.0.contains_key(&term) {
-            panic!("Hierarchy element already exists!");
-        }
-
-        self.0.insert(term.clone(), vec![]).unwrap();
-
-        if let Some(parent) = parent {
-            if let Some(parent_node) = self.0.get_mut(&parent) {
-                parent_node.push(term);
-            } else {
-                panic!("Added hierarchical elements in wrong order!");
-            }
-        } else {
-            self.1.push(term.clone());
-        }
-    }
-
-    pub fn get_child_terms(&self, term: T) -> Option<&[T]> {
-        if let Some(node) = self.0.get(&term) {
-            Some(&node)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_root_terms(&self) -> &[T] {
-        &self.1
-    }
-}
 
 impl<TTerm> PipelineBucket<TTerm> for Field<TTerm>
     where TTerm: Hash + Eq + Ord
@@ -111,10 +22,10 @@ impl<TTerm> PipelineBucket<TTerm> for Field<TTerm>
 }
 
 
-//#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use perlin_core::index::posting::DocId;
-    use field::{Field, FilterField};
+    use field::{Field, FilterField, HierarchyField};
 
     use rust_stemmers::Algorithm;
 
@@ -122,6 +33,7 @@ mod tests {
     pub struct FilterTest {
         body: Field<String>,
         number: FilterField<u64>,
+        cat: HierarchyField<usize>
     }
     // pub use self::perlin_impl::FilterTestIndex;
     // mod perlin_impl {
