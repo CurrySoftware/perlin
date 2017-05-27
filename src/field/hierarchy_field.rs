@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::ops::{Deref, DerefMut};
 use std::collections::HashMap;
 
 use perlin_core::index::Index;
@@ -56,5 +57,18 @@ impl<T: Hash + Eq + Clone> Hierarchy<T> {
 
     pub fn get_root_terms(&self) -> &[T] {
         &self.1
+    }
+}
+
+impl<T: Hash + Eq> DerefMut for HierarchyField<T> {
+    fn deref_mut(&mut self) -> &mut Index<T> {
+        &mut self.index
+    }
+}
+
+impl<T: Hash + Eq> Deref for HierarchyField<T> {
+    type Target = Index<T>;
+    fn deref(&self) -> &Index<T> {
+        &self.index
     }
 }
