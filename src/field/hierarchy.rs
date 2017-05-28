@@ -1,26 +1,6 @@
 use std::hash::Hash;
-use std::ops::{Deref, DerefMut};
 use std::collections::HashMap;
 
-use perlin_core::index::Index;
-
-pub struct HierarchyField<T: Hash + Eq> {
-    pub hierarchy: Hierarchy<T>,
-    pub index: Index<T>,
-}
-
-impl<T: Hash + Eq + Clone + Ord> HierarchyField<T> {
-    pub fn new(index: Index<T>) -> Self {
-        HierarchyField {
-            hierarchy: Hierarchy::new(),
-            index
-        }
-    }
-
-    pub fn commit(&mut self) {
-        self.index.commit();
-    }
-}
 
 pub struct Hierarchy<T>(HashMap<T, Vec<T>>, Vec<T>);
 
@@ -57,18 +37,5 @@ impl<T: Hash + Eq + Clone> Hierarchy<T> {
 
     pub fn get_root_terms(&self) -> &[T] {
         &self.1
-    }
-}
-
-impl<T: Hash + Eq> DerefMut for HierarchyField<T> {
-    fn deref_mut(&mut self) -> &mut Index<T> {
-        &mut self.index
-    }
-}
-
-impl<T: Hash + Eq> Deref for HierarchyField<T> {
-    type Target = Index<T>;
-    fn deref(&self) -> &Index<T> {
-        &self.index
     }
 }

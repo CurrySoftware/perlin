@@ -1,25 +1,67 @@
 use std::hash::Hash;
+use std::ops::{Deref, DerefMut};
+use std::collections::HashMap;
 
 use perlin_core::index::Index;
 use perlin_core::index::posting::DocId;
 
 use language::PipelineBucket;
 
-mod filter_field;
-mod hierarchy_field;
+mod filter;
+mod hierarchy;
 
-pub use field::filter_field::FilterField;
-pub use field::hierarchy_field::HierarchyField;
+pub use field::filter::Filter;
+pub use field::hierarchy::Hierarchy;
 
-pub type Field<T> = Index<T>;
+pub enum FieldSupplement<T> {
+    None,
+    Filter(Filter<T>),
+    Hierarchy(Hierarchy<T>)
+}
+
+pub struct Field<T: Hash + Eq> {
+    index: Index<T>,
+    supplement: FieldSupplement<T> 
+}
+
+impl<T: Hash + Eq + Ord + Clone + 'static> Field<T> {
+    pub fn commit(&mut self) {
+        self.index.commit();
+
+        if let FieldSupplement::Filter(ref mut filter) = self.supplement {
+            filter.commit(&self.index);
+        }
+    }
+}
 
 impl<TTerm> PipelineBucket<TTerm> for Field<TTerm>
     where TTerm: Hash + Eq + Ord
 {
-    fn put(&mut self, doc_id: DocId, term: TTerm) {
-        self.index_term(doc_id, term)
+    fn put(&mut self, doc_id: DocId, term: TTerm) {        
+        self.index.index_term(doc_id, term);            
     }
 }
+
+
+
+impl<T: Hash + Eq> DerefMut for Field<T> {
+    fn deref_mut(&mut self) -> &mut Index<T> {
+        &mut self.index
+    }
+}
+
+impl<T: Hash + Eq> Deref for Field<T> {
+    type Target = Index<T>;
+    fn deref(&self) -> &Index<T> {
+        &self.index
+    }
+}
+
+
+pub struct Fields<T: Hash + Eq> {
+    fields: HashMap<String, Field<T>>
+}
+
 
 
 #[cfg(test)]
@@ -32,8 +74,8 @@ mod tests {
     #[derive(PerlinDocument)]
     pub struct FilterTest {
         body: Field<String>,
-        number: FilterField<u64>,
-        cat: HierarchyField<usize>
+        number: Field<u64>,
+        cat: Field<usize>
     }
     // pub use self::perlin_impl::FilterTestIndex;
     // mod perlin_impl {
