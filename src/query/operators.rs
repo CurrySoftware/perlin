@@ -10,6 +10,7 @@ use perlin_core::index::Index;
 
 use language::CanApply;
 use query::{ToOperands, Operand, Operator, ChainingOperator};
+use field::Fields;
 
 /// Mimics the functionality of the `try!` macro for `Option`s.
 /// Evaluates `Some(x)` to x. Else it returns `None`.
@@ -80,7 +81,8 @@ impl<'a, T: 'a + Hash + Eq, CB> ToOperands<'a> for SplitFunnel<'a, T, CB>
         match self.combinator {
             Combinator::All => {
                 other.push((self.chaining_operator,
-                            PeekableSeekable::new(Operand::Operated(Box::new(And {}), self.result))))
+                            PeekableSeekable::new(Operand::Operated(Box::new(And {}),
+                                                                    self.result))))
             }
             Combinator::Any => {
                 other.push((self.chaining_operator,
@@ -99,12 +101,12 @@ impl<'a, T: 'a + Hash + Eq, CB> ToOperands<'a> for SplitFunnel<'a, T, CB>
 // We could skip the rest
 // If the operator is Or and one term returns an empty posting iterator we
 // could discard it
-pub struct Funnel<'a, T:'a, TIndex: 'a> {
+pub struct Funnel<'a, T: 'a, TIndex: 'a> {
     index: &'a TIndex,
     combinator: Combinator,
     chaining_operator: ChainingOperator,
     result: Vec<PeekableSeekable<Operand<'a>>>,
-    _term: PhantomData<T>
+    _term: PhantomData<T>,
 }
 
 impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
@@ -118,6 +120,39 @@ impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
             chaining_operator: chaining_operator,
             result: Vec::new(),
             _term: PhantomData,
+        }
+    }
+}
+
+impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T>
+    for Funnel<'a, T, Fields<T>> {
+    type Output = T;
+
+    fn apply(&mut self, term: &'b T) {
+        for index in self.index.fields.values() {
+            match index.query_atom(&term) {
+                PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
+                PostingIterator::Decoder(decoder) => {
+                    self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
+                }
+            }
+        }
+    }
+}
+
+
+impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T>
+    for Funnel<'a, T, Fields<T>> {
+    type Output = T;
+
+    fn apply(&mut self, term: T) {
+        for index in self.index.fields.values() {
+            match index.query_atom(&term) {
+                PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
+                PostingIterator::Decoder(decoder) => {
+                    self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
+                }
+            }
         }
     }
 }
@@ -156,7 +191,7 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug, TIndex> CanApply<T> for Funnel<'a, T, 
 
 
 
-impl<'a, T:'a,  TIndex> ToOperands<'a> for Funnel<'a, T, TIndex> {
+impl<'a, T: 'a, TIndex> ToOperands<'a> for Funnel<'a, T, TIndex> {
     fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
         if self.result.is_empty() {
             return vec![];
@@ -175,7 +210,6 @@ impl<'a, T:'a,  TIndex> ToOperands<'a> for Funnel<'a, T, TIndex> {
     }
 }
 /// END FUNNEL
-
 #[derive(Debug, Copy, Clone)]
 pub struct And;
 
@@ -209,16 +243,18 @@ impl Operator for And {
                  operands: &mut [PeekableSeekable<Operand>],
                  target: &Posting)
                  -> Option<Posting> {
-       //Advance operands to `target`
+        // Advance operands to `target`
         for op in operands.iter_mut() {
             op.peek_seek(target);
         }
         self.next(operands)
     }
 
-    fn progress(&self,
-                operands: &[PeekableSeekable<Operand>]) -> Progress {
-        operands.iter().map(|op| op.inner().progress()).max().unwrap_or(Progress::done())
+    fn progress(&self, operands: &[PeekableSeekable<Operand>]) -> Progress {
+        operands.iter()
+            .map(|op| op.inner().progress())
+            .max()
+            .unwrap_or(Progress::done())
     }
 }
 
@@ -256,15 +292,17 @@ impl Operator for Or {
                  operands: &mut [PeekableSeekable<Operand>],
                  target: &Posting)
                  -> Option<Posting> {
-        //Advance operands to `target`
+        // Advance operands to `target`
         for op in operands.iter_mut() {
             op.peek_seek(target);
         }
         self.next(operands)
     }
 
-    fn progress(&self,
-                operands: &[PeekableSeekable<Operand>]) -> Progress {
-        operands.iter().map(|op| op.inner().progress()).min().unwrap_or(Progress::done())
+    fn progress(&self, operands: &[PeekableSeekable<Operand>]) -> Progress {
+        operands.iter()
+            .map(|op| op.inner().progress())
+            .min()
+            .unwrap_or(Progress::done())
     }
 }
