@@ -60,7 +60,7 @@ impl<T: Hash + Eq> Deref for Field<T> {
 
 
 pub struct Fields<T: Hash + Eq> {
-    fields: HashMap<String, Field<T>>,
+    pub fields: HashMap<String, Field<T>>,
 }
 
 impl<T: Hash + Eq + Ord> Fields<T> {
