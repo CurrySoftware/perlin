@@ -52,23 +52,24 @@ impl<'a, TStringCallback, TNumberCallback> ToOperands<'a>
 }
 
 
-pub struct ToU64<TCallback> {
+
+pub struct ToUsize<TCallback> {
     callback: TCallback,
 }
 
-impl<TCallback> ToU64<TCallback> {
+impl<TCallback> ToUsize<TCallback> {
     pub fn create(callback: TCallback) -> Self {
-        ToU64 { callback: callback }
+        ToUsize { callback: callback }
     }
 }
 
-impl<'a, TCallback> CanApply<&'a str> for ToU64<TCallback>
-    where TCallback: CanApply<u64>
+impl<'a, TCallback> CanApply<&'a str> for ToUsize<TCallback>
+    where TCallback: CanApply<usize>
 {
     type Output = TCallback::Output;
 
     fn apply(&mut self, input: &'a str) {
-        if let Ok(number) = u64::from_str(input) {
+        if let Ok(number) = usize::from_str(input) {
             self.callback.apply(number);
         }
     }

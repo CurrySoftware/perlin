@@ -1,4 +1,5 @@
 use std::hash::Hash;
+use std::path::Path;
 use std::ops::{Deref, DerefMut};
 use std::collections::HashMap;
 
@@ -16,12 +17,12 @@ pub use field::hierarchy::Hierarchy;
 pub enum FieldSupplement<T> {
     None,
     Filter(Filter<T>),
-    Hierarchy(Hierarchy<T>)
+    Hierarchy(Hierarchy<T>),
 }
 
 pub struct Field<T: Hash + Eq> {
     index: Index<T>,
-    supplement: FieldSupplement<T> 
+    supplement: FieldSupplement<T>,
 }
 
 impl<T: Hash + Eq + Ord + Clone + 'static> Field<T> {
@@ -37,8 +38,8 @@ impl<T: Hash + Eq + Ord + Clone + 'static> Field<T> {
 impl<TTerm> PipelineBucket<TTerm> for Field<TTerm>
     where TTerm: Hash + Eq + Ord
 {
-    fn put(&mut self, doc_id: DocId, term: TTerm) {        
-        self.index.index_term(doc_id, term);            
+    fn put(&mut self, doc_id: DocId, term: TTerm) {
+        self.index.index_term(doc_id, term);
     }
 }
 
@@ -59,23 +60,54 @@ impl<T: Hash + Eq> Deref for Field<T> {
 
 
 pub struct Fields<T: Hash + Eq> {
-    fields: HashMap<String, Field<T>>
+    fields: HashMap<String, Field<T>>,
 }
 
+impl<T: Hash + Eq + Ord> Fields<T> {
+    pub fn commit(&mut self) {
+        for field in self.fields.values_mut() {
+            field.commit();
+        }
+    }
+
+    pub fn add_field(&mut self,
+                     name: String,
+                     path: &Path,
+                     supplement: FieldSupplement<T>)
+                     -> Result<(), ()> {
+        use perlin_core::page_manager::{RamPageCache, FsPageManager};
+        use perlin_core::index::vocabulary::SharedVocabulary;
+        use perlin_core::index::Index;
+        if self.fields.contains_key(&name) {
+            return Err(());
+        } else {
+            let page_cache =
+                RamPageCache::new(FsPageManager::new(&path.join(format!("{}_page_cache", name))));
+            self.fields.insert(name,
+                               Field {
+                                   index: Index::new(page_cache, SharedVocabulary::new()),
+                                   supplement,
+                               });
+            return Ok(());
+        }
+    }
+
+    pub fn new() -> Self {
+        Fields { fields: HashMap::new() }
+    }
+}
 
 
 #[cfg(test)]
 mod tests {
     use perlin_core::index::posting::DocId;
-    use field::{Field, FilterField, HierarchyField};
+    use field::{Fields};
 
     use rust_stemmers::Algorithm;
 
     #[derive(PerlinDocument)]
     pub struct FilterTest {
-        body: Field<String>,
-        number: Field<u64>,
-        cat: Field<usize>
+        body: Fields<String>,
     }
     // pub use self::perlin_impl::FilterTestIndex;
     // mod perlin_impl {
@@ -105,7 +137,8 @@ mod tests {
     //         pub fn commit(&mut self) {
     //             self.documents.commit();
     //         }
-    //         pub fn set_query_pipeline(&mut self, pipe: QueryPipeline<FilterTest>) {
+    // pub fn set_query_pipeline(&mut self, pipe:
+    // QueryPipeline<FilterTest>) {
     //             self.query_pipeline = Some(pipe);
     //         }
     //         pub fn run_query<'a>(&'a self, query: Query<'a>) -> Operand<'a> {
@@ -124,12 +157,15 @@ mod tests {
     //             use perlin_core::index::vocabulary::SharedVocabulary;
     //             use perlin_core::index::Index;
     //             let body_page_cache =
-    //                 RamPageCache::new(FsPageManager::new(&path.join("body_page_cache")));
+    //                 RamPageCache::new(
+    // FsPageManager::new(&path.join("body_page_cache")));
     //             let number_page_cache =
-    //                 RamPageCache::new(FsPageManager::new(&path.join("number_page_cache")));
+    //                 RamPageCache::new(
+    // FsPageManager::new(&path.join("number_page_cache")));
     //             FilterTest {
     //                 body: Index::new(body_page_cache, SharedVocabulary::new()),
-    //                 number: FilterField::new(Index::new(number_page_cache, SharedVocabulary::new())),
+    // number: FilterField::new(Index::new(number_page_cache,
+    // SharedVocabulary::new())),
     //             }
     //         }
     //         pub fn commit(&mut self) {
