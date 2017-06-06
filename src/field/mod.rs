@@ -22,7 +22,8 @@ pub enum FieldSupplement<T> {
 
 pub struct Field<T: Hash + Eq> {
     index: Index<T>,
-    supplement: FieldSupplement<T>,
+    pub term_doc_ratio: f32,
+    pub supplement: FieldSupplement<T>,
 }
 
 impl<T: Hash + Eq + Ord + Clone + 'static> Field<T> {
@@ -86,6 +87,7 @@ impl<T: Hash + Eq + Ord> Fields<T> {
             self.fields.insert(name,
                                Field {
                                    index: Index::new(page_cache, SharedVocabulary::new()),
+                                   term_doc_ratio: 1.0,
                                    supplement,
                                });
             return Ok(());
