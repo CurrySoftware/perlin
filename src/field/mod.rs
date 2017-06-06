@@ -29,8 +29,7 @@ pub struct Field<T: Hash + Eq> {
 impl<T: Hash + Eq + Ord + Clone + 'static> Field<T> {
     pub fn commit(&mut self) {
         self.index.commit();
-
-        if let FieldSupplement::Filter(ref mut filter) = self.supplement {
+        if let FieldSupplement::Filter(ref mut filter) = self.supplement {            
             filter.commit(&self.index);
         }
     }
@@ -64,10 +63,10 @@ pub struct Fields<T: Hash + Eq> {
     pub fields: HashMap<String, Field<T>>,
 }
 
-impl<T: Hash + Eq + Ord> Fields<T> {
+impl<T: Hash + Eq + Ord + Clone + 'static> Fields<T> {
     pub fn commit(&mut self) {
         for field in self.fields.values_mut() {
-            field.commit();
+            (field as &mut Field<T>).commit();
         }
     }
 
