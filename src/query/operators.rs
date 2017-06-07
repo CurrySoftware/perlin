@@ -124,8 +124,7 @@ impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
     }
 }
 
-impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T>
-    for Funnel<'a, T, Fields<T>> {
+impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T> for Funnel<'a, T, Fields<T>> {
     type Output = T;
 
     fn apply(&mut self, term: &'b T) {
@@ -141,8 +140,7 @@ impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T>
 }
 
 
-impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T>
-    for Funnel<'a, T, Fields<T>> {
+impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T, Fields<T>> {
     type Output = T;
 
     fn apply(&mut self, term: T) {
