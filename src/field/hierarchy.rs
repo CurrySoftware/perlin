@@ -14,7 +14,7 @@ impl<T: Hash + Eq + Clone> Hierarchy<T> {
             panic!("Hierarchy element already exists!");
         }
 
-        self.0.insert(term.clone(), vec![]).unwrap();
+        self.0.insert(term.clone(), vec![]);
 
         if let Some(parent) = parent {
             if let Some(parent_node) = self.0.get_mut(&parent) {
@@ -27,8 +27,9 @@ impl<T: Hash + Eq + Clone> Hierarchy<T> {
         }
     }
 
-    pub fn get_child_terms(&self, term: T) -> Option<&[T]> {
-        if let Some(node) = self.0.get(&term) {
+    pub fn get_child_terms(&self, term: &T) -> Option<&[T]> {
+        //TODO: Think about that. Is it possible, that we ask for children of a term that does not exist?
+        if let Some(node) = self.0.get(term) {
             Some(&node)
         } else {
             None

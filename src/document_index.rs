@@ -36,6 +36,14 @@ impl<'a, T: 'a> AsRef<Operand<'a>> for QueryResultIterator<'a, T> {
     }
 }
 
+impl<'a, T: 'a> AsMut<Operand<'a>> for QueryResultIterator<'a, T> {
+    fn as_mut(&mut self) -> &mut Operand<'a> {
+        &mut self.0
+    }
+}
+
+
+
 
 #[cfg(test)]
 mod tests {
