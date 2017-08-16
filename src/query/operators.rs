@@ -1,16 +1,14 @@
 use std::hash::Hash;
 use std::fmt::Debug;
-use std::borrow::Borrow;
 use std::marker::PhantomData;
 
 use perlin_core::index::posting::{Posting, PostingIterator};
 use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 use perlin_core::utils::progress::Progress;
-use perlin_core::index::Index;
 
 use language::CanApply;
-use query::{ToOperands, Operand, Operator, ChainingOperator};
-use field::Fields;
+use query::{Weight, ToOperands, Operand, ChainingOperator};
+use field::{Field, Fields};
 
 /// Mimics the functionality of the `try!` macro for `Option`s.
 /// Evaluates `Some(x)` to x. Else it returns `None`.
@@ -30,69 +28,6 @@ pub enum Combinator {
     Any,
 }
 
-pub struct SplitFunnel<'a, T: 'a + Hash + Eq, CB> {
-    index: &'a Index<T>,
-    combinator: Combinator,
-    chaining_operator: ChainingOperator,
-    result: Vec<PeekableSeekable<Operand<'a>>>,
-    callback: CB,
-}
-
-impl<'a, T: 'a + Hash + Eq, CB> SplitFunnel<'a, T, CB> {
-    pub fn create(chaining_operator: ChainingOperator,
-                  combinator: Combinator,
-                  index: &'a Index<T>,
-                  cb: CB)
-                  -> Self {
-        SplitFunnel {
-            index: index,
-            combinator: combinator,
-            chaining_operator: chaining_operator,
-            callback: cb,
-            result: Vec::new(),
-        }
-    }
-}
-
-impl<'a, T: 'a + Hash + Eq + Ord, CB> CanApply<T> for SplitFunnel<'a, T, CB>
-    where CB: CanApply<T>
-{
-    type Output = CB::Output;
-
-    fn apply(&mut self, term: T) {
-        // Query index
-        match self.index.query_atom(&term) {
-            PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
-            PostingIterator::Decoder(decoder) => {
-                self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
-            }
-        }
-        // And keep going
-        self.callback.apply(term);
-    }
-}
-
-
-impl<'a, T: 'a + Hash + Eq, CB> ToOperands<'a> for SplitFunnel<'a, T, CB>
-    where CB: ToOperands<'a>
-{
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
-        let mut other = self.callback.to_operands();
-        match self.combinator {
-            Combinator::All => {
-                other.push((self.chaining_operator,
-                            PeekableSeekable::new(Operand::Operated(Box::new(And {}),
-                                                                    self.result))))
-            }
-            Combinator::Any => {
-                other.push((self.chaining_operator,
-                            PeekableSeekable::new(Operand::Operated(Box::new(Or {}), self.result))))
-            }
-        }
-        other
-    }
-}
-
 /// This funnel is used at an end of a query pipeline
 /// It calls `index.query_atom` and stores the result, which is lazy
 /// When `to_operand` is then called, it packs everything into an operator!
@@ -103,21 +38,16 @@ impl<'a, T: 'a + Hash + Eq, CB> ToOperands<'a> for SplitFunnel<'a, T, CB>
 // could discard it
 pub struct Funnel<'a, T: 'a, TIndex: 'a> {
     index: &'a TIndex,
-    combinator: Combinator,
     chaining_operator: ChainingOperator,
     result: Vec<PeekableSeekable<Operand<'a>>>,
     _term: PhantomData<T>,
 }
 
 impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
-    pub fn create(chaining_operator: ChainingOperator,
-                  combinator: Combinator,
-                  index: &'a TIndex)
-                  -> Self {
+    pub fn create(chaining_operator: ChainingOperator, index: &'a TIndex) -> Self {
         Funnel {
-            index: index,
-            combinator: combinator,
-            chaining_operator: chaining_operator,
+            index,
+            chaining_operator,
             result: Vec::new(),
             _term: PhantomData,
         }
@@ -128,11 +58,19 @@ impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T> for Funnel<'a,
     type Output = T;
 
     fn apply(&mut self, term: &'b T) {
-        for index in self.index.fields.values() {
+        for (key, index) in self.index.fields.iter() {
+            let w = index.term_doc_ratio;
             match index.query_atom(&term) {
-                PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
-                PostingIterator::Decoder(decoder) => {
-                    self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
+                (_, PostingIterator::Empty) => {
+                    self.result.push(PeekableSeekable::new(Operand::Empty))
+                }
+                (idf, PostingIterator::Decoder(decoder)) => {
+                    println!("Term {:?} in field {:?} queried with a weight of: {:?}.",
+                             &term,
+                             key,
+                             Weight(idf.0 * w));
+                    self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w),
+                                                                         decoder)))
                 }
             }
         }
@@ -144,11 +82,19 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T, Fields<T
     type Output = T;
 
     fn apply(&mut self, term: T) {
-        for index in self.index.fields.values() {
+        for (key, index) in self.index.fields.iter() {
+            let w = index.term_doc_ratio;;
             match index.query_atom(&term) {
-                PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
-                PostingIterator::Decoder(decoder) => {
-                    self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
+                (_, PostingIterator::Empty) => {
+                    self.result.push(PeekableSeekable::new(Operand::Empty))
+                }
+                (idf, PostingIterator::Decoder(decoder)) => {
+                    println!("Term {:?} in field {:?} queried with a weight of: {:?}.",
+                             &term,
+                             key,
+                             Weight(idf.0 * w));
+                    self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w),
+                                                                         decoder)))
                 }
             }
         }
@@ -156,32 +102,38 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T, Fields<T
 }
 
 
-impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug, TIndex> CanApply<&'b T> for Funnel<'a, T, TIndex>
-    where TIndex: Borrow<Index<T>>
+impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T> for Funnel<'a, T, Field<T>>
 {
     type Output = T;
 
     fn apply(&mut self, term: &'b T) {
-        match (self.index.borrow()).query_atom(&term) {
-            PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
-            PostingIterator::Decoder(decoder) => {
-                self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
+        let w = self.index.term_doc_ratio;
+        match self.index.query_atom(&term) {
+            (_, PostingIterator::Empty) => self.result.push(PeekableSeekable::new(Operand::Empty)),
+            (idf, PostingIterator::Decoder(decoder)) => {
+                println!("Term {:?} queried with a weight of: {:?}.",
+                         &term,
+                         Weight(idf.0 * w));
+                self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w), decoder)))
             }
         }
     }
 }
 
 
-impl<'a, T: 'a + Hash + Eq + Ord + Debug, TIndex> CanApply<T> for Funnel<'a, T, TIndex>
-    where TIndex: Borrow<Index<T>>
+impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T, Field<T>>
 {
     type Output = T;
 
     fn apply(&mut self, term: T) {
-        match (self.index.borrow()).query_atom(&term) {
-            PostingIterator::Empty => self.result.push(PeekableSeekable::new(Operand::Empty)),
-            PostingIterator::Decoder(decoder) => {
-                self.result.push(PeekableSeekable::new(Operand::Term(decoder)))
+        let w = self.index.term_doc_ratio;
+        match self.index.query_atom(&term) {
+            (_, PostingIterator::Empty) => self.result.push(PeekableSeekable::new(Operand::Empty)),
+            (idf, PostingIterator::Decoder(decoder)) => {
+                println!("Term {:?} queried with a weight of: {:?}.",
+                         &term,
+                         Weight(idf.0 * w));
+                self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w), decoder)))
             }
         }
     }
@@ -194,25 +146,18 @@ impl<'a, T: 'a, TIndex> ToOperands<'a> for Funnel<'a, T, TIndex> {
         if self.result.is_empty() {
             return vec![];
         }
-        match self.combinator {
-            Combinator::All => {
-                vec![(self.chaining_operator,
-                      PeekableSeekable::new(Operand::Operated(Box::new(And {}), self.result)))]
-            }
-            Combinator::Any => {
-                vec![(self.chaining_operator,
-                      PeekableSeekable::new(Operand::Operated(Box::new(Or {}), self.result)))]
-            }
-        }
-
+        vec![(self.chaining_operator,
+              PeekableSeekable::new(Operand::Operated(Weight(1.0), self.result)))]
     }
 }
+
+
 /// END FUNNEL
 #[derive(Debug, Copy, Clone)]
 pub struct And;
 
-impl Operator for And {
-    fn next(&mut self, operands: &mut [PeekableSeekable<Operand>]) -> Option<Posting> {
+impl And {
+    pub fn next(operands: &mut [PeekableSeekable<Operand>]) -> Option<Posting> {
         let mut focus = try_option!(operands[0].next()); // Acts as temporary to be compared against
         let mut last_iter = 0; // The iterator that last set 'focus'
         'possible_documents: loop {
@@ -237,70 +182,20 @@ impl Operator for And {
         }
     }
 
-    fn next_seek(&mut self,
-                 operands: &mut [PeekableSeekable<Operand>],
-                 target: &Posting)
-                 -> Option<Posting> {
+    pub fn next_seek(operands: &mut [PeekableSeekable<Operand>],
+                     target: &Posting)
+                     -> Option<Posting> {
         // Advance operands to `target`
         for op in operands.iter_mut() {
             op.peek_seek(target);
         }
-        self.next(operands)
+        Self::next(operands)
     }
 
-    fn progress(&self, operands: &[PeekableSeekable<Operand>]) -> Progress {
+    pub fn progress(operands: &[PeekableSeekable<Operand>]) -> Progress {
         operands.iter()
             .map(|op| op.inner().progress())
             .max()
-            .unwrap_or(Progress::done())
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Or;
-
-impl Operator for Or {
-    fn next(&mut self, operands: &mut [PeekableSeekable<Operand>]) -> Option<Posting> {
-        // TODO: Probably improveable
-        // Find the smallest current value of all operands
-        let min_doc_id = operands.iter_mut()
-            .map(|op| op.peek())
-            .filter(|val| val.is_some())
-            .map(|val| val.unwrap().doc_id())
-            .min();
-
-        // Walk over all operands. Advance those who emit the min value
-        if min_doc_id.is_some() {
-            let mut i = 0;
-            let mut tmp = None;
-            while i < operands.len() {
-                let v = operands[i].peek().map(|p| p.doc_id());
-                if !v.is_none() && v == min_doc_id {
-                    tmp = operands[i].next();
-                }
-                i += 1;
-            }
-            tmp
-        } else {
-            None
-        }
-    }
-
-    fn next_seek(&mut self,
-                 operands: &mut [PeekableSeekable<Operand>],
-                 target: &Posting)
-                 -> Option<Posting> {
-        // Advance operands to `target`
-        for op in operands.iter_mut() {
-            op.peek_seek(target);
-        }
-        self.next(operands)
-    }
-
-    fn progress(&self, operands: &[PeekableSeekable<Operand>]) -> Progress {
-        operands.iter()
-            .map(|op| op.inner().progress())
-            .min()
             .unwrap_or(Progress::done())
     }
 }

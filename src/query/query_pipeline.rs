@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! operand {
     (;$INDEX:ident; $chaining_op:ident [$operator:ident in $this_field:ident]) => {
-        Funnel::create(ChainingOperator::$chaining_op, Combinator::$operator, &$INDEX.$this_field)
+        Funnel::create(ChainingOperator::$chaining_op, &$INDEX.$this_field)
     };
 }
 #[macro_export]
@@ -37,15 +37,15 @@ macro_rules! inner_query_pipe {
     (;$INDEX:ident;
      $chain:ident [$operator:ident in $this_field:ident]) => {
         // Must [All in field]
-        Funnel::create(ChainingOperator::$chain, Combinator::$operator, &$INDEX.$this_field)
+        Funnel::create(ChainingOperator::$chain, &$INDEX.$this_field)
     };
-    (;$INDEX:ident;
-     $chain:ident [$operator:ident in $this_field:ident] $($x:tt)*) => {
-        // Must [All in field]
-        SplitFunnel::create(
-            ChainingOperator::$chain, Combinator::$operator, &$INDEX.$this_field,
-            inner_query_pipe!(;$INDEX; $($x)*))
-    };
+    // (;$INDEX:ident;
+    //  $chain:ident [$operator:ident in $this_field:ident] $($x:tt)*) => {
+    //     // Must [All in field]
+    //     SplitFunnel::create(
+    //         ChainingOperator::$chain, Combinator::$operator, &$INDEX.$this_field,
+    //         inner_query_pipe!(;$INDEX; $($x)*))
+    // };
     (;$INDEX:ident;
      $element:ident $($x:tt)*) =>
     // Element
@@ -60,14 +60,14 @@ macro_rules! query_pipeline {
     ($($x:tt)*) => {
         Box::new(move |index, mut query| {
             use $crate::language::CanApply;
-            use $crate::query::{And, Or, ToOperands, SplitFunnel, Funnel, Operand, Combinator, ChainingOperator};
+            use $crate::query::{ToOperands, Weight, Funnel, Operand, ChainingOperator};
             use perlin_core::utils::seeking_iterator::PeekableSeekable;
 
             // Build the pipeline
             let mut pipeline = inner_query_pipe!(;index; $($x)*);
             // Run the query-string through it
             pipeline.apply(&query.query);
-            // And retrieve all operands            
+            // And retrieve all operands
             let mut operands = pipeline.to_operands();
             // Append the filters
             operands.append(&mut query.filter);
@@ -88,10 +88,10 @@ macro_rules! query_pipeline {
             };
             if !may_bucket.is_empty() {
                 // Append the result of the may buckets to the must bucket
-                must_bucket.push(PeekableSeekable::new(Operand::Operated(Box::new(Or {}), may_bucket)));
+                must_bucket.push(PeekableSeekable::new(Operand::Operated(Weight(0.5), may_bucket)));
             }
             // Return a boxed iterator
-            Operand::Operated(Box::new(And {}), must_bucket)
+            Operand::Operated(Weight(1.0), must_bucket)
         })
     }
 }

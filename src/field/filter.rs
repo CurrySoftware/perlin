@@ -21,7 +21,6 @@ impl<T: Hash + Eq + Ord + Clone + 'static> Filter<T> {
         Box::new(self.0.iter().map(move |&(ref df, ref t, ref term_id)| (*df, t, *term_id)))
     }
 
-
     pub fn new() -> Self {
         Filter(vec![])
     }

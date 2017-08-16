@@ -153,7 +153,6 @@ mod tests {
                 | Must [Any in number]
                 > LowercaseFilter
                 > Stemmer(Algorithm::English)
-                > Must [Any in title]
                 > Must [All in text]));
         should_yield(&t, "2567 deimos phobos", &[2]);
         should_yield(&t, "deimos phobos", &[2]);

@@ -29,7 +29,7 @@ pub struct Field<T: Hash + Eq> {
 impl<T: Hash + Eq + Ord + Clone + 'static> Field<T> {
     pub fn commit(&mut self) {
         self.index.commit();
-        if let FieldSupplement::Filter(ref mut filter) = self.supplement {            
+        if let FieldSupplement::Filter(ref mut filter) = self.supplement {
             filter.commit(&self.index);
         }
     }
