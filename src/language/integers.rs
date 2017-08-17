@@ -44,7 +44,7 @@ impl<'a, TStringCallback, TNumberCallback> ToOperands<'a>
     where TStringCallback: ToOperands<'a>,
           TNumberCallback: ToOperands<'a>
 {
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
+    fn to_operands(self) -> Vec<PeekableSeekable<Operand<'a>>> {
         let mut result = self.number_callback.to_operands();
         result.append(&mut self.string_callback.to_operands());
         result

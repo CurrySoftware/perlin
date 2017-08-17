@@ -50,7 +50,7 @@ impl<'a, TCB> CanApply<&'a str> for AlphaNumericTokenizer<TCB>
 impl<'a, TCB> ToOperands<'a> for AlphaNumericTokenizer<TCB>
     where TCB: ToOperands<'a>
 {
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
+    fn to_operands(self) -> Vec<PeekableSeekable<Operand<'a>>> {
         self.cb.to_operands()
     }
 }
@@ -82,7 +82,7 @@ impl<TCallback, T: Debug> CanApply<T> for Debugger<TCallback>
 impl<'a, TCB> ToOperands<'a> for Debugger<TCB>
     where TCB: ToOperands<'a>
 {
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
+    fn to_operands(self) -> Vec<PeekableSeekable<Operand<'a>>> {
         self.callback.to_operands()
     }
 }
@@ -114,7 +114,7 @@ impl<'a, TCallback> CanApply<&'a str> for WhitespaceTokenizer<TCallback>
 
 impl<'a, TCallback> ToOperands<'a> for WhitespaceTokenizer<TCallback>
     where TCallback: ToOperands<'a> {
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
+    fn to_operands(self) -> Vec<PeekableSeekable<Operand<'a>>> {
         self.callback.to_operands()
     }
 }
@@ -144,7 +144,7 @@ impl<'a, TCallback> CanApply<&'a str> for LowercaseFilter<TCallback>
 impl<'a, TCallback> ToOperands<'a> for LowercaseFilter<TCallback>
     where TCallback: ToOperands<'a> {
 
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
+    fn to_operands(self) -> Vec<PeekableSeekable<Operand<'a>>> {
         self.callback.to_operands()
     }
 }

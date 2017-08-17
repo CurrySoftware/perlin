@@ -2,7 +2,7 @@ use std::hash::Hash;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use perlin_core::index::posting::{Posting, PostingIterator};
+use perlin_core::index::posting::{Posting, PostingIterator, PostingDecoder};
 use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 use perlin_core::utils::progress::Progress;
 
@@ -52,89 +52,96 @@ impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
             _term: PhantomData,
         }
     }
+
+    fn add_posting_list(&mut self,
+                        weight: Weight,
+                        decoder: PostingDecoder<'a>,
+                        term: String,
+                        field: String) {
+        if weight.0 > 0. {
+            println!("New Query Term with {:?}: {} on {}", weight, term, field);
+            self.result.push(PeekableSeekable::new(Operand::Term(weight, decoder, term, field)));
+        } else {
+            println!("Query term discarded because its useless! {} on {}",
+                     term,
+                     field);
+        }
+    }
 }
 
-impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T> for Funnel<'a, T, Fields<T>> {
+impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug + ToString> CanApply<&'b T>
+    for Funnel<'a, T, Fields<T>> {
     type Output = T;
 
     fn apply(&mut self, term: &'b T) {
         for (key, index) in self.index.fields.iter() {
-            let w = index.term_doc_ratio;
+            let w = 1./index.term_doc_ratio;
             match index.query_atom(&term) {
-                (_, PostingIterator::Empty) => {
-                    self.result.push(PeekableSeekable::new(Operand::Empty))
-                }
                 (idf, PostingIterator::Decoder(decoder)) => {
-                    println!("Term {:?} in field {:?} queried with a weight of: {:?}.",
-                             &term,
-                             key,
-                             Weight(idf.0 * w));
-                    self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w),
-                                                                         decoder)))
+                    self.add_posting_list(Weight(idf.0 * w),
+                                          decoder,
+                                          term.to_string(),
+                                          key.clone());
                 }
+                _ => {}
             }
         }
     }
 }
 
 
-impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T, Fields<T>> {
+impl<'a, T: 'a + Hash + Eq + Ord + Debug + ToString> CanApply<T> for Funnel<'a, T, Fields<T>> {
     type Output = T;
 
     fn apply(&mut self, term: T) {
         for (key, index) in self.index.fields.iter() {
-            let w = index.term_doc_ratio;;
+            let w = 1./index.term_doc_ratio;
             match index.query_atom(&term) {
-                (_, PostingIterator::Empty) => {
-                    self.result.push(PeekableSeekable::new(Operand::Empty))
-                }
                 (idf, PostingIterator::Decoder(decoder)) => {
-                    println!("Term {:?} in field {:?} queried with a weight of: {:?}.",
-                             &term,
-                             key,
-                             Weight(idf.0 * w));
-                    self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w),
-                                                                         decoder)))
+                    self.add_posting_list(Weight(idf.0 * w),
+                                          decoder,
+                                          term.to_string(),
+                                          key.clone());
                 }
+                _ => {}
             }
         }
     }
 }
 
 
-impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug> CanApply<&'b T> for Funnel<'a, T, Field<T>>
-{
+impl<'a: 'b, 'b, T: 'a + Hash + Eq + Ord + Debug + ToString> CanApply<&'b T>
+    for Funnel<'a, T, Field<T>> {
     type Output = T;
 
     fn apply(&mut self, term: &'b T) {
-        let w = self.index.term_doc_ratio;
+        let w = 1./self.index.term_doc_ratio;
         match self.index.query_atom(&term) {
-            (_, PostingIterator::Empty) => self.result.push(PeekableSeekable::new(Operand::Empty)),
             (idf, PostingIterator::Decoder(decoder)) => {
-                println!("Term {:?} queried with a weight of: {:?}.",
-                         &term,
-                         Weight(idf.0 * w));
-                self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w), decoder)))
+                self.add_posting_list(Weight(idf.0 * w),
+                                      decoder,
+                                      term.to_string(),
+                                      self.index.name.clone());
             }
+            _ => {}
         }
     }
 }
 
 
-impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T, Field<T>>
-{
+impl<'a, T: 'a + Hash + Eq + Ord + Debug + ToString> CanApply<T> for Funnel<'a, T, Field<T>> {
     type Output = T;
 
     fn apply(&mut self, term: T) {
-        let w = self.index.term_doc_ratio;
+        let w = 1./self.index.term_doc_ratio;
         match self.index.query_atom(&term) {
-            (_, PostingIterator::Empty) => self.result.push(PeekableSeekable::new(Operand::Empty)),
             (idf, PostingIterator::Decoder(decoder)) => {
-                println!("Term {:?} queried with a weight of: {:?}.",
-                         &term,
-                         Weight(idf.0 * w));
-                self.result.push(PeekableSeekable::new(Operand::Term(Weight(idf.0 * w), decoder)))
+                self.add_posting_list(Weight(idf.0 * w),
+                                      decoder,
+                                      term.to_string(),
+                                      self.index.name.clone());
             }
+            _ => {}
         }
     }
 }
@@ -142,12 +149,8 @@ impl<'a, T: 'a + Hash + Eq + Ord + Debug> CanApply<T> for Funnel<'a, T, Field<T>
 
 
 impl<'a, T: 'a, TIndex> ToOperands<'a> for Funnel<'a, T, TIndex> {
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
-        if self.result.is_empty() {
-            return vec![];
-        }
-        vec![(self.chaining_operator,
-              PeekableSeekable::new(Operand::Operated(Weight(1.0), self.result)))]
+    fn to_operands(self) -> Vec<PeekableSeekable<Operand<'a>>> {
+        self.result
     }
 }
 

@@ -32,7 +32,7 @@ impl<'a, TCallback> CanApply<&'a str> for Stemmer<TCallback>
 impl<'a, TCallback> ToOperands<'a> for Stemmer<TCallback>
     where TCallback: ToOperands<'a>
 {
-    fn to_operands(self) -> Vec<(ChainingOperator, PeekableSeekable<Operand<'a>>)> {
+    fn to_operands(self) -> Vec<PeekableSeekable<Operand<'a>>> {
         self.callback.to_operands()
     }
 }

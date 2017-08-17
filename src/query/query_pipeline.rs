@@ -68,30 +68,7 @@ macro_rules! query_pipeline {
             // Run the query-string through it
             pipeline.apply(&query.query);
             // And retrieve all operands
-            let mut operands = pipeline.to_operands();
-            // Append the filters
-            operands.append(&mut query.filter);
-
-            // Put them in must or may buckets
-            let mut must_bucket = Vec::new();
-            let mut may_bucket = Vec::new();
-            for (op, operand) in operands {
-                match op {
-                    ChainingOperator::Must => {
-                        must_bucket.push(operand);
-                    },
-                    ChainingOperator::May => {
-                        may_bucket.push(operand);
-                    },
-                    _ => {panic!()}
-                }
-            };
-            if !may_bucket.is_empty() {
-                // Append the result of the may buckets to the must bucket
-                must_bucket.push(PeekableSeekable::new(Operand::Operated(Weight(0.5), may_bucket)));
-            }
-            // Return a boxed iterator
-            Operand::Operated(Weight(1.0), must_bucket)
+            pipeline.to_operands()
         })
     }
 }

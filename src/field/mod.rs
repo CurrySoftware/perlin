@@ -22,6 +22,7 @@ pub enum FieldSupplement<T> {
 
 pub struct Field<T: Hash + Eq> {
     index: Index<T>,
+    pub name: String,
     pub term_doc_ratio: f32,
     pub supplement: FieldSupplement<T>,
 }
@@ -83,8 +84,9 @@ impl<T: Hash + Eq + Ord + Clone + 'static> Fields<T> {
         } else {
             let page_cache =
                 RamPageCache::new(FsPageManager::new(&path.join(format!("{}_page_cache", name))));
-            self.fields.insert(name,
+            self.fields.insert(name.clone(),
                                Field {
+                                   name,
                                    index: Index::new(page_cache, SharedVocabulary::new()),
                                    term_doc_ratio: 1.0,
                                    supplement,

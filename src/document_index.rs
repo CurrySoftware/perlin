@@ -1,16 +1,21 @@
 use std::marker::PhantomData;
 
-use query::{Query, Operand};
+use query::{Query, Operand, WeightingOperator};
+use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 use perlin_core::index::posting::{Posting, DocId};
 
 pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out> + Sync + Send>;
-pub type QueryPipeline<T> = Box<for<'r> Fn(&'r T, Query<'r>) -> Operand<'r> + Sync + Send>;
+pub type QueryPipeline<T> = Box<for<'r> Fn(&'r T, &Query<'r>) -> Vec<PeekableSeekable<Operand<'r>>> + Sync + Send>;
 
-pub struct QueryResultIterator<'a, T: 'a>(Operand<'a>, &'a [(DocId, T)]);
+pub struct QueryResultIterator<'a, T: 'a>(WeightingOperator<'a>, &'a [(DocId, T)]);
 
 impl<'a, T: 'a + Clone> QueryResultIterator<'a, T> {
-    pub fn new(op: Operand<'a>, ext_ids: &'a [(DocId, T)]) -> Self {
-        QueryResultIterator(op, ext_ids)
+    pub fn new(ops: Vec<PeekableSeekable<Operand<'a>>>,
+               filters: Vec<PeekableSeekable<Operand<'a>>>,
+               ext_ids: &'a [(DocId, T)])
+               -> Self {
+        println!("New QueryResultIterator! OPS: {:?} filters: {:?}", ops, filters);
+        QueryResultIterator(WeightingOperator::create(ops, filters), ext_ids)
     }
 }
 
@@ -30,19 +35,17 @@ impl<'a, T: 'a + Clone> Iterator for QueryResultIterator<'a, T> {
     }
 }
 
-impl<'a, T: 'a> AsRef<Operand<'a>> for QueryResultIterator<'a, T> {
-    fn as_ref(&self) -> &Operand<'a> {
+impl<'a, T: 'a> AsRef<WeightingOperator<'a>> for QueryResultIterator<'a, T> {
+    fn as_ref(&self) -> &WeightingOperator<'a> {
         &self.0
     }
 }
 
-impl<'a, T: 'a> AsMut<Operand<'a>> for QueryResultIterator<'a, T> {
-    fn as_mut(&mut self) -> &mut Operand<'a> {
+impl<'a, T: 'a> AsMut<WeightingOperator<'a>> for QueryResultIterator<'a, T> {
+    fn as_mut(&mut self) -> &mut WeightingOperator<'a> {
         &mut self.0
     }
 }
-
-
 
 
 #[cfg(test)]
@@ -64,7 +67,7 @@ mod tests {
         #[no_pipe]
         emails: Field<usize>,
     }
-    
+
     use language::{Stemmer, LowercaseFilter, WhitespaceTokenizer};
     use language::integers::NumberFilter;
     use std::borrow::Cow;
@@ -165,7 +168,7 @@ mod tests {
         let unfiltered = Query::new("flew");
         let filtered =
             Query::new("flew").filter_by(ChainingOperator::Must,
-                                                     t.documents.number.query_atom(&2567));
+                                         t.documents.number.query_atom(&2567));
 
         assert_eq!(t.run_query(unfiltered).collect::<Vec<_>>(),
                    vec![Posting(DocId(0)), Posting(DocId(1)), Posting(DocId(2))]);

@@ -31,12 +31,12 @@ pub fn generate_index_struct(ast: &syn::MacroInput) -> quote::Tokens {
             pub fn commit(&mut self) {
                 self.documents.commit();
             }
-       
+
             pub fn set_query_pipeline(&mut self, pipe: QueryPipeline<#ident>) {
                 self.query_pipeline = Some(pipe);
             }
 
-            #run_query           
+            #run_query
         }
     )
 }
@@ -47,8 +47,9 @@ fn run_query(ast: &syn::MacroInput) -> quote::Tokens {
             pub fn run_query<'a>(&'a self, query: Query<'a>) ->
                 QueryResultIterator<'a, #ext_id_type> {
                 use perlin_core::index::posting::Posting;
-                if let Some(ref query_pipe) = self.query_pipeline {
-                    QueryResultIterator::new(query_pipe(&self.documents, query), &self.external_ids)
+                    if let Some(ref query_pipe) = self.query_pipeline {
+                        let ops = query_pipe(&self.documents, &query);
+                    QueryResultIterator::new(ops, query.filter, &self.external_ids)
                 } else {
                     panic!("Query Pipe not set!");
                 }
