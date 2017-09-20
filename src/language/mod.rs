@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use perlin_core::utils::seeking_iterator::{PeekableSeekable};
 use perlin_core::index::posting::DocId;
 
-use query::{Operand, ChainingOperator, ToOperands};
+use query::{Operand, ToOperands};
 
 mod stemmers;
 pub mod integers;

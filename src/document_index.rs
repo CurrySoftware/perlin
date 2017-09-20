@@ -1,11 +1,12 @@
 use std::marker::PhantomData;
 
 use query::{Query, Operand, WeightingOperator};
-use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
+use perlin_core::utils::seeking_iterator::PeekableSeekable;
 use perlin_core::index::posting::{Posting, DocId};
 
 pub type Pipeline<Out, T> = Box<Fn(DocId, &mut T, &str) -> PhantomData<Out> + Sync + Send>;
-pub type QueryPipeline<T> = Box<for<'r> Fn(&'r T, &Query<'r>) -> Vec<PeekableSeekable<Operand<'r>>> + Sync + Send>;
+pub type QueryPipeline<T> =
+    Box<for<'r> Fn(&'r T, &Query<'r>) -> Vec<PeekableSeekable<Operand<'r>>> + Sync + Send>;
 
 pub struct QueryResultIterator<'a, T: 'a>(WeightingOperator<'a>, &'a [(DocId, T)]);
 
@@ -14,7 +15,9 @@ impl<'a, T: 'a + Clone> QueryResultIterator<'a, T> {
                filters: Vec<PeekableSeekable<Operand<'a>>>,
                ext_ids: &'a [(DocId, T)])
                -> Self {
-        println!("New QueryResultIterator! OPS: {:?} filters: {:?}", ops, filters);
+        println!("New QueryResultIterator! OPS: {:?} filters: {:?}",
+                 ops,
+                 filters);
         QueryResultIterator(WeightingOperator::create(ops, filters), ext_ids)
     }
 }
@@ -90,10 +93,10 @@ mod tests {
         t.set_query_pipeline(query_pipeline!(
             WhitespaceTokenizer
                 > NumberFilter
-                | Must [Any in number]
+                | [Any in number]
                 > LowercaseFilter
                 > Stemmer(Algorithm::English)
-                > Must [All in text]
+                > [All in text]
         ));
         t.add_document(&[(Cow::from("text"), Cow::from("10 birds flew over MT EVEREST"))]);
         t.add_document(&[(Cow::from("text"), Cow::from("125 birds flew accross THE ocean"))]);
@@ -136,10 +139,10 @@ mod tests {
         t.set_query_pipeline(query_pipeline!(
             WhitespaceTokenizer
                 > NumberFilter
-                | Must [Any in number]
+                | [Any in number]
                 > LowercaseFilter
                 > Stemmer(Algorithm::English)
-                > Must [Any in title]));
+                > [Any in title]));
         // No term to funnel -> no operator -> only numberfunnel returns
         should_yield(&t, "10", &[0]);
         // Unkown term to funnel -> empty iterator -> empty result
@@ -153,10 +156,10 @@ mod tests {
         t.set_query_pipeline(query_pipeline!(
             WhitespaceTokenizer
                 > NumberFilter
-                | Must [Any in number]
+                | [Any in number]
                 > LowercaseFilter
                 > Stemmer(Algorithm::English)
-                > Must [All in text]));
+                > [All in text]));
         should_yield(&t, "2567 deimos phobos", &[2]);
         should_yield(&t, "deimos phobos", &[2]);
         should_yield(&t, "ocean", &[]);

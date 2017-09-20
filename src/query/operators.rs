@@ -7,7 +7,7 @@ use perlin_core::utils::seeking_iterator::{PeekableSeekable, SeekingIterator};
 use perlin_core::utils::progress::Progress;
 
 use language::CanApply;
-use query::{Weight, ToOperands, Operand, ChainingOperator};
+use query::{Weight, ToOperands, Operand};
 use field::{Field, Fields};
 
 /// Mimics the functionality of the `try!` macro for `Option`s.
@@ -31,23 +31,16 @@ pub enum Combinator {
 /// This funnel is used at an end of a query pipeline
 /// It calls `index.query_atom` and stores the result, which is lazy
 /// When `to_operand` is then called, it packs everything into an operator!
-// TODO: In this struct lies an opportunity to optimize
-// If the operator is AND and one term returns an empty posting iterator
-// We could skip the rest
-// If the operator is Or and one term returns an empty posting iterator we
-// could discard it
 pub struct Funnel<'a, T: 'a, TIndex: 'a> {
     index: &'a TIndex,
-    chaining_operator: ChainingOperator,
     result: Vec<PeekableSeekable<Operand<'a>>>,
     _term: PhantomData<T>,
 }
 
 impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
-    pub fn create(chaining_operator: ChainingOperator, index: &'a TIndex) -> Self {
+    pub fn create(index: &'a TIndex) -> Self {
         Funnel {
             index,
-            chaining_operator,
             result: Vec::new(),
             _term: PhantomData,
         }

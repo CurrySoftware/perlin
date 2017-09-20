@@ -51,7 +51,7 @@ impl<'a> Iterator for WeightingOperator<'a> {
             let posting = next.unwrap();
 
             let index = match self.already_emitted.binary_search(&posting) {
-                Ok(index) => {
+                Ok(_) => {
                     // We already emitted that posting
                     continue;
                 }
@@ -143,10 +143,6 @@ impl<'a> WeightingOperator<'a> {
                 return None;
             }
         }
-    }
-
-    fn generate_permutations(&mut self) {
-
     }
 
     // TODO: Think about something more correct(!)

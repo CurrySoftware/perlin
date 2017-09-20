@@ -4,7 +4,7 @@ use perlin_core::utils::seeking_iterator::{PeekableSeekable};
 
 use language::CanApply;
 
-use query::{Operand, ChainingOperator, ToOperands};
+use query::{Operand, ToOperands};
 
 /// Numberfilter.
 /// Takes an string as input and tries to convert it to usize

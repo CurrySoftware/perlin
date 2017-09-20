@@ -3,7 +3,7 @@ use perlin_core::utils::seeking_iterator::PeekableSeekable;
 
 use rust_stemmers::{Algorithm, Stemmer as RStemmer};
 
-use query::{Operand, ChainingOperator, ToOperands};
+use query::{Operand, ToOperands};
 use language::CanApply;
 
 pub struct Stemmer<TCallback> {
