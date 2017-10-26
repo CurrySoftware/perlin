@@ -15,9 +15,6 @@ impl<'a, T: 'a + Clone> QueryResultIterator<'a, T> {
                filters: Vec<PeekableSeekable<Operand<'a>>>,
                ext_ids: &'a [(DocId, T)])
                -> Self {
-        println!("New QueryResultIterator! OPS: {:?} filters: {:?}",
-                 ops,
-                 filters);
         QueryResultIterator(WeightingOperator::create(ops, filters), ext_ids)
     }
 }

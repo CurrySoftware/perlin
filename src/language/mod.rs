@@ -89,7 +89,7 @@ impl<'a, TCB> ToOperands<'a> for Debugger<TCB>
 
 
 
-pub struct WhitespaceTokenizer<TCallback>    
+pub struct WhitespaceTokenizer<TCallback>
 {
     callback: TCallback,
 }
@@ -197,7 +197,7 @@ macro_rules! inner_pipeline {
      $element:ident($($param:expr),+) $($x:tt)*) =>
     // ;doc_id; ;field_id; Element(params)
     {
-        $element::create($($param),+ , inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))        
+        $element::create($($param),+ , inner_pipeline!(;$INDEX; ;$doc_id; ;$field; $($x)*))
     };
     (;$INDEX:ident; ;$doc_id:expr; ;$field:ident;
      $element:ident | [$this_field:ident] $($x:tt)*) =>
@@ -232,4 +232,3 @@ macro_rules! pipeline {
         })
     }
 }
-

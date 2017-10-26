@@ -52,12 +52,7 @@ impl<'a, T: 'a, TIndex: 'a> Funnel<'a, T, TIndex> {
                         term: String,
                         field: String) {
         if weight.0 > 0. {
-            println!("New Query Term with {:?}: {} on {}", weight, term, field);
             self.result.push(PeekableSeekable::new(Operand::Term(weight, decoder, term, field)));
-        } else {
-            println!("Query term discarded because its useless! {} on {}",
-                     term,
-                     field);
         }
     }
 }

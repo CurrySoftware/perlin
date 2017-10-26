@@ -127,7 +127,6 @@ impl<'a> WeightingOperator<'a> {
                         }
                         // TODO: Sort current operands by length(!)
                         self.counter += 1;
-                        println!("NEW OPERANDS: {:?}", new_current_operands); 
                         self.current_operands = Some(new_current_operands);
                         continue;
                     } else {
@@ -153,7 +152,6 @@ impl<'a> WeightingOperator<'a> {
                 .max()
                 .unwrap_or(Progress::done())
         } else {
-            println!("Progress: DONE!");
             Progress::done()
         }
     }
@@ -161,7 +159,6 @@ impl<'a> WeightingOperator<'a> {
     pub fn create(mut operands: Vec<PeekableSeekable<Operand<'a>>>,
                   filters: Vec<PeekableSeekable<Operand<'a>>>)
                   -> Self {
-        println!("WeightedOperator with operands {:?} and filters {:?}", operands, filters);
         operands.sort_by_key(|op| op.inner().weight());
         let mut current_operands = operands.clone();
         current_operands.append(&mut filters.clone());
