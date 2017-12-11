@@ -10,18 +10,6 @@ use language::CanApply;
 use query::{Weight, ToOperands, Operand};
 use field::{Field, Fields};
 
-/// Mimics the functionality of the `try!` macro for `Option`s.
-/// Evaluates `Some(x)` to x. Else it returns `None`.
-macro_rules! try_option{
-    ($operand:expr) => {
-        if let Some(x) = $operand {
-            x
-        } else {
-            return None;
-        }
-    }
-}
-
 #[derive(Debug)]
 pub enum Combinator {
     All,
@@ -149,7 +137,10 @@ pub struct And;
 
 impl And {
     pub fn next(operands: &mut [PeekableSeekable<Operand>]) -> Option<Posting> {
-        let mut focus = try_option!(operands[0].next()); // Acts as temporary to be compared against
+        if operands.is_empty() {
+            return None;
+        }
+        let mut focus = operands[0].next()?; // Acts as temporary to be compared against
         let mut last_iter = 0; // The iterator that last set 'focus'
         'possible_documents: loop {
             // For every term
@@ -160,7 +151,7 @@ impl And {
                     continue;
                 }
 
-                let v = try_option!(input.next_seek(&focus));
+                let v = input.next_seek(&focus)?;
                 if v.0 > focus.0 {
                     // If it is larger, we are now looking at a different focus.
                     // Reset focus and last_iter. Then start from the beginning
